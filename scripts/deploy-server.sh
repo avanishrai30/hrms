@@ -64,11 +64,11 @@ for key in "${required[@]}"; do
   fi
 done
 
-echo "Deploying isolated VC-WMS services for ${DOMAIN_NAME}"
-echo "Host nginx remains untouched; HRMS binds only to 127.0.0.1:3100 and 127.0.0.1:4100."
+echo "Deploying isolated VC-WMS backend for ${DOMAIN_NAME}"
+echo "Frontend is hosted on Vercel. Host nginx remains untouched; HRMS API binds only to 127.0.0.1:4100."
 
 docker compose pull postgres redis
-docker compose build api web
+docker compose build api
 docker compose up -d postgres redis
 
 for i in {1..30}; do
@@ -91,18 +91,21 @@ docker compose run --rm api pnpm --filter @vc-wms/api exec prisma db push --skip
 echo "Seeding VC Organics tenant and login users..."
 docker compose run --rm api pnpm --filter @vc-wms/api prisma:seed
 
-echo "Starting isolated API and web services..."
-docker compose up -d api web
+echo "Starting isolated HRMS API..."
+docker compose up -d api
+
+# If an older server deployment started the local web container, remove only that HRMS container.
+docker compose stop web >/dev/null 2>&1 || true
+docker compose rm -f web >/dev/null 2>&1 || true
 
 docker compose ps
 
 echo
 echo_line="------------------------------------------------------------"
 echo "$echo_line"
-echo "VC-WMS application containers are running in isolation"
-echo "Web upstream:  http://127.0.0.1:3100"
+echo "VC-WMS backend is running in isolation"
 echo "API upstream:  http://127.0.0.1:4100/api/v1"
-echo "Domain:        https://${DOMAIN_NAME} (after host nginx vhost is added)"
+echo "Frontend:      Vercel"
 echo "Tenant:        vc-organics"
 echo "Email:         owner@vcorganics.com"
 echo "Password:      ${BOOTSTRAP_PASSWORD}"
