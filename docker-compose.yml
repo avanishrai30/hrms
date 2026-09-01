@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-hrms_admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - hrms_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hrms_admin} -d ${POSTGRES_DB:-vc_hrms_prod}"]
       interval: 10s
@@ -25,7 +25,7 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     volumes:
-      - redis_data:/data
+      - hrms_redis_data:/data
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a '$$REDIS_PASSWORD' ping | grep PONG"]
       interval: 10s
@@ -61,6 +61,8 @@ services:
       PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-admin@example.com}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "127.0.0.1:4100:4000"
     networks:
       - hrms-net
 
@@ -77,35 +79,18 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-    networks:
-      - hrms-net
-
-  caddy:
-    image: caddy:2-alpine
-    container_name: hrms-caddy
-    restart: unless-stopped
-    depends_on:
-      - api
-      - web
-    environment:
-      DOMAIN_NAME: ${DOMAIN_NAME:-hrms.vcorganics.com}
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - "127.0.0.1:3100:3000"
     networks:
       - hrms-net
 
 networks:
   hrms-net:
+    name: vc-hrms-net
     driver: bridge
 
 volumes:
-  postgres_data:
-  redis_data:
-  caddy_data:
-  caddy_config:
+  hrms_postgres_data:
+    name: vc-hrms-postgres-data
+  hrms_redis_data:
+    name: vc-hrms-redis-data
