@@ -14,7 +14,7 @@ RUN pnpm --filter @vc-wms/api prisma:generate
 # package exports resolve to compiled JavaScript rather than TypeScript source.
 RUN pnpm --filter @vc-wms/api... build
 # Fail the image build immediately if the production runtime artifacts are absent.
-RUN test -f apps/api/dist/apps/api/src/main.js \
+RUN test -f apps/api/dist/main.js \
  && test -f packages/auth/dist/index.js \
  && test -f packages/shared-types/dist/index.js \
  && test -f packages/utils/dist/index.js
@@ -30,4 +30,4 @@ WORKDIR /app
 COPY --from=builder /app /app
 
 EXPOSE 4000
-CMD ["node", "apps/api/dist/apps/api/src/main.js"]
+CMD ["node", "apps/api/dist/main.js"]
