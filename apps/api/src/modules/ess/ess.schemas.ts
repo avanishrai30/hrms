@@ -193,3 +193,57 @@ export const directoryFilterSchema = z.object({
 });
 
 export type DirectoryFilterDto = z.infer<typeof directoryFilterSchema>;
+
+// ----------------- Task 32: Letter, Communication & Policy Schemas -----------------
+
+export const generateLetterSchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  letterType: z.enum([
+    "EMPLOYMENT_CONFIRMATION",
+    "EXPERIENCE_LETTER",
+    "PROMOTION_LETTER",
+    "SALARY_CERTIFICATE",
+    "ADDRESS_PROOF",
+    "INTERNSHIP_LETTER",
+    "RELIEVING_LETTER"
+  ]).default("EMPLOYMENT_CONFIRMATION"),
+  customNotes: z.string().optional()
+});
+
+export type GenerateLetterDto = z.infer<typeof generateLetterSchema>;
+
+export const createCommunicationSchema = z.object({
+  title: z.string().min(3).max(200),
+  content: z.string().min(5),
+  type: z.enum(["ANNOUNCEMENT", "NEWS", "BROADCAST", "POLICY_CIRCULAR"]).default("ANNOUNCEMENT"),
+  priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
+  targetDepartmentId: z.string().uuid().optional(),
+  targetLocationId: z.string().uuid().optional(),
+  isPinned: z.boolean().default(false)
+});
+
+export type CreateCommunicationDto = z.infer<typeof createCommunicationSchema>;
+
+export const createPolicySchema = z.object({
+  title: z.string().min(3).max(200),
+  code: z.string().min(2).max(50),
+  category: z.string().default("HR_GENERAL"),
+  description: z.string().min(5),
+  documentUrl: z.string().url().optional(),
+  version: z.string().default("1.0"),
+  effectiveDate: z.string().datetime(),
+  acknowledgementRequired: z.boolean().default(false)
+});
+
+export type CreatePolicyDto = z.infer<typeof createPolicySchema>;
+
+export const createFaqSchema = z.object({
+  category: z.string().default("PAYROLL"),
+  question: z.string().min(3).max(300),
+  answer: z.string().min(5),
+  tags: z.array(z.string()).default([])
+});
+
+export type CreateFaqDto = z.infer<typeof createFaqDto>;
+export const createFaqDto = createFaqSchema;
+

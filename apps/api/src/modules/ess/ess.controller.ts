@@ -28,6 +28,9 @@ import {
   updateProfileSchema,
   uploadDocumentSchema,
   verifyDocumentSchema,
+  generateLetterSchema,
+  createPolicySchema,
+  createFaqSchema,
   type AnnouncementFilterDto,
   type CreateAnnouncementDto,
   type CreateEmployeeRequestDto,
@@ -37,7 +40,10 @@ import {
   type ResolveEmployeeRequestDto,
   type UpdateProfileDto,
   type UploadDocumentDto,
-  type VerifyDocumentDto
+  type VerifyDocumentDto,
+  type GenerateLetterDto,
+  type CreatePolicyDto,
+  type CreateFaqDto
 } from "./ess.schemas.js";
 import { EssService } from "./ess.service.js";
 import { AnnouncementService } from "./services/announcement.service.js";
@@ -352,7 +358,7 @@ export class EssController {
     res.end(buffer);
   }
 
-  // ----------------- ESS Dashboard Aggregated Endpoint -----------------
+  // ----------------- ESS Dashboard & Digital Workplace Endpoints -----------------
 
   @Get("ess/dashboard")
   @RequirePermissions("profile.view")
@@ -364,6 +370,166 @@ export class EssController {
     const targetEmployeeId =
       queryEmployeeId || (await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId));
 
-    return this.essService.getDashboard(tenant.tenantId, targetEmployeeId, tenant.userId);
+    return this.essService.getEssDashboard(tenant.tenantId, targetEmployeeId);
+  }
+
+  @Get("ess/quick-actions")
+  @RequirePermissions("profile.view")
+  async getQuickActions(
+    @Req() req: AuthenticatedRequest,
+    @Query("employeeId") queryEmployeeId?: string
+  ) {
+    const tenant = requireTenantContext(req);
+    const targetEmployeeId =
+      queryEmployeeId || (await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId));
+
+    return this.essService.getQuickActions(tenant.tenantId, targetEmployeeId);
+  }
+
+  // ----------------- Letters Generator Endpoints -----------------
+
+  @Post("letters/generate")
+  @RequirePermissions("letters.generate")
+  async generateLetter(
+    @Req() req: AuthenticatedRequest,
+    @Body(new ZodValidationPipe(generateLetterSchema)) body: GenerateLetterDto
+  ) {
+    const tenant = requireTenantContext(req);
+    const targetEmployeeId =
+      body.employeeId || (await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId));
+
+    return this.essService.generateLetter(
+      tenant.tenantId,
+      targetEmployeeId,
+      body,
+      tenant.userId,
+      tenant.membershipId
+    );
+  }
+
+  @Get("letters")
+  @RequirePermissions("profile.view")
+  async listLetters(
+    @Req() req: AuthenticatedRequest,
+    @Query("employeeId") queryEmployeeId?: string
+  ) {
+    const tenant = requireTenantContext(req);
+    const targetEmployeeId =
+      queryEmployeeId || (await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId));
+
+    return this.essService.listLetters(tenant.tenantId, targetEmployeeId);
+  }
+
+  @Get("letters/:id")
+  @RequirePermissions("profile.view")
+  async getLetterById(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.essService.getLetterById(tenant.tenantId, id);
+  }
+
+  // ----------------- MSS Manager Self Service Endpoints -----------------
+
+  @Get("mss/dashboard")
+  @RequirePermissions("mss.read")
+  async getMssDashboard(@Req() req: AuthenticatedRequest) {
+    const tenant = requireTenantContext(req);
+    const managerEmployeeId = await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId);
+    return this.essService.getMssDashboard(tenant.tenantId, managerEmployeeId);
+  }
+
+  @Get("mss/team")
+  @RequirePermissions("mss.read")
+  async getMssTeam(@Req() req: AuthenticatedRequest) {
+    const tenant = requireTenantContext(req);
+    const managerEmployeeId = await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId);
+    return this.essService.getMssTeam(tenant.tenantId, managerEmployeeId);
+  }
+
+  @Get("mss/approvals")
+  @RequirePermissions("mss.read")
+  async getMssApprovals(@Req() req: AuthenticatedRequest) {
+    const tenant = requireTenantContext(req);
+    const managerEmployeeId = await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId);
+    return this.essService.getMssApprovals(tenant.tenantId, managerEmployeeId);
+  }
+
+  // ----------------- Org Chart & Directory Endpoints -----------------
+
+  @Get("directory/org-chart")
+  @RequirePermissions("directory.view")
+  async getOrgChart(@Req() req: AuthenticatedRequest) {
+    const tenant = requireTenantContext(req);
+    return this.essService.getOrgChartHierarchy(tenant.tenantId);
+  }
+
+  // ----------------- Wallet & Timeline Endpoints -----------------
+
+  @Get("wallet")
+  @RequirePermissions("profile.view")
+  async getWallet(
+    @Req() req: AuthenticatedRequest,
+    @Query("employeeId") queryEmployeeId?: string
+  ) {
+    const tenant = requireTenantContext(req);
+    const targetEmployeeId =
+      queryEmployeeId || (await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId));
+
+    return this.essService.getUnifiedWallet(tenant.tenantId, targetEmployeeId);
+  }
+
+  @Get("employee-timeline")
+  @RequirePermissions("profile.view")
+  async getEmployeeTimeline(
+    @Req() req: AuthenticatedRequest,
+    @Query("employeeId") queryEmployeeId?: string
+  ) {
+    const tenant = requireTenantContext(req);
+    const targetEmployeeId =
+      queryEmployeeId || (await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId));
+
+    return this.essService.getEmployeeTimeline(tenant.tenantId, targetEmployeeId);
+  }
+
+  // ----------------- Policies & FAQs Endpoints -----------------
+
+  @Get("policies")
+  @RequirePermissions("profile.view")
+  async listPolicies(@Req() req: AuthenticatedRequest) {
+    const tenant = requireTenantContext(req);
+    return this.essService.listPolicies(tenant.tenantId);
+  }
+
+  @Post("policies")
+  @RequirePermissions("communications.manage")
+  async createPolicy(
+    @Req() req: AuthenticatedRequest,
+    @Body(new ZodValidationPipe(createPolicySchema)) body: CreatePolicyDto
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.essService.createPolicy(tenant.tenantId, body, tenant.userId);
+  }
+
+  @Get("faqs")
+  @RequirePermissions("profile.view")
+  async listFaqs(
+    @Req() req: AuthenticatedRequest,
+    @Query("category") category?: string,
+    @Query("search") search?: string
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.essService.listFaqs(tenant.tenantId, category, search);
+  }
+
+  @Post("faqs")
+  @RequirePermissions("communications.manage")
+  async createFaq(
+    @Req() req: AuthenticatedRequest,
+    @Body(new ZodValidationPipe(createFaqSchema)) body: CreateFaqDto
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.essService.createFaq(tenant.tenantId, body, tenant.userId);
   }
 }

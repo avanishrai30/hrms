@@ -512,6 +512,9 @@ model Tenant {
   cultureMetrics       CultureMetric[]
   employeeSentiments   EmployeeSentiment[]
   engagementScoreSnapshots EngagementScoreSnapshot[]
+  employeeLetters      EmployeeLetter[]
+  faqArticles          FAQArticle[]
+  companyPolicies      CompanyPolicy[]
   auditLogs           AuditLog[]
 
   @@index([slug])
@@ -967,6 +970,7 @@ model Employee {
   suggestionVotes      SuggestionVote[]
   innovationSubmissions InnovationSubmission[]
   employeeSentiments   EmployeeSentiment[]
+  employeeLetters      EmployeeLetter[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, email])
@@ -8873,3 +8877,89 @@ model EngagementScoreSnapshot {
   @@index([tenantId, period])
   @@map("engagement_score_snapshots")
 }
+
+// ----------------- TASK 32: ESS, MSS, HELPDESK & DIGITAL WORKPLACE MODELS -----------------
+
+enum LetterType {
+  EMPLOYMENT_CONFIRMATION
+  EXPERIENCE_LETTER
+  PROMOTION_LETTER
+  SALARY_CERTIFICATE
+  ADDRESS_PROOF
+  INTERNSHIP_LETTER
+  RELIEVING_LETTER
+}
+
+enum LetterStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  ISSUED
+  REJECTED
+}
+
+model EmployeeLetter {
+  id              String       @id @default(uuid()) @db.Uuid
+  tenantId        String       @map("tenant_id") @db.Uuid
+  employeeId      String       @map("employee_id") @db.Uuid
+  letterType      LetterType   @default(EMPLOYMENT_CONFIRMATION) @map("letter_type")
+  title           String
+  templateBody    String       @map("template_body")
+  renderedContent String       @map("rendered_content")
+  status          LetterStatus @default(DRAFT)
+  issuedAt        DateTime?    @map("issued_at")
+  issuedBy        String?      @map("issued_by")
+  metadata        Json         @default("{}")
+  pdfUrl          String?      @map("pdf_url")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee        Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, letterType])
+  @@index([tenantId, status])
+  @@map("employee_letters")
+}
+
+model FAQArticle {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  category    String   @default("PAYROLL") // PAYROLL, LEAVE, ATTENDANCE, BENEFITS, IT_SUPPORT, POLICIES, EXPENSES
+  question    String
+  answer      String
+  tags        Json     @default("[]")
+  viewCount   Int      @default(0) @map("view_count")
+  isPublished Boolean  @default(true) @map("is_published")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, category])
+  @@index([tenantId, isPublished])
+  @@map("faq_articles")
+}
+
+model CompanyPolicy {
+  id                      String   @id @default(uuid()) @db.Uuid
+  tenantId                String   @map("tenant_id") @db.Uuid
+  title                   String
+  code                    String
+  category                String   @default("HR_GENERAL") // HR_GENERAL, CODE_OF_CONDUCT, LEAVE_ATTENDANCE, IT_SECURITY, TRAVEL_EXPENSE, POSH
+  description             String
+  documentUrl             String?  @map("document_url")
+  version                 String   @default("1.0")
+  effectiveDate           DateTime @map("effective_date")
+  acknowledgementRequired Boolean  @default(false) @map("acknowledgement_required")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code])
+  @@index([tenantId, category])
+  @@map("company_policies")
+}
+

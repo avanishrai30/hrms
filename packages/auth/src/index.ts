@@ -271,7 +271,14 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "engagement.recognition",
     "engagement.rewards",
     "engagement.analytics",
-    "engagement.ai"
+    "engagement.ai",
+    "ess.read",
+    "ess.manage",
+    "mss.read",
+    "mss.manage",
+    "letters.generate",
+    "communications.manage",
+    "servicedelivery.analytics"
   ],
   TENANT_ADMIN: [
     "tenant.dashboard.read",
@@ -494,7 +501,14 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "engagement.recognition",
     "engagement.rewards",
     "engagement.analytics",
-    "engagement.ai"
+    "engagement.ai",
+    "ess.read",
+    "ess.manage",
+    "mss.read",
+    "mss.manage",
+    "letters.generate",
+    "communications.manage",
+    "servicedelivery.analytics"
   ],
   HR_ADMIN: [
     "tenant.dashboard.read",
@@ -701,7 +715,14 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "engagement.recognition",
     "engagement.rewards",
     "engagement.analytics",
-    "engagement.ai"
+    "engagement.ai",
+    "ess.read",
+    "ess.manage",
+    "mss.read",
+    "mss.manage",
+    "letters.generate",
+    "communications.manage",
+    "servicedelivery.analytics"
   ],
   MANAGER: [
     "tenant.dashboard.read",
@@ -736,6 +757,7 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "workflows.create",
     "workflows.action",
     "approvals.view",
+    "approvals.create",
     "approvals.action",
     "organization.view",
     "profile.view",
@@ -774,7 +796,7 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "expenses.approve",
     "travel.view",
     "travel.approve",
-    "approvals.action",
+    "reimbursements.view",
     "analytics.operations",
     "lms.view",
     "lms.enroll",
@@ -794,7 +816,11 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "engagement.survey",
     "engagement.recognition",
     "engagement.rewards",
-    "engagement.analytics"
+    "engagement.analytics",
+    "ess.read",
+    "mss.read",
+    "mss.manage",
+    "letters.generate"
   ],
   EMPLOYEE: [
     "tenant.dashboard.read",
@@ -855,7 +881,8 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "engagement.read",
     "engagement.survey",
     "engagement.recognition",
-    "engagement.rewards"
+    "engagement.rewards",
+    "ess.read"
   ]
 };
 

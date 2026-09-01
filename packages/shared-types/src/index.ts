@@ -400,7 +400,14 @@ export type PermissionCode =
   | "engagement.recognition"
   | "engagement.rewards"
   | "engagement.analytics"
-  | "engagement.ai";
+  | "engagement.ai"
+  | "ess.read"
+  | "ess.manage"
+  | "mss.read"
+  | "mss.manage"
+  | "letters.generate"
+  | "communications.manage"
+  | "servicedelivery.analytics";
 
 export interface TenantContext {
   tenantId: string;

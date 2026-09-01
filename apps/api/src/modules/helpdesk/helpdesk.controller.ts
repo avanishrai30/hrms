@@ -58,6 +58,20 @@ export class HelpdeskController {
     return this.helpdeskService.getSLAPerformance(ctx.tenantId);
   }
 
+  @Get("analytics")
+  @RequirePermissions("helpdesk.view")
+  async getHelpdeskAnalytics(@Req() req: Request) {
+    const ctx = requireTenantContext(req);
+    return this.helpdeskService.getServiceDeliveryDashboard(ctx.tenantId);
+  }
+
+  @Get("service-delivery/dashboard")
+  @RequirePermissions("helpdesk.view")
+  async getServiceDeliveryDashboard(@Req() req: Request) {
+    const ctx = requireTenantContext(req);
+    return this.helpdeskService.getServiceDeliveryDashboard(ctx.tenantId);
+  }
+
   @Get("tickets/:id")
   @RequirePermissions("helpdesk.view")
   async getTicketById(@Req() req: Request, @Param("id") id: string) {
