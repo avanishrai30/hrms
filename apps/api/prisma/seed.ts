@@ -1,4 +1,4 @@
-import { PrismaClient, EmployeeStatus, EmploymentType, AssetCategory, AssetCondition, AssetStatus } from "@prisma/client";
+import { PrismaClient, EmploymentStatus, EmploymentType } from "@prisma/client";
 import * as argon2 from "argon2";
 import { ROLE_PERMISSIONS } from "@vc-wms/auth";
 import type { TenantRoleCode } from "@vc-wms/shared-types";
@@ -10,12 +10,9 @@ const ROLES: TenantRoleCode[] = ["TENANT_OWNER", "TENANT_ADMIN", "HR_ADMIN", "MA
 async function main(): Promise<void> {
   console.log("🌱 Starting Enterprise HRMS Seed...");
 
-  // 1. Seed all permissions from ROLE_PERMISSIONS map
   const uniquePerms = new Set<string>();
   for (const roleCode of ROLES) {
-    for (const perm of ROLE_PERMISSIONS[roleCode]) {
-      uniquePerms.add(perm);
-    }
+    for (const perm of ROLE_PERMISSIONS[roleCode]) uniquePerms.add(perm);
   }
 
   for (const code of uniquePerms) {
@@ -28,9 +25,9 @@ async function main(): Promise<void> {
   }
   console.log(`✅ Seeded ${uniquePerms.size} Enterprise Permissions`);
 
-  // 2. Seed Platform Super Admin
   const platformEmail = process.env.PLATFORM_ADMIN_EMAILS?.split(",")[0] ?? "admin@example.com";
   const bootstrapPassword = process.env.BOOTSTRAP_PASSWORD ?? "ChangeMe123!";
+
   await prisma.platformUser.upsert({
     where: { email: platformEmail.toLowerCase() },
     create: {
@@ -42,7 +39,6 @@ async function main(): Promise<void> {
     update: { role: "PLATFORM_SUPER_ADMIN", status: "ACTIVE" }
   });
 
-  // 3. Seed Primary Tenant (VC Organics HQ)
   const tenant = await prisma.tenant.upsert({
     where: { slug: "vc-organics" },
     create: {
@@ -86,7 +82,6 @@ async function main(): Promise<void> {
   });
   console.log(`✅ Seeded Tenant: ${tenant.name} (${tenant.id})`);
 
-  // 4. Seed Roles & Role-Permission Mappings
   const allPermissions = await prisma.permission.findMany();
   const byCode = new Map(allPermissions.map((p) => [p.code, p.id]));
 
@@ -104,14 +99,15 @@ async function main(): Promise<void> {
       },
       update: { isSystemRole: true }
     });
+
     const assignments = ROLE_PERMISSIONS[roleCode]
       .map((code) => byCode.get(code))
       .filter((permissionId): permissionId is string => Boolean(permissionId))
       .map((permissionId) => ({ tenantId: tenant.id, roleId: role.id, permissionId }));
+
     await prisma.tenantRolePermission.createMany({ data: assignments, skipDuplicates: true });
   }
 
-  // 5. Seed Locations / Workplaces
   const locHq = await prisma.location.upsert({
     where: { tenantId_code: { tenantId: tenant.id, code: "LOC-BLR-HQ" } },
     create: {
@@ -132,7 +128,7 @@ async function main(): Promise<void> {
     update: { isActive: true }
   });
 
-  const locMumbai = await prisma.location.upsert({
+  await prisma.location.upsert({
     where: { tenantId_code: { tenantId: tenant.id, code: "LOC-MUM-HUB" } },
     create: {
       tenantId: tenant.id,
@@ -152,7 +148,6 @@ async function main(): Promise<void> {
     update: { isActive: true }
   });
 
-  // 6. Seed Departments
   const deptEng = await prisma.department.upsert({
     where: { tenantId_code: { tenantId: tenant.id, code: "DEPT-ENG" } },
     create: { tenantId: tenant.id, code: "DEPT-ENG", name: "Engineering & Technology", isActive: true },
@@ -165,26 +160,25 @@ async function main(): Promise<void> {
     update: { isActive: true }
   });
 
-  const deptFin = await prisma.department.upsert({
+  await prisma.department.upsert({
     where: { tenantId_code: { tenantId: tenant.id, code: "DEPT-FIN" } },
     create: { tenantId: tenant.id, code: "DEPT-FIN", name: "Finance & Accounting", isActive: true },
     update: { isActive: true }
   });
 
-  const deptOps = await prisma.department.upsert({
+  await prisma.department.upsert({
     where: { tenantId_code: { tenantId: tenant.id, code: "DEPT-OPS" } },
     create: { tenantId: tenant.id, code: "DEPT-OPS", name: "Supply Chain & Operations", isActive: true },
     update: { isActive: true }
   });
 
-  // 7. Seed Designations
   const desigCeo = await prisma.designation.upsert({
     where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-CEO" } },
     create: { tenantId: tenant.id, code: "DESIG-CEO", name: "Chief Executive Officer", level: 10, isActive: true },
     update: { isActive: true }
   });
 
-  const desigChro = await prisma.designation.upsert({
+  await prisma.designation.upsert({
     where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-CHRO" } },
     create: { tenantId: tenant.id, code: "DESIG-CHRO", name: "Chief Human Resources Officer", level: 9, isActive: true },
     update: { isActive: true }
@@ -196,7 +190,7 @@ async function main(): Promise<void> {
     update: { isActive: true }
   });
 
-  const desigEng = await prisma.designation.upsert({
+  await prisma.designation.upsert({
     where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-ENG" } },
     create: { tenantId: tenant.id, code: "DESIG-ENG", name: "Senior Software Engineer", level: 6, isActive: true },
     update: { isActive: true }
@@ -208,8 +202,8 @@ async function main(): Promise<void> {
     update: { isActive: true }
   });
 
-  // 8. Seed Enterprise Users & Employees
   const ownerEmail = process.env.VC_ORGANICS_OWNER_EMAIL ?? "owner@vcorganics.com";
+
   const userOwner = await prisma.user.upsert({
     where: { email: ownerEmail.toLowerCase() },
     create: {
@@ -240,7 +234,6 @@ async function main(): Promise<void> {
     update: { status: "ACTIVE" }
   });
 
-  // Memberships
   const memberOwner = await prisma.tenantMembership.upsert({
     where: { tenantId_userId: { tenantId: tenant.id, userId: userOwner.id } },
     create: { tenantId: tenant.id, userId: userOwner.id, status: "ACTIVE" },
@@ -259,10 +252,15 @@ async function main(): Promise<void> {
     update: { status: "ACTIVE" }
   });
 
-  // Assign Roles
-  const roleOwner = await prisma.role.findUniqueOrThrow({ where: { tenantId_code: { tenantId: tenant.id, code: "TENANT_OWNER" } } });
-  const roleHr = await prisma.role.findUniqueOrThrow({ where: { tenantId_code: { tenantId: tenant.id, code: "HR_ADMIN" } } });
-  const roleMgr = await prisma.role.findUniqueOrThrow({ where: { tenantId_code: { tenantId: tenant.id, code: "MANAGER" } } });
+  const roleOwner = await prisma.role.findUniqueOrThrow({
+    where: { tenantId_code: { tenantId: tenant.id, code: "TENANT_OWNER" } }
+  });
+  const roleHr = await prisma.role.findUniqueOrThrow({
+    where: { tenantId_code: { tenantId: tenant.id, code: "HR_ADMIN" } }
+  });
+  const roleMgr = await prisma.role.findUniqueOrThrow({
+    where: { tenantId_code: { tenantId: tenant.id, code: "MANAGER" } }
+  });
 
   await prisma.tenantMembershipRole.createMany({
     data: [
@@ -273,7 +271,6 @@ async function main(): Promise<void> {
     skipDuplicates: true
   });
 
-  // Create Employee Profiles
   const empOwner = await prisma.employee.upsert({
     where: { tenantId_employeeCode: { tenantId: tenant.id, employeeCode: "VC-0001" } },
     create: {
@@ -285,17 +282,17 @@ async function main(): Promise<void> {
       fullName: "Avanish Rai",
       email: ownerEmail.toLowerCase(),
       phone: "+919876543210",
-      status: EmployeeStatus.ACTIVE,
+      status: EmploymentStatus.ACTIVE,
       employmentType: EmploymentType.FULL_TIME,
       joiningDate: new Date("2022-01-01"),
       departmentId: deptEng.id,
       designationId: desigCeo.id,
       locationId: locHq.id
     },
-    update: { status: EmployeeStatus.ACTIVE }
+    update: { status: EmploymentStatus.ACTIVE }
   });
 
-  const empHr = await prisma.employee.upsert({
+  await prisma.employee.upsert({
     where: { tenantId_employeeCode: { tenantId: tenant.id, employeeCode: "VC-0002" } },
     create: {
       tenantId: tenant.id,
@@ -306,7 +303,7 @@ async function main(): Promise<void> {
       fullName: "Priya Sharma",
       email: "hradmin@vcorganics.com",
       phone: "+919812345678",
-      status: EmployeeStatus.ACTIVE,
+      status: EmploymentStatus.ACTIVE,
       employmentType: EmploymentType.FULL_TIME,
       joiningDate: new Date("2023-03-15"),
       departmentId: deptHr.id,
@@ -314,10 +311,10 @@ async function main(): Promise<void> {
       locationId: locHq.id,
       managerId: empOwner.id
     },
-    update: { status: EmployeeStatus.ACTIVE }
+    update: { status: EmploymentStatus.ACTIVE }
   });
 
-  const empLead = await prisma.employee.upsert({
+  await prisma.employee.upsert({
     where: { tenantId_employeeCode: { tenantId: tenant.id, employeeCode: "VC-0003" } },
     create: {
       tenantId: tenant.id,
@@ -328,7 +325,7 @@ async function main(): Promise<void> {
       fullName: "Rohit Verma",
       email: "techlead@vcorganics.com",
       phone: "+919765432109",
-      status: EmployeeStatus.ACTIVE,
+      status: EmploymentStatus.ACTIVE,
       employmentType: EmploymentType.FULL_TIME,
       joiningDate: new Date("2023-06-01"),
       departmentId: deptEng.id,
@@ -336,10 +333,9 @@ async function main(): Promise<void> {
       locationId: locHq.id,
       managerId: empOwner.id
     },
-    update: { status: EmployeeStatus.ACTIVE }
+    update: { status: EmploymentStatus.ACTIVE }
   });
 
-  // 9. Seed Facilities (Meeting Rooms & Parking)
   await prisma.meetingRoom.createMany({
     data: [
       { tenantId: tenant.id, name: "Boardroom Alpha", capacity: 20, floor: "Floor 4", building: "Building 1", isActive: true },
@@ -358,7 +354,6 @@ async function main(): Promise<void> {
     skipDuplicates: true
   });
 
-  // 10. Seed Vendor & Contractors
   const vendor = await prisma.vendor.upsert({
     where: { tenantId_code: { tenantId: tenant.id, code: "VND-APX-01" } },
     create: {
@@ -406,20 +401,19 @@ async function main(): Promise<void> {
     skipDuplicates: true
   });
 
-  // 11. Seed Assets
   await prisma.asset.createMany({
     data: [
       {
         tenantId: tenant.id,
         assetCode: "AST-LAP-001",
         serialNumber: "C02XYZ12345",
-        name: 'MacBook Pro 16" M3 Max',
-        category: AssetCategory.LAPTOP,
+        name: "MacBook Pro 16\" M3 Max",
+        category: "LAPTOP",
         purchaseDate: new Date("2024-01-15"),
         purchaseCost: 285000,
         currency: "INR",
-        condition: AssetCondition.BRAND_NEW,
-        status: AssetStatus.ASSIGNED,
+        condition: "BRAND_NEW",
+        status: "ASSIGNED",
         currentHolderId: empOwner.id
       },
       {
@@ -427,18 +421,17 @@ async function main(): Promise<void> {
         assetCode: "AST-LAP-002",
         serialNumber: "DL987654321",
         name: "Dell XPS 15 9530",
-        category: AssetCategory.LAPTOP,
+        category: "LAPTOP",
         purchaseDate: new Date("2024-03-10"),
         purchaseCost: 175000,
         currency: "INR",
-        condition: AssetCondition.GOOD,
-        status: AssetStatus.AVAILABLE
+        condition: "GOOD",
+        status: "AVAILABLE"
       }
     ],
     skipDuplicates: true
   });
 
-  // 12. Seed Company Policies
   await prisma.companyPolicy.createMany({
     data: [
       {
@@ -467,7 +460,7 @@ async function main(): Promise<void> {
     skipDuplicates: true
   });
 
-  console.log("🎉 Enterprise Seed Complete! VC Organics HRMS is 100% Production Ready.");
+  console.log("🎉 Enterprise Seed Complete! VC Organics HRMS is ready for local validation.");
 }
 
 main()
