@@ -6,11 +6,11 @@ RUN corepack enable && apk add --no-cache libc6-compat openssl
 
 FROM base AS builder
 WORKDIR /app
-COPY pnpm-lock.yaml package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml ./
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 RUN pnpm --filter @vc-wms/api prisma:generate
 RUN pnpm --filter @vc-wms/api build
 
@@ -25,6 +25,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/prisma ./prisma
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder --chown=nestjs:nodejs /app/packages ./packages
 
 USER nestjs
