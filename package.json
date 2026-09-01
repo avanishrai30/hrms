@@ -12,7 +12,8 @@
     "format": "prettier --check .",
     "dev:web": "pnpm --filter @vc-wms/web dev",
     "dev:api": "pnpm --filter @vc-wms/api start:dev",
-    "prisma:generate": "pnpm --filter @vc-wms/api prisma:generate"
+    "prisma:generate": "pnpm --filter @vc-wms/api prisma:generate",
+    "db:seed": "pnpm --filter @vc-wms/api prisma db seed"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
