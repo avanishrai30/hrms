@@ -247,7 +247,17 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "workforce.succession.manage",
     "workforce.attrition.predict",
     "workforce.skills.forecast",
-    "workforce.analytics.view"
+    "workforce.analytics.view",
+    "workforce.operations.view",
+    "workforce.operations.manage",
+    "attendance.shifts.manage",
+    "attendance.biometric.sync",
+    "attendance.devices.manage",
+    "attendance.geofence.manage",
+    "attendance.overtime.manage",
+    "attendance.anomalies.manage",
+    "attendance.contractors.manage",
+    "attendance.scheduling.manage"
   ],
   TENANT_ADMIN: [
     "tenant.dashboard.read",
@@ -446,7 +456,17 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "workforce.succession.manage",
     "workforce.attrition.predict",
     "workforce.skills.forecast",
-    "workforce.analytics.view"
+    "workforce.analytics.view",
+    "workforce.operations.view",
+    "workforce.operations.manage",
+    "attendance.shifts.manage",
+    "attendance.biometric.sync",
+    "attendance.devices.manage",
+    "attendance.geofence.manage",
+    "attendance.overtime.manage",
+    "attendance.anomalies.manage",
+    "attendance.contractors.manage",
+    "attendance.scheduling.manage"
   ],
   HR_ADMIN: [
     "tenant.dashboard.read",
@@ -627,12 +647,19 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "workforce.manage",
     "workforce.positions.manage",
     "workforce.headcount.plan",
-    "workforce.cost.forecast",
-    "workforce.orgdesign.manage",
-    "workforce.succession.manage",
     "workforce.attrition.predict",
     "workforce.skills.forecast",
-    "workforce.analytics.view"
+    "workforce.analytics.view",
+    "workforce.operations.view",
+    "workforce.operations.manage",
+    "attendance.shifts.manage",
+    "attendance.biometric.sync",
+    "attendance.devices.manage",
+    "attendance.geofence.manage",
+    "attendance.overtime.manage",
+    "attendance.anomalies.manage",
+    "attendance.contractors.manage",
+    "attendance.scheduling.manage"
   ],
   MANAGER: [
     "tenant.dashboard.read",
@@ -714,7 +741,12 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "workforce.view",
     "workforce.positions.manage",
     "workforce.succession.manage",
-    "workforce.analytics.view"
+    "workforce.analytics.view",
+    "workforce.operations.view",
+    "attendance.shifts.manage",
+    "attendance.overtime.manage",
+    "attendance.anomalies.manage",
+    "attendance.scheduling.manage"
   ],
   EMPLOYEE: [
     "tenant.dashboard.read",

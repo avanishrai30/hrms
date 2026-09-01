@@ -476,6 +476,14 @@ model Tenant {
   orgStructureVersions OrgStructureVersion[]
   attritionRiskAssessments AttritionRiskAssessment[]
   skillSupplyDemandForecasts SkillSupplyDemandForecast[]
+  biometricDevices    BiometricDevice[]
+  biometricPunches    BiometricPunch[]
+  deviceSyncLogs      DeviceSyncLog[]
+  shiftSwapRequests   ShiftSwapRequest[]
+  overtimeRequests    OvertimeRequest[]
+  attendanceAnomalies AttendanceAnomaly[]
+  contractorAttendances ContractorAttendance[]
+  workforceSchedules  WorkforceSchedule[]
   auditLogs           AuditLog[]
 
   @@index([slug])
@@ -901,6 +909,11 @@ model Employee {
   sessionAttendances    SessionAttendance[]
   positionAssignments   PositionAssignment[]
   attritionRiskAssessments AttritionRiskAssessment[]
+  biometricPunches      BiometricPunch[]
+  requestedShiftSwaps   ShiftSwapRequest[]       @relation("RequesterShiftSwaps")
+  targetedShiftSwaps    ShiftSwapRequest[]       @relation("TargetShiftSwaps")
+  overtimeRequests      OvertimeRequest[]
+  attendanceAnomalies   AttendanceAnomaly[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, email])
@@ -998,6 +1011,8 @@ model Shift {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   assignments ShiftAssignment[]
   attendances Attendance[]
+  sourceShiftSwaps ShiftSwapRequest[] @relation("SourceShiftSwaps")
+  targetShiftSwaps ShiftSwapRequest[] @relation("TargetShiftSwaps")
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -7504,6 +7519,271 @@ model SkillSupplyDemandForecast {
 
   @@index([tenantId, category])
   @@map("skill_supply_demand_forecasts")
+}
+
+// ====================================================
+// TASK 29: TIME & ATTENDANCE INTELLIGENCE & WORKFORCE OPERATIONS
+// ====================================================
+
+enum BiometricDeviceVendor {
+  ESSL
+  ZKTECO
+  MATRIX
+  SUPREMA
+  GENERIC_REST
+}
+
+enum BiometricDeviceSyncMode {
+  PUSH
+  PULL
+  REALTIME
+}
+
+enum BiometricDeviceStatus {
+  ONLINE
+  OFFLINE
+  ERROR
+  MAINTENANCE
+}
+
+enum ShiftSwapStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum OvertimeStatus {
+  PENDING
+  MANAGER_APPROVED
+  HR_APPROVED
+  REJECTED
+  PROCESSED_IN_PAYROLL
+}
+
+enum OvertimeType {
+  DAILY_OT
+  WEEKLY_OFF_OT
+  HOLIDAY_OT
+  NIGHT_SHIFT_OT
+}
+
+enum AnomalySeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AnomalyType {
+  MISSING_PUNCH
+  DOUBLE_PUNCH
+  EXCESSIVE_LATE
+  EARLY_EXIT
+  GEOFENCE_BREACH
+  SPOOF_ATTEMPT
+  UNUSUAL_HOURS
+}
+
+model BiometricDevice {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  tenantId             String                  @map("tenant_id") @db.Uuid
+  deviceName           String                  @map("device_name")
+  deviceType           String                  @default("BIOMETRIC_TERMINAL") @map("device_type")
+  vendor               BiometricDeviceVendor   @default(ESSL)
+  serialNumber         String                  @map("serial_number")
+  siteLocationId       String?                 @map("site_location_id") @db.Uuid
+  ipAddress            String?                 @map("ip_address")
+  port                 Int?
+  syncMode             BiometricDeviceSyncMode @default(PUSH) @map("sync_mode")
+  status               BiometricDeviceStatus   @default(ONLINE)
+  lastHeartbeatAt      DateTime?               @map("last_heartbeat_at")
+  lastSyncAt           DateTime?               @map("last_sync_at")
+  totalPunchesRecorded Int                     @default(0) @map("total_punches_recorded")
+  failedPunchesCount   Int                     @default(0) @map("failed_punches_count")
+  metadata             Json                    @default("{}")
+  createdAt            DateTime                @default(now()) @map("created_at")
+  updatedAt            DateTime                @updatedAt @map("updated_at")
+
+  tenant               Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  punches              BiometricPunch[]
+  syncLogs             DeviceSyncLog[]
+
+  @@unique([tenantId, serialNumber])
+  @@index([tenantId, status])
+  @@map("biometric_devices")
+}
+
+model BiometricPunch {
+  id                   String          @id @default(uuid()) @db.Uuid
+  tenantId             String          @map("tenant_id") @db.Uuid
+  deviceId             String          @map("device_id") @db.Uuid
+  employeeId           String?         @map("employee_id") @db.Uuid
+  biometricUserId      String          @map("biometric_user_id")
+  punchTime            DateTime        @default(now()) @map("punch_time")
+  punchType            String          @default("CHECK_IN") @map("punch_type") // CHECK_IN, CHECK_OUT, BREAK_IN, BREAK_OUT
+  verificationMode     String          @default("FINGERPRINT") @map("verification_mode") // FINGERPRINT, FACE, CARD, PIN
+  rawPayload           Json            @default("{}") @map("raw_payload")
+  isSyncedToAttendance Boolean         @default(false) @map("is_synced_to_attendance")
+  attendanceId         String?         @map("attendance_id") @db.Uuid
+  createdAt            DateTime        @default(now()) @map("created_at")
+
+  tenant               Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  device               BiometricDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  employee             Employee?       @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, deviceId])
+  @@index([tenantId, employeeId])
+  @@index([tenantId, punchTime])
+  @@map("biometric_punches")
+}
+
+model DeviceSyncLog {
+  id               String          @id @default(uuid()) @db.Uuid
+  tenantId         String          @map("tenant_id") @db.Uuid
+  deviceId         String          @map("device_id") @db.Uuid
+  syncStartTime    DateTime        @default(now()) @map("sync_start_time")
+  syncEndTime      DateTime?       @map("sync_end_time")
+  status           String          @default("SUCCESS") // SUCCESS, PARTIAL, FAILED
+  recordsProcessed Int             @default(0) @map("records_processed")
+  recordsInserted  Int             @default(0) @map("records_inserted")
+  errorMessage     String?         @map("error_message")
+  createdAt        DateTime        @default(now()) @map("created_at")
+
+  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  device           BiometricDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, deviceId])
+  @@map("device_sync_logs")
+}
+
+model ShiftSwapRequest {
+  id                  String          @id @default(uuid()) @db.Uuid
+  tenantId            String          @map("tenant_id") @db.Uuid
+  requesterEmployeeId String          @map("requester_employee_id") @db.Uuid
+  targetEmployeeId    String          @map("target_employee_id") @db.Uuid
+  sourceShiftId       String          @map("source_shift_id") @db.Uuid
+  targetShiftId       String          @map("target_shift_id") @db.Uuid
+  swapDate            DateTime        @map("swap_date")
+  reason              String
+  status              ShiftSwapStatus @default(PENDING)
+  approvedByUserId    String?         @map("approved_by_user_id") @db.Uuid
+  approvedAt          DateTime?       @map("approved_at")
+  rejectionReason     String?         @map("rejection_reason")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  tenant              Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requester           Employee        @relation("RequesterShiftSwaps", fields: [requesterEmployeeId], references: [id], onDelete: Cascade)
+  target              Employee        @relation("TargetShiftSwaps", fields: [targetEmployeeId], references: [id], onDelete: Cascade)
+  sourceShift         Shift           @relation("SourceShiftSwaps", fields: [sourceShiftId], references: [id], onDelete: Cascade)
+  targetShift         Shift           @relation("TargetShiftSwaps", fields: [targetShiftId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, requesterEmployeeId])
+  @@index([tenantId, targetEmployeeId])
+  @@index([tenantId, status])
+  @@map("shift_swap_requests")
+}
+
+model OvertimeRequest {
+  id                     String         @id @default(uuid()) @db.Uuid
+  tenantId               String         @map("tenant_id") @db.Uuid
+  employeeId             String         @map("employee_id") @db.Uuid
+  attendanceId           String?        @map("attendance_id") @db.Uuid
+  overtimeDate           DateTime       @map("overtime_date")
+  overtimeType           OvertimeType   @default(DAILY_OT) @map("overtime_type")
+  requestedMinutes       Int            @default(60) @map("requested_minutes")
+  approvedMinutes        Int            @default(0) @map("approved_minutes")
+  hourlyRate             Float          @default(0.0) @map("hourly_rate")
+  estimatedCost          Float          @default(0.0) @map("estimated_cost")
+  reason                 String
+  status                 OvertimeStatus @default(PENDING)
+  managerApprovedByUserId String?       @map("manager_approved_by_user_id") @db.Uuid
+  managerApprovedAt      DateTime?      @map("manager_approved_at")
+  hrApprovedByUserId     String?        @map("hr_approved_by_user_id") @db.Uuid
+  hrApprovedAt           DateTime?      @map("hr_approved_at")
+  payrollCycleId         String?        @map("payroll_cycle_id") @db.Uuid
+  createdAt              DateTime       @default(now()) @map("created_at")
+  updatedAt              DateTime       @updatedAt @map("updated_at")
+
+  tenant                 Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee               Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+  @@map("overtime_requests")
+}
+
+model AttendanceAnomaly {
+  id                String          @id @default(uuid()) @db.Uuid
+  tenantId          String          @map("tenant_id") @db.Uuid
+  employeeId        String          @map("employee_id") @db.Uuid
+  attendanceId      String?         @map("attendance_id") @db.Uuid
+  anomalyDate       DateTime        @map("anomaly_date")
+  anomalyType       AnomalyType     @map("anomaly_type")
+  severity          AnomalySeverity @default(MEDIUM)
+  explanation       String
+  recommendedAction String?         @map("recommended_action")
+  isResolved        Boolean         @default(false) @map("is_resolved")
+  resolvedByUserId  String?         @map("resolved_by_user_id") @db.Uuid
+  resolvedAt        DateTime?       @map("resolved_at")
+  resolutionNotes   String?         @map("resolution_notes")
+  createdAt         DateTime        @default(now()) @map("created_at")
+
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee          Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, isResolved])
+  @@index([tenantId, severity])
+  @@map("attendance_anomalies")
+}
+
+model ContractorAttendance {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  vendorName     String   @map("vendor_name")
+  contractorName String   @map("contractor_name")
+  contractorCode String   @map("contractor_code")
+  siteLocationId String?  @map("site_location_id") @db.Uuid
+  gatePassId     String?  @map("gate_pass_id") @db.Uuid
+  checkInTime    DateTime @default(now()) @map("check_in_time")
+  checkOutTime   DateTime? @map("check_out_time")
+  totalHours     Float    @default(0.0) @map("total_hours")
+  hourlyRate     Float    @default(0.0) @map("hourly_rate")
+  totalCost      Float    @default(0.0) @map("total_cost")
+  status         String   @default("PRESENT")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, vendorName])
+  @@index([tenantId, checkInTime])
+  @@map("contractor_attendances")
+}
+
+model WorkforceSchedule {
+  id                    String   @id @default(uuid()) @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  scheduleName          String   @map("schedule_name")
+  departmentId          String?  @map("department_id") @db.Uuid
+  startDate             DateTime @map("start_date")
+  endDate               DateTime @map("end_date")
+  targetHeadcount       Int      @default(0) @map("target_headcount")
+  scheduledHeadcount    Int      @default(0) @map("scheduled_headcount")
+  coveragePercent       Float    @default(0.0) @map("coverage_percent")
+  understaffedHoursCount Int     @default(0) @map("understaffed_hours_count")
+  isAutoGenerated       Boolean  @default(false) @map("is_auto_generated")
+  status                String   @default("PUBLISHED") // DRAFT, PUBLISHED, ARCHIVED
+  scheduleData          Json     @default("{}") @map("schedule_data")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startDate, endDate])
+  @@map("workforce_schedules")
 }
 
 
