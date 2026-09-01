@@ -1,11 +1,9 @@
-# Multi-stage Production Dockerfile for Next.js Web App (@vc-wms/web)
-FROM node:20-alpine AS base
+FROM node:20-alpine AS builder
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && apk add --no-cache libc6-compat
-
-FROM base AS builder
 WORKDIR /app
+
 COPY package.json pnpm-workspace.yaml ./
 COPY packages/ ./packages/
 COPY apps/web/ ./apps/web/
@@ -16,21 +14,16 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @vc-wms/web build
 
-FROM base AS runner
-WORKDIR /app
+FROM node:20-alpine AS runner
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV NEXT_TELEMETRY_DISABLED=1
+RUN corepack enable && apk add --no-cache libc6-compat
+WORKDIR /app
 
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+COPY --from=builder /app /app
 
-COPY --from=builder /app/apps/web/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next ./.next
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/package.json ./package.json
-
-USER nextjs
 EXPOSE 3000
-
-CMD ["node_modules/.bin/next", "start"]
+CMD ["pnpm", "--filter", "@vc-wms/web", "start"]
