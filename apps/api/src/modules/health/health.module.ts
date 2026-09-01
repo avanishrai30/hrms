@@ -6,7 +6,6 @@ import { HealthController } from "./health.controller.js";
 
 @Module({
   imports: [PrismaModule, AuditModule, QueueModule],
-  controllers: [HealthController],
-  exports: [HealthController]
+  controllers: [HealthController]
 })
 export class HealthModule {}
