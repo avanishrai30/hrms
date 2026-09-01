@@ -278,7 +278,16 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "mss.manage",
     "letters.generate",
     "communications.manage",
-    "servicedelivery.analytics"
+    "servicedelivery.analytics",
+    "vendors.manage",
+    "contractors.manage",
+    "assets.manage",
+    "visitors.manage",
+    "facilities.manage",
+    "search.global",
+    "notifications.manage",
+    "executive.intelligence",
+    "system.health"
   ],
   TENANT_ADMIN: [
     "tenant.dashboard.read",
@@ -508,7 +517,16 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "mss.manage",
     "letters.generate",
     "communications.manage",
-    "servicedelivery.analytics"
+    "servicedelivery.analytics",
+    "vendors.manage",
+    "contractors.manage",
+    "assets.manage",
+    "visitors.manage",
+    "facilities.manage",
+    "search.global",
+    "notifications.manage",
+    "executive.intelligence",
+    "system.health"
   ],
   HR_ADMIN: [
     "tenant.dashboard.read",
@@ -722,7 +740,16 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "mss.manage",
     "letters.generate",
     "communications.manage",
-    "servicedelivery.analytics"
+    "servicedelivery.analytics",
+    "vendors.manage",
+    "contractors.manage",
+    "assets.manage",
+    "visitors.manage",
+    "facilities.manage",
+    "search.global",
+    "notifications.manage",
+    "executive.intelligence",
+    "system.health"
   ],
   MANAGER: [
     "tenant.dashboard.read",
@@ -820,7 +847,8 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "ess.read",
     "mss.read",
     "mss.manage",
-    "letters.generate"
+    "letters.generate",
+    "search.global"
   ],
   EMPLOYEE: [
     "tenant.dashboard.read",
@@ -882,7 +910,8 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "engagement.survey",
     "engagement.recognition",
     "engagement.rewards",
-    "ess.read"
+    "ess.read",
+    "search.global"
   ]
 };
 

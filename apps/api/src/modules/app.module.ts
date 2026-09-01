@@ -33,6 +33,8 @@ import { LearningModule } from "./learning/learning.module.js";
 import { WorkforceModule } from "./workforce/workforce.module.js";
 import { WorkforceOperationsModule } from "./workforce-operations/workforce-operations.module.js";
 import { EngagementModule } from "./engagement/engagement.module.js";
+import { SearchModule } from "./search/search.module.js";
+import { VendorsModule } from "./vendors/vendors.module.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { RbacGuard } from "./rbac/rbac.guard.js";
 import { TenantsModule } from "./tenants/tenants.module.js";
@@ -81,7 +83,9 @@ import { HealthModule } from "./health/health.module.js";
     LearningModule,
     WorkforceModule,
     WorkforceOperationsModule,
-    EngagementModule
+    EngagementModule,
+    SearchModule,
+    VendorsModule
   ],
   providers: [
     {

@@ -152,4 +152,40 @@ export class FacilitiesController {
       dto
     );
   }
+
+  @Get("meeting-rooms")
+  @RequirePermissions("facilities.view")
+  async listMeetingRooms(@Req() req: Request) {
+    const ctx = requireTenantContext(req);
+    return this.facilitiesService.listMeetingRooms(ctx.tenantId);
+  }
+
+  @Post("meeting-rooms")
+  @RequirePermissions("facilities.manage")
+  async createMeetingRoom(@Req() req: Request, @Body() body: { name: string; capacity: number; floor?: string; building?: string; amenities?: string[] }) {
+    const ctx = requireTenantContext(req);
+    return this.facilitiesService.createMeetingRoom(
+      ctx.tenantId,
+      { userId: ctx.userId, membershipId: ctx.membershipId },
+      body
+    );
+  }
+
+  @Get("parking-slots")
+  @RequirePermissions("facilities.view")
+  async listParkingSlots(@Req() req: Request) {
+    const ctx = requireTenantContext(req);
+    return this.facilitiesService.listParkingSlots(ctx.tenantId);
+  }
+
+  @Post("parking-slots")
+  @RequirePermissions("facilities.manage")
+  async createParkingSlot(@Req() req: Request, @Body() body: { slotNumber: string; vehicleType: string; isAssigned?: boolean; assignedToName?: string; assignedVehicleNo?: string }) {
+    const ctx = requireTenantContext(req);
+    return this.facilitiesService.createParkingSlot(
+      ctx.tenantId,
+      { userId: ctx.userId, membershipId: ctx.membershipId },
+      body
+    );
+  }
 }

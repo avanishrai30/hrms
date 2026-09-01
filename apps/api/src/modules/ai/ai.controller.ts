@@ -235,4 +235,32 @@ export class AiController {
     const tenant = requireTenantContext(req);
     return this.aiService.updateAiSettings(tenant.tenantId, body, tenant.userId);
   }
+
+  @Get("executive/ceo-dashboard")
+  @RequirePermissions("executive.intelligence")
+  async getCeoDashboard(@Req() req: AuthenticatedRequest) {
+    const tenant = requireTenantContext(req);
+    return this.aiService.getCeoDashboard(tenant.tenantId);
+  }
+
+  @Get("executive/chro-dashboard")
+  @RequirePermissions("executive.intelligence")
+  async getChroDashboard(@Req() req: AuthenticatedRequest) {
+    const tenant = requireTenantContext(req);
+    return this.aiService.getChroDashboard(tenant.tenantId);
+  }
+
+  @Get("executive/cfo-dashboard")
+  @RequirePermissions("executive.intelligence")
+  async getCfoDashboard(@Req() req: AuthenticatedRequest) {
+    const tenant = requireTenantContext(req);
+    return this.aiService.getCfoDashboard(tenant.tenantId);
+  }
+
+  @Get("executive/risks")
+  @RequirePermissions("executive.intelligence")
+  async getExecutiveRisks(@Req() req: AuthenticatedRequest) {
+    const tenant = requireTenantContext(req);
+    return this.aiService.getExecutiveRisks(tenant.tenantId);
+  }
 }

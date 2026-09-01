@@ -1,0 +1,43 @@
+name: Enterprise CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Gate 1 — Prisma Generate
+        run: pnpm prisma:generate
+
+      - name: Gate 2 — TypeScript Strict Typecheck
+        run: pnpm typecheck
+
+      - name: Gate 3 — ESLint Code Quality
+        run: pnpm lint
+
+      - name: Gate 4 — Automated Test Suites
+        run: pnpm test
+
+      - name: Gate 5 — Production Build Verification
+        run: pnpm build

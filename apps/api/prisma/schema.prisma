@@ -515,6 +515,11 @@ model Tenant {
   employeeLetters      EmployeeLetter[]
   faqArticles          FAQArticle[]
   companyPolicies      CompanyPolicy[]
+  vendorContracts      VendorContract[]
+  vendorCompliances    VendorCompliance[]
+  meetingRooms         MeetingRoom[]
+  parkingSlots         ParkingSlot[]
+  searchIndexEntries   SearchIndexEntry[]
   auditLogs           AuditLog[]
 
   @@index([slug])
@@ -5935,6 +5940,8 @@ model Vendor {
   documents   VendorDocument[]
   invoices    VendorInvoice[]
   payments    VendorPayment[]
+  contracts   VendorContract[]
+  complianceRecords VendorCompliance[]
 
   @@unique([tenantId, code])
   @@index([tenantId, isActive])
@@ -8962,4 +8969,108 @@ model CompanyPolicy {
   @@index([tenantId, category])
   @@map("company_policies")
 }
+
+model VendorContract {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  vendorId         String   @map("vendor_id") @db.Uuid
+  contractNumber   String   @map("contract_number")
+  title            String
+  startDate        DateTime @map("start_date")
+  endDate          DateTime @map("end_date")
+  valueInInr       Float    @default(0) @map("value_in_inr")
+  status           String   @default("ACTIVE") // ACTIVE, EXPIRED, TERMINATED, PENDING_RENEWAL
+  termsAndNotes    String?  @map("terms_and_notes")
+  slaRating        Float    @default(5.0) @map("sla_rating")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vendor           Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, contractNumber])
+  @@index([tenantId, vendorId])
+  @@index([tenantId, status])
+  @@map("vendor_contracts")
+}
+
+model VendorCompliance {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  vendorId         String   @map("vendor_id") @db.Uuid
+  complianceType   String   @map("compliance_type") // GST_FILING, PAN_VERIFICATION, MSME_REGISTRATION, LABOR_LICENSE, INSURANCE, STATUTORY_EPF_ESIC
+  documentNumber   String?  @map("document_number")
+  validUntil       DateTime? @map("valid_until")
+  isVerified       Boolean  @default(false) @map("is_verified")
+  verifiedAt       DateTime? @map("verified_at")
+  status           String   @default("COMPLIANT") // COMPLIANT, NON_COMPLIANT, EXPIRING_SOON, EXPIRED
+  notes            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vendor           Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, vendorId])
+  @@index([tenantId, status])
+  @@map("vendor_compliances")
+}
+
+model MeetingRoom {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  name             String
+  capacity         Int      @default(10)
+  floor            String?
+  building         String?
+  amenities        Json?    // ["VIDEO_CONFERENCING", "PROJECTOR", "WHITEBOARD", "TV"]
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId, isActive])
+  @@map("meeting_rooms")
+}
+
+model ParkingSlot {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  slotNumber       String   @map("slot_number")
+  vehicleType      String   @default("FOUR_WHEELER") @map("vehicle_type") // TWO_WHEELER, FOUR_WHEELER, EV_CHARGING
+  isAssigned       Boolean  @default(false) @map("is_assigned")
+  assignedToName   String?  @map("assigned_to_name")
+  assignedVehicleNo String? @map("assigned_vehicle_no")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, slotNumber])
+  @@index([tenantId, isAssigned])
+  @@map("parking_slots")
+}
+
+model SearchIndexEntry {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  entityType       String   @map("entity_type") // EMPLOYEE, VENDOR, CONTRACTOR, ASSET, POLICY, KNOWLEDGE_ARTICLE, DOCUMENT
+  entityId         String   @map("entity_id")
+  title            String
+  subtitle         String?
+  searchVector     String   @map("search_vector")
+  metadata         Json?
+  url              String
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, entityType])
+  @@index([tenantId, searchVector])
+  @@map("search_index_entries")
+}
+
 

@@ -468,4 +468,58 @@ export class FacilitiesService {
 
     return { log, vehicle: updatedVehicle };
   }
+
+  async listMeetingRooms(tenantId: string) {
+    return this.prisma.meetingRoom.findMany({
+      where: { tenantId, isActive: true },
+      orderBy: { name: "asc" }
+    });
+  }
+
+  async createMeetingRoom(
+    tenantId: string,
+    actor: { userId: string; membershipId?: string },
+    dto: { name: string; capacity: number; floor?: string; building?: string; amenities?: string[] }
+  ) {
+    const room = await this.prisma.meetingRoom.create({
+      data: {
+        tenantId,
+        name: dto.name,
+        capacity: dto.capacity,
+        floor: dto.floor,
+        building: dto.building,
+        amenities: dto.amenities ? (dto.amenities as unknown as Prisma.InputJsonValue) : Prisma.JsonNull
+      }
+    });
+
+    await this.recordAudit(tenantId, "MEETING_ROOM_CREATED", "MeetingRoom", room.id, { name: room.name }, actor.userId, actor.membershipId);
+    return room;
+  }
+
+  async listParkingSlots(tenantId: string) {
+    return this.prisma.parkingSlot.findMany({
+      where: { tenantId },
+      orderBy: { slotNumber: "asc" }
+    });
+  }
+
+  async createParkingSlot(
+    tenantId: string,
+    actor: { userId: string; membershipId?: string },
+    dto: { slotNumber: string; vehicleType: string; isAssigned?: boolean; assignedToName?: string; assignedVehicleNo?: string }
+  ) {
+    const slot = await this.prisma.parkingSlot.create({
+      data: {
+        tenantId,
+        slotNumber: dto.slotNumber,
+        vehicleType: dto.vehicleType,
+        isAssigned: dto.isAssigned ?? false,
+        assignedToName: dto.assignedToName,
+        assignedVehicleNo: dto.assignedVehicleNo
+      }
+    });
+
+    await this.recordAudit(tenantId, "PARKING_SLOT_CREATED", "ParkingSlot", slot.id, { slotNumber: slot.slotNumber }, actor.userId, actor.membershipId);
+    return slot;
+  }
 }

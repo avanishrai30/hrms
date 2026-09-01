@@ -182,4 +182,11 @@ export class AssetsController {
     const dto = ReturnAssetSchema.parse(body);
     return this.assetsService.returnAsset(ctx.tenantId, { userId: ctx.userId, membershipId: ctx.membershipId }, id, dto);
   }
+
+  @Get("analytics/health")
+  @RequirePermissions("assets.view")
+  async getAssetHealth(@Req() req: Request) {
+    const ctx = requireTenantContext(req);
+    return this.assetsService.getAssetLifecycleSummary(ctx.tenantId);
+  }
 }

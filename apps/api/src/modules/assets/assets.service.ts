@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { AssetAssignmentEngine } from "./engines/asset-assignment.engine.js";
 import { DepreciationEngine } from "./engines/depreciation.engine.js";
+import { AssetLifecycleEngine } from "./engines/asset-lifecycle.engine.js";
 import {
   type AssetCategory,
   type AssetCondition,
@@ -905,5 +906,22 @@ export class AssetsService {
     );
 
     return { movement, item: updatedItem };
+  }
+
+  async getAssetLifecycleSummary(tenantId: string) {
+    const assets = await this.prisma.asset.findMany({
+      where: { tenantId },
+      include: { warranties: true, amcs: true }
+    });
+
+    return AssetLifecycleEngine.calculateAssetHealthSummary(
+      assets.map((a) => ({
+        id: a.id,
+        cost: a.purchaseCost,
+        status: a.status,
+        warrantyExpiry: a.warranties[0]?.endDate ?? null,
+        amcExpiry: a.amcs[0]?.endDate ?? null
+      }))
+    );
   }
 }

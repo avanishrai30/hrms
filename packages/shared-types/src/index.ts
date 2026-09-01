@@ -407,7 +407,16 @@ export type PermissionCode =
   | "mss.manage"
   | "letters.generate"
   | "communications.manage"
-  | "servicedelivery.analytics";
+  | "servicedelivery.analytics"
+  | "vendors.manage"
+  | "contractors.manage"
+  | "assets.manage"
+  | "visitors.manage"
+  | "facilities.manage"
+  | "search.global"
+  | "notifications.manage"
+  | "executive.intelligence"
+  | "system.health";
 
 export interface TenantContext {
   tenantId: string;
