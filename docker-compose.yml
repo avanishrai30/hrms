@@ -2,37 +2,35 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: hrms-postgres
-    restart: always
-    ports:
-      - "5432:5432"
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-vc_hrms_prod}
       POSTGRES_USER: ${POSTGRES_USER:-hrms_admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SuperSecretSecurePassword2026!}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hrms_admin} -d ${POSTGRES_DB:-vc_hrms_prod}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - hrms-net
 
   redis:
     image: redis:7-alpine
     container_name: hrms-redis
-    restart: always
-    ports:
-      - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-RedisSecure2026!}"]
+    restart: unless-stopped
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass '$$REDIS_PASSWORD'"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-RedisSecure2026!}", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a '$$REDIS_PASSWORD' ping | grep PONG"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - hrms-net
 
@@ -41,7 +39,7 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     container_name: hrms-api
-    restart: always
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,13 +48,18 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-hrms_admin}:${POSTGRES_PASSWORD:-SuperSecretSecurePassword2026!}@postgres:5432/${POSTGRES_DB:-vc_hrms_prod}?schema=public
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-RedisSecure2026!}
-      JWT_SECRET: ${JWT_SECRET:-EnterpriseJwtSecretKey2026Prod!}
-      COOKIE_SECRET: ${COOKIE_SECRET:-EnterpriseCookieSecretKey2026Prod!}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hrms_admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vc_hrms_prod}?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      COOKIE_SECRET: ${COOKIE_SECRET}
+      CSRF_SECRET: ${CSRF_SECRET}
+      BOOTSTRAP_PASSWORD: ${BOOTSTRAP_PASSWORD}
+      VC_ORGANICS_OWNER_EMAIL: ${VC_ORGANICS_OWNER_EMAIL:-owner@vcorganics.com}
+      PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-admin@example.com}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     networks:
       - hrms-net
 
@@ -64,31 +67,35 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: /api/v1
     container_name: hrms-web
-    restart: always
+    restart: unless-stopped
     depends_on:
       - api
     environment:
       NODE_ENV: production
       PORT: 3000
-      NEXT_PUBLIC_API_URL: https://${DOMAIN_NAME:-hrms.vcorganics.com}/api
     networks:
       - hrms-net
 
-  nginx:
-    image: nginx:alpine
-    container_name: hrms-nginx
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./certbot/conf:/etc/letsencrypt:ro
-      - ./certbot/www:/var/www/certbot:ro
+  caddy:
+    image: caddy:2-alpine
+    container_name: hrms-caddy
+    restart: unless-stopped
     depends_on:
       - api
       - web
+    environment:
+      DOMAIN_NAME: ${DOMAIN_NAME:-hrms.vcorganics.com}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     networks:
       - hrms-net
 
@@ -99,3 +106,5 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  caddy_data:
+  caddy_config:
