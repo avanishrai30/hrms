@@ -98,12 +98,38 @@ docker compose up -d api
 docker compose stop web >/dev/null 2>&1 || true
 docker compose rm -f web >/dev/null 2>&1 || true
 
+API_READY=0
+for i in {1..30}; do
+  api_state="$(docker inspect -f '{{.State.Status}}' hrms-api 2>/dev/null || true)"
+  if [[ "$api_state" != "running" ]]; then
+    echo "HRMS API exited during startup."
+    docker compose ps
+    docker logs --tail 120 hrms-api || true
+    exit 1
+  fi
+
+  if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:4100/api/v1/health/ready >/dev/null 2>&1; then
+    API_READY=1
+    break
+  fi
+
+  sleep 2
+done
+
+if [[ "$API_READY" != "1" ]]; then
+  echo "HRMS API did not become ready within 60 seconds."
+  docker compose ps
+  docker logs --tail 120 hrms-api || true
+  exit 1
+fi
+
 docker compose ps
 
 echo
 echo_line="------------------------------------------------------------"
 echo "$echo_line"
 echo "VC-WMS backend is running in isolation"
+echo "API readiness: verified"
 echo "API upstream:  http://127.0.0.1:4100/api/v1"
 echo "Frontend:      Vercel"
 echo "Tenant:        vc-organics"
