@@ -10,7 +10,14 @@ COPY apps/api/ ./apps/api/
 
 RUN pnpm install --no-frozen-lockfile
 RUN pnpm --filter @vc-wms/api prisma:generate
-RUN pnpm --filter @vc-wms/api build
+# Build the API together with all of its workspace dependencies so runtime
+# package exports resolve to compiled JavaScript rather than TypeScript source.
+RUN pnpm --filter @vc-wms/api... build
+# Fail the image build immediately if the production runtime artifacts are absent.
+RUN test -f apps/api/dist/apps/api/src/main.js \
+ && test -f packages/auth/dist/index.js \
+ && test -f packages/shared-types/dist/index.js \
+ && test -f packages/utils/dist/index.js
 
 FROM node:20-alpine AS runner
 ENV PNPM_HOME="/pnpm"
@@ -23,4 +30,4 @@ WORKDIR /app
 COPY --from=builder /app /app
 
 EXPOSE 4000
-CMD ["apps/api/node_modules/.bin/tsx", "apps/api/dist/apps/api/src/main.js"]
+CMD ["node", "apps/api/dist/apps/api/src/main.js"]
