@@ -237,7 +237,17 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "lms.skills",
     "lms.instructors",
     "lms.analytics",
-    "lms.compliance"
+    "lms.compliance",
+    "workforce.view",
+    "workforce.manage",
+    "workforce.positions.manage",
+    "workforce.headcount.plan",
+    "workforce.cost.forecast",
+    "workforce.orgdesign.manage",
+    "workforce.succession.manage",
+    "workforce.attrition.predict",
+    "workforce.skills.forecast",
+    "workforce.analytics.view"
   ],
   TENANT_ADMIN: [
     "tenant.dashboard.read",
@@ -426,7 +436,17 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "lms.skills",
     "lms.instructors",
     "lms.analytics",
-    "lms.compliance"
+    "lms.compliance",
+    "workforce.view",
+    "workforce.manage",
+    "workforce.positions.manage",
+    "workforce.headcount.plan",
+    "workforce.cost.forecast",
+    "workforce.orgdesign.manage",
+    "workforce.succession.manage",
+    "workforce.attrition.predict",
+    "workforce.skills.forecast",
+    "workforce.analytics.view"
   ],
   HR_ADMIN: [
     "tenant.dashboard.read",
@@ -602,7 +622,17 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "lms.skills",
     "lms.instructors",
     "lms.analytics",
-    "lms.compliance"
+    "lms.compliance",
+    "workforce.view",
+    "workforce.manage",
+    "workforce.positions.manage",
+    "workforce.headcount.plan",
+    "workforce.cost.forecast",
+    "workforce.orgdesign.manage",
+    "workforce.succession.manage",
+    "workforce.attrition.predict",
+    "workforce.skills.forecast",
+    "workforce.analytics.view"
   ],
   MANAGER: [
     "tenant.dashboard.read",
@@ -680,7 +710,11 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "lms.enroll",
     "lms.assess",
     "lms.certifications",
-    "lms.skills"
+    "lms.skills",
+    "workforce.view",
+    "workforce.positions.manage",
+    "workforce.succession.manage",
+    "workforce.analytics.view"
   ],
   EMPLOYEE: [
     "tenant.dashboard.read",

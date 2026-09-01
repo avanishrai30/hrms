@@ -366,7 +366,17 @@ export type PermissionCode =
   | "lms.skills"
   | "lms.instructors"
   | "lms.analytics"
-  | "lms.compliance";
+  | "lms.compliance"
+  | "workforce.view"
+  | "workforce.manage"
+  | "workforce.positions.manage"
+  | "workforce.headcount.plan"
+  | "workforce.cost.forecast"
+  | "workforce.orgdesign.manage"
+  | "workforce.succession.manage"
+  | "workforce.attrition.predict"
+  | "workforce.skills.forecast"
+  | "workforce.analytics.view";
 
 export interface TenantContext {
   tenantId: string;

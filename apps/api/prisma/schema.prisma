@@ -468,6 +468,14 @@ model Tenant {
   instructors         Instructor[]
   trainingSessions    TrainingSession[]
   sessionAttendances  SessionAttendance[]
+  positions           Position[]
+  positionAssignments PositionAssignment[]
+  headcountPlans      HeadcountPlan[]
+  headcountScenarios  HeadcountScenario[]
+  workforceCostForecasts WorkforceCostForecast[]
+  orgStructureVersions OrgStructureVersion[]
+  attritionRiskAssessments AttritionRiskAssessment[]
+  skillSupplyDemandForecasts SkillSupplyDemandForecast[]
   auditLogs           AuditLog[]
 
   @@index([slug])
@@ -750,6 +758,9 @@ model Department {
   hiringRequests HiringRequest[]
   jobRequisitions JobRequisition[]
   calibrationSessions CalibrationSession[]
+  positions    Position[]
+  headcountPlans HeadcountPlan[]
+  workforceCostForecasts WorkforceCostForecast[]
 
   @@unique([tenantId, code])
   @@index([tenantId, status])
@@ -888,6 +899,8 @@ model Employee {
   employeeSkills        EmployeeSkill[]
   instructorProfile     Instructor?
   sessionAttendances    SessionAttendance[]
+  positionAssignments   PositionAssignment[]
+  attritionRiskAssessments AttritionRiskAssessment[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, email])
@@ -1320,6 +1333,7 @@ model Location {
   assignments   LocationAssignment[]
   verifications LocationVerification[]
   attendances   Attendance[]
+  headcountPlans HeadcountPlan[]
 
   @@unique([tenantId, code])
   @@index([tenantId, isActive])
@@ -2771,6 +2785,8 @@ model BusinessUnit {
   children BusinessUnit[] @relation("BusinessUnitHierarchy")
   regions  Region[]
   employees Employee[]
+  positions Position[]
+  headcountPlans HeadcountPlan[]
 
   @@unique([tenantId, code])
   @@index([tenantId, parentId])
@@ -7248,6 +7264,246 @@ model SessionAttendance {
   @@unique([tenantId, sessionId, employeeId])
   @@index([tenantId, employeeId])
   @@map("session_attendances")
+}
+
+// ====================================================
+// TASK 28: WORKFORCE PLANNING & STRATEGIC HR INTELLIGENCE
+// ====================================================
+
+enum PositionLifecycleStatus {
+  DRAFT
+  APPROVED
+  ACTIVE
+  FROZEN
+  CLOSED
+}
+
+enum HeadcountPeriodType {
+  ANNUAL
+  QUARTERLY
+  MONTHLY
+}
+
+enum HeadcountPlanStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  ACTIVE
+  ARCHIVED
+}
+
+enum GrowthScenarioCase {
+  BEST_CASE
+  EXPECTED_CASE
+  WORST_CASE
+}
+
+enum OrgVersionStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum AttritionRiskTier {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Position {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  tenantId            String                  @map("tenant_id") @db.Uuid
+  positionCode        String                  @map("position_code")
+  title               String
+  departmentId        String?                 @map("department_id") @db.Uuid
+  businessUnitId      String?                 @map("business_unit_id") @db.Uuid
+  grade               String?
+  level               String?
+  reportsToPositionId String?                 @map("reports_to_position_id") @db.Uuid
+  employmentType      EmploymentType          @default(FULL_TIME) @map("employment_type")
+  isCriticalRole      Boolean                 @default(false) @map("is_critical_role")
+  approvedHeadcount   Int                     @default(1) @map("approved_headcount")
+  filledHeadcount     Int                     @default(0) @map("filled_headcount")
+  openHeadcount       Int                     @default(1) @map("open_headcount")
+  budgetedAnnualCost  Float                   @default(0.0) @map("budgeted_annual_cost")
+  currency            String                  @default("INR")
+  status              PositionLifecycleStatus @default(ACTIVE)
+  frozenAt            DateTime?               @map("frozen_at")
+  closedAt            DateTime?               @map("closed_at")
+  deletedAt           DateTime?               @map("deleted_at")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+
+  tenant              Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  department          Department?             @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  businessUnit        BusinessUnit?           @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  reportsToPosition   Position?               @relation("PositionHierarchy", fields: [reportsToPositionId], references: [id], onDelete: SetNull)
+  childPositions      Position[]              @relation("PositionHierarchy")
+  assignments         PositionAssignment[]
+
+  @@unique([tenantId, positionCode])
+  @@index([tenantId, departmentId])
+  @@index([tenantId, status])
+  @@index([tenantId, isCriticalRole])
+  @@map("positions")
+}
+
+model PositionAssignment {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  positionId String    @map("position_id") @db.Uuid
+  employeeId String    @map("employee_id") @db.Uuid
+  startDate  DateTime  @default(now()) @map("start_date")
+  endDate    DateTime? @map("end_date")
+  isPrimary  Boolean   @default(true) @map("is_primary")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  position   Position  @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, positionId])
+  @@index([tenantId, employeeId])
+  @@map("position_assignments")
+}
+
+model HeadcountPlan {
+  id                String              @id @default(uuid()) @db.Uuid
+  tenantId          String              @map("tenant_id") @db.Uuid
+  name              String
+  fiscalYear        Int                 @map("fiscal_year")
+  periodType        HeadcountPeriodType @default(ANNUAL) @map("period_type")
+  departmentId      String?             @map("department_id") @db.Uuid
+  businessUnitId    String?             @map("business_unit_id") @db.Uuid
+  locationId        String?             @map("location_id") @db.Uuid
+  currentHeadcount  Int                 @default(0) @map("current_headcount")
+  approvedHeadcount Int                 @default(0) @map("approved_headcount")
+  forecastHeadcount Int                 @default(0) @map("forecast_headcount")
+  budgetHeadcount   Int                 @default(0) @map("budget_headcount")
+  vacancyHeadcount  Int                 @default(0) @map("vacancy_headcount")
+  status            HeadcountPlanStatus @default(ACTIVE)
+  approvedByUserId  String?             @map("approved_by_user_id") @db.Uuid
+  approvedAt        DateTime?           @map("approved_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  department        Department?         @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  businessUnit      BusinessUnit?       @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  location          Location?           @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  scenarios         HeadcountScenario[]
+  costForecasts     WorkforceCostForecast[]
+
+  @@index([tenantId, fiscalYear])
+  @@index([tenantId, departmentId])
+  @@map("headcount_plans")
+}
+
+model HeadcountScenario {
+  id             String             @id @default(uuid()) @db.Uuid
+  tenantId       String             @map("tenant_id") @db.Uuid
+  planId         String             @map("plan_id") @db.Uuid
+  name           String
+  description    String?
+  growthCase     GrowthScenarioCase @default(EXPECTED_CASE) @map("growth_case")
+  headcountDelta Int                @default(0) @map("headcount_delta")
+  budgetDelta    Float              @default(0.0) @map("budget_delta")
+  scenarioCost   Float              @default(0.0) @map("scenario_cost")
+  impactSummary  String?            @map("impact_summary")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan           HeadcountPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, planId])
+  @@map("headcount_scenarios")
+}
+
+model WorkforceCostForecast {
+  id                 String        @id @default(uuid()) @db.Uuid
+  tenantId           String        @map("tenant_id") @db.Uuid
+  planId             String?       @map("plan_id") @db.Uuid
+  departmentId       String?       @map("department_id") @db.Uuid
+  periodLabel        String        @map("period_label")
+  salaryCost         Float         @default(0.0) @map("salary_cost")
+  benefitsCost       Float         @default(0.0) @map("benefits_cost")
+  contributionsCost  Float         @default(0.0) @map("contributions_cost")
+  recruitmentCost    Float         @default(0.0) @map("recruitment_cost")
+  trainingCost       Float         @default(0.0) @map("training_cost")
+  assetCost          Float         @default(0.0) @map("asset_cost")
+  totalWorkforceCost Float         @default(0.0) @map("total_workforce_cost")
+  createdAt          DateTime      @default(now()) @map("created_at")
+
+  tenant             Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan               HeadcountPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  department         Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, periodLabel])
+  @@map("workforce_cost_forecasts")
+}
+
+model OrgStructureVersion {
+  id               String           @id @default(uuid()) @db.Uuid
+  tenantId         String           @map("tenant_id") @db.Uuid
+  versionName      String           @map("version_name")
+  status           OrgVersionStatus @default(ACTIVE)
+  effectiveDate    DateTime         @default(now()) @map("effective_date")
+  totalNodes       Int              @default(0) @map("total_nodes")
+  maxLayers        Int              @default(1) @map("max_layers")
+  avgSpanOfControl Float            @default(1.0) @map("avg_span_of_control")
+  complexityScore  Float            @default(1.0) @map("complexity_score")
+  snapshotData     Json             @default("{}") @map("snapshot_data")
+  createdByUserId  String?          @map("created_by_user_id") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@map("org_structure_versions")
+}
+
+model AttritionRiskAssessment {
+  id                 String            @id @default(uuid()) @db.Uuid
+  tenantId           String            @map("tenant_id") @db.Uuid
+  employeeId         String            @map("employee_id") @db.Uuid
+  riskScore          Float             @default(0.0) @map("risk_score") // 0 - 100
+  riskCategory       AttritionRiskTier @default(LOW) @map("risk_category")
+  primaryDrivers     String[]          @default([]) @map("primary_drivers")
+  mitigatingFactors  String[]          @default([]) @map("mitigating_factors")
+  recommendedActions String[]          @default([]) @map("recommended_actions")
+  assessmentDate     DateTime          @default(now()) @map("assessment_date")
+  createdAt          DateTime          @default(now()) @map("created_at")
+
+  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee           Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, riskCategory])
+  @@map("attrition_risk_assessments")
+}
+
+model SkillSupplyDemandForecast {
+  id                       String   @id @default(uuid()) @db.Uuid
+  tenantId                 String   @map("tenant_id") @db.Uuid
+  skillId                  String?  @map("skill_id") @db.Uuid
+  skillName                String   @map("skill_name")
+  category                 String   @default("Technical")
+  currentSupplyCount       Int      @default(0) @map("current_supply_count")
+  futureDemandCount        Int      @default(0) @map("future_demand_count")
+  gapCount                 Int      @default(0) @map("gap_count")
+  deficitPercent           Float    @default(0.0) @map("deficit_percent")
+  targetHorizonMonths      Int      @default(12) @map("target_horizon_months")
+  recommendedTrainingTrack String?  @map("recommended_training_track")
+  createdAt                DateTime @default(now()) @map("created_at")
+
+  tenant                   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, category])
+  @@map("skill_supply_demand_forecasts")
 }
 
 

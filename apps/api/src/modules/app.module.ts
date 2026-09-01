@@ -30,6 +30,7 @@ import { FinanceModule } from "./finance/finance.module.js";
 import { OperationsAnalyticsModule } from "./operations-analytics/operations-analytics.module.js";
 import { IntegrationsModule } from "./integrations/integrations.module.js";
 import { LearningModule } from "./learning/learning.module.js";
+import { WorkforceModule } from "./workforce/workforce.module.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { RbacGuard } from "./rbac/rbac.guard.js";
 import { TenantsModule } from "./tenants/tenants.module.js";
@@ -75,7 +76,8 @@ import { HealthModule } from "./health/health.module.js";
     FinanceModule,
     OperationsAnalyticsModule,
     IntegrationsModule,
-    LearningModule
+    LearningModule,
+    WorkforceModule
   ],
   providers: [
     {
