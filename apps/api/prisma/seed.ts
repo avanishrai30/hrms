@@ -1,4 +1,4 @@
-import { PrismaClient, EmploymentStatus, EmploymentType } from "@prisma/client";
+import { EmploymentStatus, EmploymentType, PrismaClient, SalaryType } from "@prisma/client";
 import * as argon2 from "argon2";
 import { ROLE_PERMISSIONS } from "@vc-wms/auth";
 import type { TenantRoleCode } from "@vc-wms/shared-types";
@@ -8,35 +8,50 @@ const prisma = new PrismaClient();
 const ROLES: TenantRoleCode[] = ["TENANT_OWNER", "TENANT_ADMIN", "HR_ADMIN", "MANAGER", "EMPLOYEE"];
 
 async function main(): Promise<void> {
-  console.log("🌱 Starting Enterprise HRMS Seed...");
+  console.log("🌱 Starting production HRMS bootstrap seed...");
 
   const uniquePerms = new Set<string>();
   for (const roleCode of ROLES) {
-    for (const perm of ROLE_PERMISSIONS[roleCode]) uniquePerms.add(perm);
+    for (const permission of ROLE_PERMISSIONS[roleCode]) uniquePerms.add(permission);
   }
 
   for (const code of uniquePerms) {
     const [resource, action] = code.split(/\.(.*)/s);
     await prisma.permission.upsert({
       where: { code },
-      create: { code, resource: resource ?? code, action: action ?? "read", description: code },
-      update: { resource: resource ?? code, action: action ?? "read", description: code }
+      create: {
+        code,
+        resource: resource ?? code,
+        action: action ?? "read",
+        description: code
+      },
+      update: {
+        resource: resource ?? code,
+        action: action ?? "read",
+        description: code
+      }
     });
   }
-  console.log(`✅ Seeded ${uniquePerms.size} Enterprise Permissions`);
+  console.log(`✅ Seeded ${uniquePerms.size} permissions`);
 
-  const platformEmail = process.env.PLATFORM_ADMIN_EMAILS?.split(",")[0] ?? "admin@example.com";
   const bootstrapPassword = process.env.BOOTSTRAP_PASSWORD ?? "ChangeMe123!";
+  const passwordHash = await argon2.hash(bootstrapPassword);
+  const platformEmail = (process.env.PLATFORM_ADMIN_EMAILS?.split(",")[0] ?? "admin@example.com").toLowerCase();
+  const ownerEmail = (process.env.VC_ORGANICS_OWNER_EMAIL ?? "owner@vcorganics.com").toLowerCase();
 
   await prisma.platformUser.upsert({
-    where: { email: platformEmail.toLowerCase() },
+    where: { email: platformEmail },
     create: {
-      email: platformEmail.toLowerCase(),
-      passwordHash: await argon2.hash(bootstrapPassword),
+      email: platformEmail,
+      passwordHash,
       role: "PLATFORM_SUPER_ADMIN",
       status: "ACTIVE"
     },
-    update: { role: "PLATFORM_SUPER_ADMIN", status: "ACTIVE" }
+    update: {
+      passwordHash,
+      role: "PLATFORM_SUPER_ADMIN",
+      status: "ACTIVE"
+    }
   });
 
   const tenant = await prisma.tenant.upsert({
@@ -47,7 +62,7 @@ async function main(): Promise<void> {
       legalName: "VC Organics Private Limited",
       status: "ACTIVE",
       plan: "ENTERPRISE",
-      primaryDomain: "hr.vcorganics.com",
+      primaryDomain: "hrms.vcorganics.com",
       timezone: "Asia/Kolkata",
       locale: "en-IN",
       currency: "INR",
@@ -72,18 +87,22 @@ async function main(): Promise<void> {
       },
       domains: {
         create: {
-          domain: "hr.vcorganics.com",
+          domain: "hrms.vcorganics.com",
           isPrimary: true,
           verifiedAt: new Date()
         }
       }
     },
-    update: { status: "ACTIVE", primaryDomain: "hr.vcorganics.com" }
+    update: {
+      status: "ACTIVE",
+      plan: "ENTERPRISE",
+      primaryDomain: "hrms.vcorganics.com"
+    }
   });
-  console.log(`✅ Seeded Tenant: ${tenant.name} (${tenant.id})`);
+  console.log(`✅ Tenant ready: ${tenant.name} (${tenant.id})`);
 
   const allPermissions = await prisma.permission.findMany();
-  const byCode = new Map(allPermissions.map((p) => [p.code, p.id]));
+  const permissionIds = new Map(allPermissions.map((permission) => [permission.code, permission.id]));
 
   for (const roleCode of ROLES) {
     const role = await prisma.role.upsert({
@@ -101,14 +120,96 @@ async function main(): Promise<void> {
     });
 
     const assignments = ROLE_PERMISSIONS[roleCode]
-      .map((code) => byCode.get(code))
+      .map((code) => permissionIds.get(code))
       .filter((permissionId): permissionId is string => Boolean(permissionId))
       .map((permissionId) => ({ tenantId: tenant.id, roleId: role.id, permissionId }));
 
     await prisma.tenantRolePermission.createMany({ data: assignments, skipDuplicates: true });
   }
+  console.log("✅ Tenant roles and permissions ready");
 
-  const locHq = await prisma.location.upsert({
+  const deptEng = await prisma.department.upsert({
+    where: { tenantId_code: { tenantId: tenant.id, code: "DEPT-ENG" } },
+    create: {
+      tenantId: tenant.id,
+      code: "DEPT-ENG",
+      name: "Engineering & Technology",
+      status: "ACTIVE"
+    },
+    update: { status: "ACTIVE" }
+  });
+
+  const deptHr = await prisma.department.upsert({
+    where: { tenantId_code: { tenantId: tenant.id, code: "DEPT-HR" } },
+    create: {
+      tenantId: tenant.id,
+      code: "DEPT-HR",
+      name: "Human Resources & Talent",
+      status: "ACTIVE"
+    },
+    update: { status: "ACTIVE" }
+  });
+
+  await prisma.department.upsert({
+    where: { tenantId_code: { tenantId: tenant.id, code: "DEPT-FIN" } },
+    create: {
+      tenantId: tenant.id,
+      code: "DEPT-FIN",
+      name: "Finance & Accounting",
+      status: "ACTIVE"
+    },
+    update: { status: "ACTIVE" }
+  });
+
+  await prisma.department.upsert({
+    where: { tenantId_code: { tenantId: tenant.id, code: "DEPT-OPS" } },
+    create: {
+      tenantId: tenant.id,
+      code: "DEPT-OPS",
+      name: "Supply Chain & Operations",
+      status: "ACTIVE"
+    },
+    update: { status: "ACTIVE" }
+  });
+
+  const desigCeo = await prisma.designation.upsert({
+    where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-CEO" } },
+    create: {
+      tenantId: tenant.id,
+      departmentId: deptEng.id,
+      code: "DESIG-CEO",
+      name: "Chief Executive Officer",
+      status: "ACTIVE"
+    },
+    update: { departmentId: deptEng.id, status: "ACTIVE" }
+  });
+
+  const desigHrLead = await prisma.designation.upsert({
+    where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-HRLEAD" } },
+    create: {
+      tenantId: tenant.id,
+      departmentId: deptHr.id,
+      code: "DESIG-HRLEAD",
+      name: "Lead People Operations",
+      status: "ACTIVE"
+    },
+    update: { departmentId: deptHr.id, status: "ACTIVE" }
+  });
+
+  const desigArch = await prisma.designation.upsert({
+    where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-ARCH" } },
+    create: {
+      tenantId: tenant.id,
+      departmentId: deptEng.id,
+      code: "DESIG-ARCH",
+      name: "Principal Software Architect",
+      status: "ACTIVE"
+    },
+    update: { departmentId: deptEng.id, status: "ACTIVE" }
+  });
+  console.log("✅ Core departments and designations ready");
+
+  await prisma.location.upsert({
     where: { tenantId_code: { tenantId: tenant.id, code: "LOC-BLR-HQ" } },
     create: {
       tenantId: tenant.id,
@@ -125,125 +226,128 @@ async function main(): Promise<void> {
     update: { isActive: true }
   });
 
-  await prisma.location.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "LOC-MUM-HUB" } },
+  const userOwner = await prisma.user.upsert({
+    where: { email: ownerEmail },
+    create: { email: ownerEmail, passwordHash, status: "ACTIVE" },
+    update: { passwordHash, status: "ACTIVE" }
+  });
+
+  const hrEmail = "hradmin@vcorganics.com";
+  const userHrAdmin = await prisma.user.upsert({
+    where: { email: hrEmail },
+    create: { email: hrEmail, passwordHash, status: "ACTIVE" },
+    update: { passwordHash, status: "ACTIVE" }
+  });
+
+  const leadEmail = "techlead@vcorganics.com";
+  const userLead = await prisma.user.upsert({
+    where: { email: leadEmail },
+    create: { email: leadEmail, passwordHash, status: "ACTIVE" },
+    update: { passwordHash, status: "ACTIVE" }
+  });
+
+  const empOwner = await prisma.employee.upsert({
+    where: { tenantId_employeeCode: { tenantId: tenant.id, employeeCode: "VC-0001" } },
     create: {
       tenantId: tenant.id,
-      code: "LOC-MUM-HUB",
-      name: "Mumbai Commercial Hub",
-      description: "VC Organics Mumbai commercial hub",
-      type: "OFFICE",
-      latitude: 19.0664,
-      longitude: 72.8687,
-      radiusMeters: 200,
-      maxAccuracyMeters: 100,
-      isActive: true
+      employeeCode: "VC-0001",
+      fullName: "Avanish Rai",
+      email: ownerEmail,
+      phone: "+919876543210",
+      departmentId: deptEng.id,
+      designationId: desigCeo.id,
+      joiningDate: new Date("2022-01-01"),
+      employmentType: EmploymentType.FULL_TIME,
+      salaryType: SalaryType.MONTHLY,
+      status: EmploymentStatus.ACTIVE
     },
-    update: { isActive: true }
+    update: {
+      departmentId: deptEng.id,
+      designationId: desigCeo.id,
+      status: EmploymentStatus.ACTIVE
+    }
   });
 
-  const deptEng = await prisma.department.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "DEPT-ENG" } },
-    create: { tenantId: tenant.id, code: "DEPT-ENG", name: "Engineering & Technology", isActive: true },
-    update: { isActive: true }
-  });
-
-  const deptHr = await prisma.department.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "DEPT-HR" } },
-    create: { tenantId: tenant.id, code: "DEPT-HR", name: "Human Resources & Talent", isActive: true },
-    update: { isActive: true }
-  });
-
-  await prisma.department.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "DEPT-FIN" } },
-    create: { tenantId: tenant.id, code: "DEPT-FIN", name: "Finance & Accounting", isActive: true },
-    update: { isActive: true }
-  });
-
-  await prisma.department.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "DEPT-OPS" } },
-    create: { tenantId: tenant.id, code: "DEPT-OPS", name: "Supply Chain & Operations", isActive: true },
-    update: { isActive: true }
-  });
-
-  const desigCeo = await prisma.designation.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-CEO" } },
-    create: { tenantId: tenant.id, code: "DESIG-CEO", name: "Chief Executive Officer", level: 10, isActive: true },
-    update: { isActive: true }
-  });
-
-  await prisma.designation.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-CHRO" } },
-    create: { tenantId: tenant.id, code: "DESIG-CHRO", name: "Chief Human Resources Officer", level: 9, isActive: true },
-    update: { isActive: true }
-  });
-
-  const desigArch = await prisma.designation.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-ARCH" } },
-    create: { tenantId: tenant.id, code: "DESIG-ARCH", name: "Principal Software Architect", level: 8, isActive: true },
-    update: { isActive: true }
-  });
-
-  await prisma.designation.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-ENG" } },
-    create: { tenantId: tenant.id, code: "DESIG-ENG", name: "Senior Software Engineer", level: 6, isActive: true },
-    update: { isActive: true }
-  });
-
-  const desigHrLead = await prisma.designation.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-HRLEAD" } },
-    create: { tenantId: tenant.id, code: "DESIG-HRLEAD", name: "Lead People Operations", level: 7, isActive: true },
-    update: { isActive: true }
-  });
-
-  const ownerEmail = process.env.VC_ORGANICS_OWNER_EMAIL ?? "owner@vcorganics.com";
-
-  const userOwner = await prisma.user.upsert({
-    where: { email: ownerEmail.toLowerCase() },
+  const empHr = await prisma.employee.upsert({
+    where: { tenantId_employeeCode: { tenantId: tenant.id, employeeCode: "VC-0002" } },
     create: {
-      email: ownerEmail.toLowerCase(),
-      passwordHash: await argon2.hash(bootstrapPassword),
-      status: "ACTIVE"
+      tenantId: tenant.id,
+      employeeCode: "VC-0002",
+      fullName: "Priya Sharma",
+      email: hrEmail,
+      phone: "+919812345678",
+      departmentId: deptHr.id,
+      designationId: desigHrLead.id,
+      managerEmployeeId: empOwner.id,
+      joiningDate: new Date("2023-03-15"),
+      employmentType: EmploymentType.FULL_TIME,
+      salaryType: SalaryType.MONTHLY,
+      status: EmploymentStatus.ACTIVE
     },
-    update: { status: "ACTIVE" }
+    update: {
+      departmentId: deptHr.id,
+      designationId: desigHrLead.id,
+      managerEmployeeId: empOwner.id,
+      status: EmploymentStatus.ACTIVE
+    }
   });
 
-  const userHrAdmin = await prisma.user.upsert({
-    where: { email: "hradmin@vcorganics.com" },
+  const empLead = await prisma.employee.upsert({
+    where: { tenantId_employeeCode: { tenantId: tenant.id, employeeCode: "VC-0003" } },
     create: {
-      email: "hradmin@vcorganics.com",
-      passwordHash: await argon2.hash(bootstrapPassword),
-      status: "ACTIVE"
+      tenantId: tenant.id,
+      employeeCode: "VC-0003",
+      fullName: "Rohit Verma",
+      email: leadEmail,
+      phone: "+919765432109",
+      departmentId: deptEng.id,
+      designationId: desigArch.id,
+      managerEmployeeId: empOwner.id,
+      joiningDate: new Date("2023-06-01"),
+      employmentType: EmploymentType.FULL_TIME,
+      salaryType: SalaryType.MONTHLY,
+      status: EmploymentStatus.ACTIVE
     },
-    update: { status: "ACTIVE" }
+    update: {
+      departmentId: deptEng.id,
+      designationId: desigArch.id,
+      managerEmployeeId: empOwner.id,
+      status: EmploymentStatus.ACTIVE
+    }
   });
-
-  const userLead = await prisma.user.upsert({
-    where: { email: "techlead@vcorganics.com" },
-    create: {
-      email: "techlead@vcorganics.com",
-      passwordHash: await argon2.hash(bootstrapPassword),
-      status: "ACTIVE"
-    },
-    update: { status: "ACTIVE" }
-  });
+  console.log("✅ Bootstrap employees ready");
 
   const memberOwner = await prisma.tenantMembership.upsert({
     where: { tenantId_userId: { tenantId: tenant.id, userId: userOwner.id } },
-    create: { tenantId: tenant.id, userId: userOwner.id, status: "ACTIVE" },
-    update: { status: "ACTIVE" }
+    create: {
+      tenantId: tenant.id,
+      userId: userOwner.id,
+      employeeId: empOwner.id,
+      status: "ACTIVE"
+    },
+    update: { employeeId: empOwner.id, status: "ACTIVE" }
   });
 
   const memberHr = await prisma.tenantMembership.upsert({
     where: { tenantId_userId: { tenantId: tenant.id, userId: userHrAdmin.id } },
-    create: { tenantId: tenant.id, userId: userHrAdmin.id, status: "ACTIVE" },
-    update: { status: "ACTIVE" }
+    create: {
+      tenantId: tenant.id,
+      userId: userHrAdmin.id,
+      employeeId: empHr.id,
+      status: "ACTIVE"
+    },
+    update: { employeeId: empHr.id, status: "ACTIVE" }
   });
 
   const memberLead = await prisma.tenantMembership.upsert({
     where: { tenantId_userId: { tenantId: tenant.id, userId: userLead.id } },
-    create: { tenantId: tenant.id, userId: userLead.id, status: "ACTIVE" },
-    update: { status: "ACTIVE" }
+    create: {
+      tenantId: tenant.id,
+      userId: userLead.id,
+      employeeId: empLead.id,
+      status: "ACTIVE"
+    },
+    update: { employeeId: empLead.id, status: "ACTIVE" }
   });
 
   const roleOwner = await prisma.role.findUniqueOrThrow({
@@ -252,7 +356,7 @@ async function main(): Promise<void> {
   const roleHr = await prisma.role.findUniqueOrThrow({
     where: { tenantId_code: { tenantId: tenant.id, code: "HR_ADMIN" } }
   });
-  const roleMgr = await prisma.role.findUniqueOrThrow({
+  const roleManager = await prisma.role.findUniqueOrThrow({
     where: { tenantId_code: { tenantId: tenant.id, code: "MANAGER" } }
   });
 
@@ -260,201 +364,14 @@ async function main(): Promise<void> {
     data: [
       { tenantId: tenant.id, membershipId: memberOwner.id, roleId: roleOwner.id },
       { tenantId: tenant.id, membershipId: memberHr.id, roleId: roleHr.id },
-      { tenantId: tenant.id, membershipId: memberLead.id, roleId: roleMgr.id }
+      { tenantId: tenant.id, membershipId: memberLead.id, roleId: roleManager.id }
     ],
     skipDuplicates: true
   });
 
-  const empOwner = await prisma.employee.upsert({
-    where: { tenantId_employeeCode: { tenantId: tenant.id, employeeCode: "VC-0001" } },
-    create: {
-      tenantId: tenant.id,
-      userId: userOwner.id,
-      employeeCode: "VC-0001",
-      firstName: "Avanish",
-      lastName: "Rai",
-      fullName: "Avanish Rai",
-      email: ownerEmail.toLowerCase(),
-      phone: "+919876543210",
-      status: EmploymentStatus.ACTIVE,
-      employmentType: EmploymentType.FULL_TIME,
-      joiningDate: new Date("2022-01-01"),
-      departmentId: deptEng.id,
-      designationId: desigCeo.id,
-      locationId: locHq.id
-    },
-    update: { status: EmploymentStatus.ACTIVE }
-  });
-
-  await prisma.employee.upsert({
-    where: { tenantId_employeeCode: { tenantId: tenant.id, employeeCode: "VC-0002" } },
-    create: {
-      tenantId: tenant.id,
-      userId: userHrAdmin.id,
-      employeeCode: "VC-0002",
-      firstName: "Priya",
-      lastName: "Sharma",
-      fullName: "Priya Sharma",
-      email: "hradmin@vcorganics.com",
-      phone: "+919812345678",
-      status: EmploymentStatus.ACTIVE,
-      employmentType: EmploymentType.FULL_TIME,
-      joiningDate: new Date("2023-03-15"),
-      departmentId: deptHr.id,
-      designationId: desigHrLead.id,
-      locationId: locHq.id,
-      managerId: empOwner.id
-    },
-    update: { status: EmploymentStatus.ACTIVE }
-  });
-
-  await prisma.employee.upsert({
-    where: { tenantId_employeeCode: { tenantId: tenant.id, employeeCode: "VC-0003" } },
-    create: {
-      tenantId: tenant.id,
-      userId: userLead.id,
-      employeeCode: "VC-0003",
-      firstName: "Rohit",
-      lastName: "Verma",
-      fullName: "Rohit Verma",
-      email: "techlead@vcorganics.com",
-      phone: "+919765432109",
-      status: EmploymentStatus.ACTIVE,
-      employmentType: EmploymentType.FULL_TIME,
-      joiningDate: new Date("2023-06-01"),
-      departmentId: deptEng.id,
-      designationId: desigArch.id,
-      locationId: locHq.id,
-      managerId: empOwner.id
-    },
-    update: { status: EmploymentStatus.ACTIVE }
-  });
-
-  await prisma.meetingRoom.createMany({
-    data: [
-      { tenantId: tenant.id, name: "Boardroom Alpha", capacity: 20, floor: "Floor 4", building: "Building 1", isActive: true },
-      { tenantId: tenant.id, name: "Innovation Bay 1", capacity: 8, floor: "Floor 3", building: "Building 1", isActive: true },
-      { tenantId: tenant.id, name: "Design Studio Hub", capacity: 12, floor: "Floor 3", building: "Building 1", isActive: true }
-    ],
-    skipDuplicates: true
-  });
-
-  await prisma.parkingSlot.createMany({
-    data: [
-      { tenantId: tenant.id, slotNumber: "P-4W-01", vehicleType: "FOUR_WHEELER", isAssigned: true, assignedToName: "Avanish Rai", assignedVehicleNo: "KA-01-MJ-9999" },
-      { tenantId: tenant.id, slotNumber: "P-4W-02", vehicleType: "FOUR_WHEELER", isAssigned: true, assignedToName: "Priya Sharma", assignedVehicleNo: "KA-03-AB-1234" },
-      { tenantId: tenant.id, slotNumber: "P-EV-01", vehicleType: "EV_CHARGING", isAssigned: false }
-    ],
-    skipDuplicates: true
-  });
-
-  const vendor = await prisma.vendor.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "VND-APX-01" } },
-    create: {
-      tenantId: tenant.id,
-      code: "VND-APX-01",
-      name: "Apex Logistics & Staffing Pvt Ltd",
-      gstin: "27ABCDE1234F1Z5",
-      pan: "ABCDE1234F",
-      isActive: true
-    },
-    update: { isActive: true }
-  });
-
-  await prisma.vendorContract.createMany({
-    data: [
-      {
-        tenantId: tenant.id,
-        vendorId: vendor.id,
-        contractNumber: "CNT-APX-2026-01",
-        title: "Master Staffing & Security Services MSA",
-        startDate: new Date("2026-01-01"),
-        endDate: new Date("2026-12-31"),
-        valueInInr: 12000000,
-        status: "ACTIVE",
-        slaRating: 4.8
-      }
-    ],
-    skipDuplicates: true
-  });
-
-  await prisma.contractor.createMany({
-    data: [
-      {
-        tenantId: tenant.id,
-        contractCode: "CON-001",
-        companyName: "Apex Logistics",
-        contactPerson: "Ramesh Sharma",
-        phone: "+919876500001",
-        startDate: new Date("2026-01-01"),
-        endDate: new Date("2026-12-31"),
-        totalWorkers: 15,
-        status: "ACTIVE"
-      }
-    ],
-    skipDuplicates: true
-  });
-
-  await prisma.asset.createMany({
-    data: [
-      {
-        tenantId: tenant.id,
-        assetCode: "AST-LAP-001",
-        serialNumber: "C02XYZ12345",
-        name: "MacBook Pro 16\" M3 Max",
-        category: "LAPTOP",
-        purchaseDate: new Date("2024-01-15"),
-        purchaseCost: 285000,
-        currency: "INR",
-        condition: "BRAND_NEW",
-        status: "ASSIGNED",
-        currentHolderId: empOwner.id
-      },
-      {
-        tenantId: tenant.id,
-        assetCode: "AST-LAP-002",
-        serialNumber: "DL987654321",
-        name: "Dell XPS 15 9530",
-        category: "LAPTOP",
-        purchaseDate: new Date("2024-03-10"),
-        purchaseCost: 175000,
-        currency: "INR",
-        condition: "GOOD",
-        status: "AVAILABLE"
-      }
-    ],
-    skipDuplicates: true
-  });
-
-  await prisma.companyPolicy.createMany({
-    data: [
-      {
-        tenantId: tenant.id,
-        code: "POL-COC-01",
-        title: "Code of Conduct, Ethics & Anti-Bribery Policy",
-        category: "COMPLIANCE",
-        version: "2.1",
-        description: "Official behavioral guidelines and professional standards for all VC Organics personnel.",
-        content: "All employees and contractors must strictly adhere to the highest standards of integrity, data privacy, and ethical conduct.",
-        isPublished: true,
-        publishedAt: new Date("2026-01-01")
-      },
-      {
-        tenantId: tenant.id,
-        code: "POL-LEAVE-01",
-        title: "Comprehensive Annual & Sick Leave Policy",
-        category: "HUMAN_RESOURCES",
-        version: "3.0",
-        description: "Annual leave accrual, carry-forward rules, casual leave, and maternity/paternity guidelines.",
-        content: "Employees accrue 1.75 days of paid annual leave per month with up to 45 days lifetime carry-forward limit.",
-        isPublished: true,
-        publishedAt: new Date("2026-01-01")
-      }
-    ],
-    skipDuplicates: true
-  });
-
-  console.log("🎉 Enterprise Seed Complete! VC Organics HRMS is ready for local validation.");
+  console.log("🎉 Production bootstrap seed complete");
+  console.log(`   Tenant: vc-organics`);
+  console.log(`   Owner: ${ownerEmail}`);
 }
 
 main()
