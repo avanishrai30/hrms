@@ -130,7 +130,6 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
   private async initializeBullMQModule(): Promise<void> {
     try {
       // Dynamic import to support environments where bullmq is dynamically loaded or bundled
-      // @ts-expect-error dynamic module import
       const bullModule = await import("bullmq");
       this.bullQueueClass = bullModule.Queue as (new (name: string, opts: unknown) => BullQueueLike);
     } catch {
