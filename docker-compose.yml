@@ -55,6 +55,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       COOKIE_SECRET: ${COOKIE_SECRET}
       CSRF_SECRET: ${CSRF_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://hrms.vcorganics.com}
       BOOTSTRAP_PASSWORD: ${BOOTSTRAP_PASSWORD}
       VC_ORGANICS_OWNER_EMAIL: ${VC_ORGANICS_OWNER_EMAIL:-owner@vcorganics.com}
       PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-admin@example.com}
