@@ -173,7 +173,13 @@ async function main(): Promise<void> {
   });
 
   const desigCeo = await prisma.designation.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-CEO" } },
+    where: {
+      tenantId_departmentId_code: {
+        tenantId: tenant.id,
+        departmentId: deptEng.id,
+        code: "DESIG-CEO"
+      }
+    },
     create: {
       tenantId: tenant.id,
       departmentId: deptEng.id,
@@ -181,11 +187,17 @@ async function main(): Promise<void> {
       name: "Chief Executive Officer",
       status: "ACTIVE"
     },
-    update: { departmentId: deptEng.id, status: "ACTIVE" }
+    update: { status: "ACTIVE" }
   });
 
   const desigHrLead = await prisma.designation.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-HRLEAD" } },
+    where: {
+      tenantId_departmentId_code: {
+        tenantId: tenant.id,
+        departmentId: deptHr.id,
+        code: "DESIG-HRLEAD"
+      }
+    },
     create: {
       tenantId: tenant.id,
       departmentId: deptHr.id,
@@ -193,11 +205,17 @@ async function main(): Promise<void> {
       name: "Lead People Operations",
       status: "ACTIVE"
     },
-    update: { departmentId: deptHr.id, status: "ACTIVE" }
+    update: { status: "ACTIVE" }
   });
 
   const desigArch = await prisma.designation.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: "DESIG-ARCH" } },
+    where: {
+      tenantId_departmentId_code: {
+        tenantId: tenant.id,
+        departmentId: deptEng.id,
+        code: "DESIG-ARCH"
+      }
+    },
     create: {
       tenantId: tenant.id,
       departmentId: deptEng.id,
@@ -205,7 +223,7 @@ async function main(): Promise<void> {
       name: "Principal Software Architect",
       status: "ACTIVE"
     },
-    update: { departmentId: deptEng.id, status: "ACTIVE" }
+    update: { status: "ACTIVE" }
   });
   console.log("✅ Core departments and designations ready");
 
