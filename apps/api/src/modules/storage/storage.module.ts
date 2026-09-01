@@ -8,8 +8,6 @@ import { LocalStorageProvider, STORAGE_PROVIDER } from "./storage.provider.js";
 @Module({
   imports: [ConfigModule, PrismaModule, AuditModule],
   providers: [
-    LocalStorageProvider,
-    S3StorageProvider,
     {
       provide: STORAGE_PROVIDER,
       useFactory: () => {
@@ -21,6 +19,6 @@ import { LocalStorageProvider, STORAGE_PROVIDER } from "./storage.provider.js";
       }
     }
   ],
-  exports: [STORAGE_PROVIDER, LocalStorageProvider, S3StorageProvider]
+  exports: [STORAGE_PROVIDER]
 })
 export class StorageModule {}
