@@ -92,7 +92,9 @@ echo "Seeding VC Organics tenant and login users..."
 docker compose run --rm api pnpm --filter @vc-wms/api prisma:seed
 
 echo "Starting isolated HRMS API..."
-docker compose up -d api
+# Recreate the API on every deployment so it re-runs startup initialization
+# against freshly restarted dependencies such as Redis/Postgres.
+docker compose up -d --force-recreate api
 
 # If an older server deployment started the local web container, remove only that HRMS container.
 docker compose stop web >/dev/null 2>&1 || true
