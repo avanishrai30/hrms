@@ -393,7 +393,14 @@ export type PermissionCode =
   | "attendance.overtime.manage"
   | "attendance.anomalies.manage"
   | "attendance.contractors.manage"
-  | "attendance.scheduling.manage";
+  | "attendance.scheduling.manage"
+  | "engagement.read"
+  | "engagement.manage"
+  | "engagement.survey"
+  | "engagement.recognition"
+  | "engagement.rewards"
+  | "engagement.analytics"
+  | "engagement.ai";
 
 export interface TenantContext {
   tenantId: string;

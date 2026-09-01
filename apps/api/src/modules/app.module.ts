@@ -32,6 +32,7 @@ import { IntegrationsModule } from "./integrations/integrations.module.js";
 import { LearningModule } from "./learning/learning.module.js";
 import { WorkforceModule } from "./workforce/workforce.module.js";
 import { WorkforceOperationsModule } from "./workforce-operations/workforce-operations.module.js";
+import { EngagementModule } from "./engagement/engagement.module.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { RbacGuard } from "./rbac/rbac.guard.js";
 import { TenantsModule } from "./tenants/tenants.module.js";
@@ -79,7 +80,8 @@ import { HealthModule } from "./health/health.module.js";
     IntegrationsModule,
     LearningModule,
     WorkforceModule,
-    WorkforceOperationsModule
+    WorkforceOperationsModule,
+    EngagementModule
   ],
   providers: [
     {

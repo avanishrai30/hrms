@@ -264,7 +264,14 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "attendance.overtime.manage",
     "attendance.anomalies.manage",
     "attendance.contractors.manage",
-    "attendance.scheduling.manage"
+    "attendance.scheduling.manage",
+    "engagement.read",
+    "engagement.manage",
+    "engagement.survey",
+    "engagement.recognition",
+    "engagement.rewards",
+    "engagement.analytics",
+    "engagement.ai"
   ],
   TENANT_ADMIN: [
     "tenant.dashboard.read",
@@ -480,7 +487,14 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "attendance.overtime.manage",
     "attendance.anomalies.manage",
     "attendance.contractors.manage",
-    "attendance.scheduling.manage"
+    "attendance.scheduling.manage",
+    "engagement.read",
+    "engagement.manage",
+    "engagement.survey",
+    "engagement.recognition",
+    "engagement.rewards",
+    "engagement.analytics",
+    "engagement.ai"
   ],
   HR_ADMIN: [
     "tenant.dashboard.read",
@@ -680,7 +694,14 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "attendance.overtime.manage",
     "attendance.anomalies.manage",
     "attendance.contractors.manage",
-    "attendance.scheduling.manage"
+    "attendance.scheduling.manage",
+    "engagement.read",
+    "engagement.manage",
+    "engagement.survey",
+    "engagement.recognition",
+    "engagement.rewards",
+    "engagement.analytics",
+    "engagement.ai"
   ],
   MANAGER: [
     "tenant.dashboard.read",
@@ -768,7 +789,12 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "attendance.shifts.manage",
     "attendance.overtime.manage",
     "attendance.anomalies.manage",
-    "attendance.scheduling.manage"
+    "attendance.scheduling.manage",
+    "engagement.read",
+    "engagement.survey",
+    "engagement.recognition",
+    "engagement.rewards",
+    "engagement.analytics"
   ],
   EMPLOYEE: [
     "tenant.dashboard.read",
@@ -825,7 +851,11 @@ export const ROLE_PERMISSIONS: Record<TenantRoleCode, PermissionCode[]> = {
     "lms.enroll",
     "lms.assess",
     "lms.certifications",
-    "lms.skills"
+    "lms.skills",
+    "engagement.read",
+    "engagement.survey",
+    "engagement.recognition",
+    "engagement.rewards"
   ]
 };
 

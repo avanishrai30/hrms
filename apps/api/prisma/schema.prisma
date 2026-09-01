@@ -496,6 +496,22 @@ model Tenant {
   compensationRevisions CompensationRevision[]
   salaryBands          SalaryBand[]
   salaryBenchmarks     SalaryBenchmark[]
+  engagementSurveys    EngagementSurvey[]
+  pulseSurveys         PulseSurvey[]
+  enpsCampaigns        ENPSCampaign[]
+  recognitions         Recognition[]
+  recognitionBadges    RecognitionBadge[]
+  employeeBadges       EmployeeBadge[]
+  rewardPointLedgers   RewardPointLedger[]
+  rewardCatalogs       RewardCatalog[]
+  rewardRedemptions    RewardRedemption[]
+  employeeCommunities  EmployeeCommunity[]
+  communityPosts       CommunityPost[]
+  suggestions          Suggestion[]
+  innovationChallenges InnovationChallenge[]
+  cultureMetrics       CultureMetric[]
+  employeeSentiments   EmployeeSentiment[]
+  engagementScoreSnapshots EngagementScoreSnapshot[]
   auditLogs           AuditLog[]
 
   @@index([slug])
@@ -935,6 +951,22 @@ model Employee {
   payrollArrears       PayrollArrear[]
   payrollLoans         PayrollLoan[]
   compensationRevisions CompensationRevision[]
+  surveyResponses      SurveyResponse[]
+  pulseResponses       PulseResponse[]
+  enpsResponses        ENPSResponse[]
+  recognitionsGiven    Recognition[]            @relation("RecognitionSender")
+  recognitionsReceived Recognition[]            @relation("RecognitionReceiver")
+  employeeBadges       EmployeeBadge[]
+  rewardPointLedgers   RewardPointLedger[]
+  rewardRedemptions    RewardRedemption[]
+  communityMemberships CommunityMember[]
+  communityPosts       CommunityPost[]
+  communityComments    CommunityComment[]
+  communityReactions   CommunityReaction[]
+  suggestions          Suggestion[]
+  suggestionVotes      SuggestionVote[]
+  innovationSubmissions InnovationSubmission[]
+  employeeSentiments   EmployeeSentiment[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, email])
@@ -8211,4 +8243,633 @@ model SalaryBenchmark {
 
   @@index([tenantId, jobTitle])
   @@map("salary_benchmarks")
+}
+
+// ----------------- TASK 31: ENTERPRISE EMPLOYEE ENGAGEMENT, REWARDS & CULTURE MODELS -----------------
+
+enum EngagementSurveyStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum SurveyQuestionType {
+  RATING_1_5
+  RATING_1_10
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TEXT
+  BOOLEAN
+}
+
+enum PulseFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum ENPSCategory {
+  PROMOTER
+  PASSIVE
+  DETRACTOR
+}
+
+enum RecognitionType {
+  PEER_APPRECIATION
+  MANAGER_KUDOS
+  COMPANY_AWARD
+  VALUES_CHAMPION
+  MILESTONE_ANNIVERSARY
+  INNOVATION_STAR
+}
+
+enum RewardLedgerType {
+  POINTS_EARNED
+  POINTS_REDEEMED
+  POINTS_EXPIRED
+  POINTS_ADJUSTED
+}
+
+enum RedemptionStatus {
+  PENDING
+  APPROVED
+  FULFILLED
+  REJECTED
+}
+
+enum CommunityType {
+  DEPARTMENT
+  INTEREST_GROUP
+  CULTURE_CLUB
+  SPORTS_WELLNESS
+  INNOVATION
+}
+
+enum PostType {
+  GENERAL
+  APPRECIATION
+  ANNOUNCEMENT
+  EVENT
+  POLL
+}
+
+enum SuggestionStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  IMPLEMENTED
+  DECLINED
+}
+
+enum ChallengeStatus {
+  OPEN
+  EVALUATION
+  COMPLETED
+  ARCHIVED
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  SHORTLISTED
+  WINNER
+  DECLINED
+}
+
+enum SentimentMood {
+  VERY_HAPPY
+  HAPPY
+  NEUTRAL
+  UNHAPPY
+  STRESSED
+  BURNOUT_RISK
+}
+
+enum BurnoutRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model EngagementSurvey {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  tenantId           String                 @map("tenant_id") @db.Uuid
+  title              String
+  description        String?
+  surveyType         String                 @default("ANNUAL_ENGAGEMENT") @map("survey_type") // ANNUAL_ENGAGEMENT, CULTURE, ONBOARDING, EXIT, CUSTOM
+  status             EngagementSurveyStatus @default(DRAFT)
+  isAnonymous        Boolean                @default(true) @map("is_anonymous")
+  startDate          DateTime               @map("start_date")
+  endDate            DateTime               @map("end_date")
+  targetDepartmentId String?                @map("target_department_id") @db.Uuid
+  targetLocationId   String?                @map("target_location_id") @db.Uuid
+  totalInvited       Int                    @default(0) @map("total_invited")
+  totalResponded     Int                    @default(0) @map("total_responded")
+  averageScore       Float                  @default(0.0) @map("average_score")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+
+  tenant             Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  questions          SurveyQuestion[]
+  responses          SurveyResponse[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, startDate, endDate])
+  @@map("engagement_surveys")
+}
+
+model SurveyQuestion {
+  id           String             @id @default(uuid()) @db.Uuid
+  tenantId     String             @map("tenant_id") @db.Uuid
+  surveyId     String             @map("survey_id") @db.Uuid
+  questionText String             @map("question_text")
+  questionType SurveyQuestionType @default(RATING_1_5) @map("question_type")
+  order        Int                @default(1)
+  category     String             @default("CULTURE") // LEADERSHIP, GROWTH, WORK_LIFE_BALANCE, COMPENSATION, TEAMWORK, CULTURE
+  isRequired   Boolean            @default(true) @map("is_required")
+  options      Json               @default("[]") // For choice questions
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+
+  survey       EngagementSurvey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  responses    SurveyResponse[]
+
+  @@index([tenantId, surveyId])
+  @@map("survey_questions")
+}
+
+model SurveyResponse {
+  id              String         @id @default(uuid()) @db.Uuid
+  tenantId        String         @map("tenant_id") @db.Uuid
+  surveyId        String         @map("survey_id") @db.Uuid
+  questionId      String         @map("question_id") @db.Uuid
+  employeeId      String?        @map("employee_id") @db.Uuid // Nullable for anonymous surveys
+  ratingValue     Float?         @map("rating_value")
+  textValue       String?        @map("text_value")
+  selectedOptions Json?          @map("selected_options")
+  sentimentScore  Float?         @map("sentiment_score") // -1.0 to +1.0
+  submittedAt     DateTime       @default(now()) @map("submitted_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  survey          EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  question        SurveyQuestion   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  employee        Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, surveyId])
+  @@index([tenantId, questionId])
+  @@map("survey_responses")
+}
+
+model PulseSurvey {
+  id                    String         @id @default(uuid()) @db.Uuid
+  tenantId              String         @map("tenant_id") @db.Uuid
+  title                 String
+  questionText          String         @map("question_text")
+  frequency             PulseFrequency @default(WEEKLY)
+  isActive              Boolean        @default(true) @map("is_active")
+  category              String         @default("HAPPINESS")
+  totalResponses        Int            @default(0) @map("total_responses")
+  averageHappinessScore Float          @default(0.0) @map("average_happiness_score")
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+
+  tenant                Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  responses             PulseResponse[]
+
+  @@index([tenantId, isActive])
+  @@map("pulse_surveys")
+}
+
+model PulseResponse {
+  id              String      @id @default(uuid()) @db.Uuid
+  tenantId        String      @map("tenant_id") @db.Uuid
+  pulseSurveyId   String      @map("pulse_survey_id") @db.Uuid
+  employeeId      String?     @map("employee_id") @db.Uuid
+  happinessRating Int         @default(3) @map("happiness_rating") // 1 to 5
+  stressRating    Int         @default(2) @map("stress_rating")    // 1 to 5
+  energyRating    Int         @default(3) @map("energy_rating")    // 1 to 5
+  note            String?
+  submittedAt     DateTime    @default(now()) @map("submitted_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+
+  pulseSurvey     PulseSurvey @relation(fields: [pulseSurveyId], references: [id], onDelete: Cascade)
+  employee        Employee?   @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, pulseSurveyId])
+  @@index([tenantId, submittedAt])
+  @@map("pulse_responses")
+}
+
+model ENPSCampaign {
+  id              String                 @id @default(uuid()) @db.Uuid
+  tenantId        String                 @map("tenant_id") @db.Uuid
+  title           String
+  quarter         String                 // e.g. "Q3"
+  year            Int                    // e.g. 2026
+  status          EngagementSurveyStatus @default(ACTIVE)
+  totalResponses  Int                    @default(0) @map("total_responses")
+  promotersCount  Int                    @default(0) @map("promoters_count")
+  passivesCount   Int                    @default(0) @map("passives_count")
+  detractorsCount Int                    @default(0) @map("detractors_count")
+  enpsScore       Float                  @default(0.0) @map("enps_score") // -100 to +100
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+
+  tenant          Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  responses       ENPSResponse[]
+
+  @@index([tenantId, year, quarter])
+  @@map("enps_campaigns")
+}
+
+model ENPSResponse {
+  id           String       @id @default(uuid()) @db.Uuid
+  tenantId     String       @map("tenant_id") @db.Uuid
+  campaignId   String       @map("campaign_id") @db.Uuid
+  employeeId   String?      @map("employee_id") @db.Uuid
+  score        Int          @map("score") // 0 to 10
+  category     ENPSCategory @default(PASSIVE)
+  feedbackText String?      @map("feedback_text")
+  sentiment    String       @default("NEUTRAL")
+  submittedAt  DateTime     @default(now()) @map("submitted_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  campaign     ENPSCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  employee     Employee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, campaignId])
+  @@map("enps_responses")
+}
+
+model RecognitionBadge {
+  id           String            @id @default(uuid()) @db.Uuid
+  tenantId     String            @map("tenant_id") @db.Uuid
+  badgeName    String            @map("badge_name")
+  icon         String            @default("🌟")
+  category     String            @default("CORE_VALUES") // CORE_VALUES, EXCELLENCE, TEAM_PLAYER, CUSTOMER_DELIGHT, INNOVATOR, LEADERSHIP
+  description  String
+  pointsValue  Int               @default(100) @map("points_value")
+  isActive     Boolean           @default(true) @map("is_active")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recognitions Recognition[]
+  employeeBadges EmployeeBadge[]
+
+  @@index([tenantId, isActive])
+  @@map("recognition_badges")
+}
+
+model Recognition {
+  id                 String           @id @default(uuid()) @db.Uuid
+  tenantId           String           @map("tenant_id") @db.Uuid
+  senderEmployeeId   String           @map("sender_employee_id") @db.Uuid
+  receiverEmployeeId String           @map("receiver_employee_id") @db.Uuid
+  badgeId            String?          @map("badge_id") @db.Uuid
+  recognitionType    RecognitionType  @default(PEER_APPRECIATION) @map("recognition_type")
+  message            String
+  pointsAwarded      Int              @default(50) @map("points_awarded")
+  isPublic           Boolean          @default(true) @map("is_public")
+  likesCount         Int              @default(0) @map("likes_count")
+  isMilestone        Boolean          @default(false) @map("is_milestone")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  tenant             Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sender             Employee         @relation("RecognitionSender", fields: [senderEmployeeId], references: [id], onDelete: Cascade)
+  receiver           Employee         @relation("RecognitionReceiver", fields: [receiverEmployeeId], references: [id], onDelete: Cascade)
+  badge              RecognitionBadge? @relation(fields: [badgeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, receiverEmployeeId])
+  @@index([tenantId, createdAt])
+  @@map("recognitions")
+}
+
+model EmployeeBadge {
+  id         String           @id @default(uuid()) @db.Uuid
+  tenantId   String           @map("tenant_id") @db.Uuid
+  employeeId String           @map("employee_id") @db.Uuid
+  badgeId    String           @map("badge_id") @db.Uuid
+  earnedAt   DateTime         @default(now()) @map("earned_at")
+  reason     String?
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee   Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  badge      RecognitionBadge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@map("employee_badges")
+}
+
+model RewardPointLedger {
+  id            String           @id @default(uuid()) @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  employeeId    String           @map("employee_id") @db.Uuid
+  transactionType RewardLedgerType @map("transaction_type")
+  points        Int
+  balanceAfter  Int              @map("balance_after")
+  referenceType String           @default("RECOGNITION") @map("reference_type") // RECOGNITION, CHALLENGE_WIN, SUGGESTION_ACCEPTED, REDEMPTION, ADJUSTMENT
+  referenceId   String?          @map("reference_id")
+  notes         String?
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee      Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, createdAt])
+  @@map("reward_point_ledgers")
+}
+
+model RewardCatalog {
+  id                  String             @id @default(uuid()) @db.Uuid
+  tenantId            String             @map("tenant_id") @db.Uuid
+  itemName            String             @map("item_name")
+  category            String             @default("GIFT_CARD") // GIFT_CARD, EXPERIENCE, MERCHANDISE, LEARNING_VOUCHER, WELLNESS
+  pointsCost          Int                @map("points_cost")
+  cashValueEquivalent Float              @default(0.0) @map("cash_value_equivalent")
+  stockQuantity       Int                @default(100) @map("stock_quantity")
+  imageUrl            String?            @map("image_url")
+  description         String
+  isActive            Boolean            @default(true) @map("is_active")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+
+  tenant              Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  redemptions         RewardRedemption[]
+
+  @@index([tenantId, isActive])
+  @@map("reward_catalogs")
+}
+
+model RewardRedemption {
+  id                 String           @id @default(uuid()) @db.Uuid
+  tenantId           String           @map("tenant_id") @db.Uuid
+  employeeId         String           @map("employee_id") @db.Uuid
+  catalogItemId      String           @map("catalog_item_id") @db.Uuid
+  pointsRedeemed     Int              @map("points_redeemed")
+  status             RedemptionStatus @default(PENDING)
+  fulfillmentDetails Json             @default("{}") @map("fulfillment_details")
+  requestedAt        DateTime         @default(now()) @map("requested_at")
+  processedAt        DateTime?        @map("processed_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  tenant             Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee           Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  catalogItem        RewardCatalog    @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+  @@map("reward_redemptions")
+}
+
+model EmployeeCommunity {
+  id          String            @id @default(uuid()) @db.Uuid
+  tenantId    String            @map("tenant_id") @db.Uuid
+  name        String
+  description String
+  communityType CommunityType   @default(INTEREST_GROUP) @map("community_type")
+  icon        String            @default("💬")
+  isPrivate   Boolean           @default(false) @map("is_private")
+  memberCount Int               @default(1) @map("member_count")
+  postCount   Int               @default(0) @map("post_count")
+  createdById String            @map("created_by_id") @db.Uuid
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members     CommunityMember[]
+  posts       CommunityPost[]
+
+  @@index([tenantId, communityType])
+  @@map("employee_communities")
+}
+
+model CommunityMember {
+  id          String            @id @default(uuid()) @db.Uuid
+  tenantId    String            @map("tenant_id") @db.Uuid
+  communityId String            @map("community_id") @db.Uuid
+  employeeId  String            @map("employee_id") @db.Uuid
+  role        String            @default("MEMBER") // ADMIN, MODERATOR, MEMBER
+  joinedAt    DateTime          @default(now()) @map("joined_at")
+
+  community   EmployeeCommunity @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  employee    Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([communityId, employeeId])
+  @@index([tenantId, employeeId])
+  @@map("community_members")
+}
+
+model CommunityPost {
+  id               String              @id @default(uuid()) @db.Uuid
+  tenantId         String              @map("tenant_id") @db.Uuid
+  communityId      String?             @map("community_id") @db.Uuid // Nullable if posted directly on company Social Wall
+  authorEmployeeId String              @map("author_employee_id") @db.Uuid
+  postType         PostType            @default(GENERAL) @map("post_type")
+  content          String
+  mediaUrls        Json                @default("[]") @map("media_urls")
+  likesCount       Int                 @default(0) @map("likes_count")
+  commentsCount    Int                 @default(0) @map("comments_count")
+  isPinned         Boolean             @default(false) @map("is_pinned")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  community        EmployeeCommunity?  @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  author           Employee            @relation(fields: [authorEmployeeId], references: [id], onDelete: Cascade)
+  comments         CommunityComment[]
+  reactions        CommunityReaction[]
+
+  @@index([tenantId, communityId])
+  @@index([tenantId, createdAt])
+  @@map("community_posts")
+}
+
+model CommunityComment {
+  id               String              @id @default(uuid()) @db.Uuid
+  tenantId         String              @map("tenant_id") @db.Uuid
+  postId           String              @map("post_id") @db.Uuid
+  authorEmployeeId String              @map("author_employee_id") @db.Uuid
+  content          String
+  likesCount       Int                 @default(0) @map("likes_count")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  post             CommunityPost       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author           Employee            @relation(fields: [authorEmployeeId], references: [id], onDelete: Cascade)
+  reactions        CommunityReaction[]
+
+  @@index([tenantId, postId])
+  @@map("community_comments")
+}
+
+model CommunityReaction {
+  id           String            @id @default(uuid()) @db.Uuid
+  tenantId     String            @map("tenant_id") @db.Uuid
+  postId       String?           @map("post_id") @db.Uuid
+  commentId    String?           @map("comment_id") @db.Uuid
+  employeeId   String            @map("employee_id") @db.Uuid
+  reactionType String            @default("LIKE") @map("reaction_type") // LIKE, LOVE, CELEBRATE, INSIGHTFUL, CLAP
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  post         CommunityPost?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment      CommunityComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  employee     Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, postId])
+  @@index([tenantId, employeeId])
+  @@map("community_reactions")
+}
+
+model Suggestion {
+  id                  String           @id @default(uuid()) @db.Uuid
+  tenantId            String           @map("tenant_id") @db.Uuid
+  employeeId          String?          @map("employee_id") @db.Uuid // Nullable for anonymous
+  title               String
+  description         String
+  category            String           @default("PROCESS_IMPROVEMENT") // PROCESS_IMPROVEMENT, WORKPLACE_CULTURE, HEALTH_SAFETY, SUSTAINABILITY, TECH_INNOVATION
+  upvotesCount        Int              @default(0) @map("upvotes_count")
+  status              SuggestionStatus @default(SUBMITTED)
+  adminFeedback       String?          @map("admin_feedback")
+  rewardPointsGranted Int              @default(0) @map("reward_points_granted")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+
+  tenant              Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee            Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  votes               SuggestionVote[]
+
+  @@index([tenantId, status])
+  @@map("suggestions")
+}
+
+model SuggestionVote {
+  id           String     @id @default(uuid()) @db.Uuid
+  tenantId     String     @map("tenant_id") @db.Uuid
+  suggestionId String     @map("suggestion_id") @db.Uuid
+  employeeId   String     @map("employee_id") @db.Uuid
+  isUpvote     Boolean    @default(true) @map("is_upvote")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  suggestion   Suggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  employee     Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([suggestionId, employeeId])
+  @@index([tenantId, suggestionId])
+  @@map("suggestion_votes")
+}
+
+model InnovationChallenge {
+  id                String                 @id @default(uuid()) @db.Uuid
+  tenantId          String                 @map("tenant_id") @db.Uuid
+  title             String
+  theme             String
+  description       String
+  startDate         DateTime               @map("start_date")
+  endDate           DateTime               @map("end_date")
+  rewardPointsPool  Int                    @default(10000) @map("reward_points_pool")
+  status            ChallengeStatus        @default(OPEN)
+  submissionsCount  Int                    @default(0) @map("submissions_count")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+
+  tenant            Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  submissions       InnovationSubmission[]
+
+  @@index([tenantId, status])
+  @@map("innovation_challenges")
+}
+
+model InnovationSubmission {
+  id              String              @id @default(uuid()) @db.Uuid
+  tenantId        String              @map("tenant_id") @db.Uuid
+  challengeId     String              @map("challenge_id") @db.Uuid
+  employeeId      String              @map("employee_id") @db.Uuid
+  teamMembers     Json                @default("[]") @map("team_members")
+  proposalTitle   String              @map("proposal_title")
+  executiveSummary String             @map("executive_summary")
+  detailedPitch   String              @map("detailed_pitch")
+  status          SubmissionStatus    @default(SUBMITTED)
+  score           Float?              @map("score")
+  rank            Int?                @map("rank")
+  rewardPointsWon Int                 @default(0) @map("reward_points_won")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  challenge       InnovationChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  employee        Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, challengeId])
+  @@index([tenantId, employeeId])
+  @@map("innovation_submissions")
+}
+
+model CultureMetric {
+  id                         String   @id @default(uuid()) @db.Uuid
+  tenantId                   String   @map("tenant_id") @db.Uuid
+  metricDate                 DateTime @map("metric_date")
+  overallEngagementScore     Float    @default(0.0) @map("overall_engagement_score") // 0 to 100
+  overallHappinessScore      Float    @default(0.0) @map("overall_happiness_score")  // 1 to 5
+  currentEnps                Float    @default(0.0) @map("current_enps")             // -100 to +100
+  recognitionActivityRate    Float    @default(0.0) @map("recognition_activity_rate") // recognitions per employee
+  rewardRedemptionRate       Float    @default(0.0) @map("reward_redemption_rate")
+  managerEffectivenessScore  Float    @default(0.0) @map("manager_effectiveness_score") // 0 to 100
+  cultureHealthIndex         Float    @default(0.0) @map("culture_health_index")        // 0 to 100
+  dimensionScores            Json     @default("{}") @map("dimension_scores")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+
+  tenant                     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, metricDate])
+  @@map("culture_metrics")
+}
+
+model EmployeeSentiment {
+  id                        String           @id @default(uuid()) @db.Uuid
+  tenantId                  String           @map("tenant_id") @db.Uuid
+  employeeId                String           @map("employee_id") @db.Uuid
+  recordedDate              DateTime         @map("recorded_date")
+  mood                      SentimentMood    @default(HAPPY)
+  happinessScore            Float            @default(7.5) @map("happiness_score") // 1 to 10
+  burnoutRiskScore          Float            @default(15.0) @map("burnout_risk_score") // 0 to 100
+  burnoutRiskLevel          BurnoutRiskLevel @default(LOW) @map("burnout_risk_level")
+  workLifeBalanceScore      Float            @default(8.0) @map("work_life_balance_score") // 1 to 10
+  managerRelationshipScore  Float            @default(8.5) @map("manager_relationship_score") // 1 to 10
+  aiNotes                   String?          @map("ai_notes")
+  createdAt                 DateTime         @default(now()) @map("created_at")
+  updatedAt                 DateTime         @updatedAt @map("updated_at")
+
+  tenant                    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee                  Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, recordedDate])
+  @@map("employee_sentiments")
+}
+
+model EngagementScoreSnapshot {
+  id                    String   @id @default(uuid()) @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  departmentId          String?  @map("department_id") @db.Uuid
+  period                String   // e.g. "2026-Q3"
+  engagementIndex       Float    @map("engagement_index") // 0 to 100
+  moraleIndex           Float    @map("morale_index")     // 0 to 100
+  burnoutIndex          Float    @map("burnout_index")    // 0 to 100
+  retentionRiskPercent  Float    @map("retention_risk_percent") // 0 to 100
+  keyDrivers            Json     @default("[]") @map("key_drivers")
+  recommendations       Json     @default("[]")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, period])
+  @@map("engagement_score_snapshots")
 }
