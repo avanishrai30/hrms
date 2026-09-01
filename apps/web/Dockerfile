@@ -6,11 +6,13 @@ RUN corepack enable && apk add --no-cache libc6-compat
 
 FROM base AS builder
 WORKDIR /app
-COPY pnpm-lock.yaml package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml ./
 COPY packages/ ./packages/
 COPY apps/web/ ./apps/web/
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
+ARG NEXT_PUBLIC_API_BASE_URL=/api/v1
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @vc-wms/web build
 
