@@ -4,6 +4,7 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "outDir": "dist",
+    "paths": {},
     "exactOptionalPropertyTypes": false,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
