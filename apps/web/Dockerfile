@@ -4,7 +4,7 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && apk add --no-cache libc6-compat
 WORKDIR /app
 
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/ ./packages/
 COPY apps/web/ ./apps/web/
 
