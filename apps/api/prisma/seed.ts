@@ -7,6 +7,20 @@ const prisma = new PrismaClient();
 
 const ROLES: TenantRoleCode[] = ["TENANT_OWNER", "TENANT_ADMIN", "HR_ADMIN", "MANAGER", "EMPLOYEE"];
 
+async function ensureUser(email: string, passwordHash: string) {
+  const existing = await prisma.user.findFirst({ where: { email } });
+  if (existing) {
+    return prisma.user.update({
+      where: { id: existing.id },
+      data: { passwordHash, status: "ACTIVE" }
+    });
+  }
+
+  return prisma.user.create({
+    data: { email, passwordHash, status: "ACTIVE" }
+  });
+}
+
 async function main(): Promise<void> {
   console.log("🌱 Starting production HRMS bootstrap seed...");
 
@@ -244,25 +258,13 @@ async function main(): Promise<void> {
     update: { isActive: true }
   });
 
-  const userOwner = await prisma.user.upsert({
-    where: { email: ownerEmail },
-    create: { email: ownerEmail, passwordHash, status: "ACTIVE" },
-    update: { passwordHash, status: "ACTIVE" }
-  });
+  const userOwner = await ensureUser(ownerEmail, passwordHash);
 
   const hrEmail = "hradmin@vcorganics.com";
-  const userHrAdmin = await prisma.user.upsert({
-    where: { email: hrEmail },
-    create: { email: hrEmail, passwordHash, status: "ACTIVE" },
-    update: { passwordHash, status: "ACTIVE" }
-  });
+  const userHrAdmin = await ensureUser(hrEmail, passwordHash);
 
   const leadEmail = "techlead@vcorganics.com";
-  const userLead = await prisma.user.upsert({
-    where: { email: leadEmail },
-    create: { email: leadEmail, passwordHash, status: "ACTIVE" },
-    update: { passwordHash, status: "ACTIVE" }
-  });
+  const userLead = await ensureUser(leadEmail, passwordHash);
 
   const empOwner = await prisma.employee.upsert({
     where: { tenantId_employeeCode: { tenantId: tenant.id, employeeCode: "VC-0001" } },
