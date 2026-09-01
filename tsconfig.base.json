@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@vc-wms/shared-types": ["packages/shared-types/src/index.ts"],
+      "@vc-wms/auth": ["packages/auth/src/index.ts"],
+      "@vc-wms/utils": ["packages/utils/src/index.ts"],
+      "@vc-wms/ui": ["packages/ui/src/index.ts"]
+    }
+  }
+}
+

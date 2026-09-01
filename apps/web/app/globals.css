@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --canvas: 80 18% 97%;
+  --surface: 0 0% 100%;
+  --muted: 150 16% 94%;
+  --border: 210 16% 88%;
+  --primary: 150 64% 34%;
+  --danger: 0 72% 48%;
+  --font-sans: Geist, Satoshi, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+.dark {
+  --canvas: 210 14% 9%;
+  --surface: 210 12% 13%;
+  --muted: 160 12% 17%;
+  --border: 210 10% 24%;
+  --primary: 150 58% 46%;
+  --danger: 0 72% 60%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: hsl(var(--canvas));
+  color: #17201b;
+  font-family: var(--font-sans);
+}
+
+.dark body {
+  color: #f4f7f5;
+}
+
+:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+

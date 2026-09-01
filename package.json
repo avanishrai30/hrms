@@ -1,0 +1,25 @@
+{
+  "name": "vc-organics-wms",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-tenant workforce management SaaS platform foundation.",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "format": "prettier --check .",
+    "dev:web": "pnpm --filter @vc-wms/web dev",
+    "dev:api": "pnpm --filter @vc-wms/api start:dev",
+    "prisma:generate": "pnpm --filter @vc-wms/api prisma:generate"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^3.0.0"
+  }
+}
