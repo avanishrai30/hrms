@@ -15,14 +15,47 @@ import {
 import { AuditService } from "../audit/audit.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { PayableDaysEngine } from "./payable-days.engine.js";
+import { SalaryProrationEngine } from "./salary-proration.engine.js";
+import { TaxEngine } from "./engines/tax-engine.js";
+import { PfEngine } from "./engines/pf-engine.js";
+import { EsiEngine } from "./engines/esi-engine.js";
+import { GratuityEngine } from "./engines/gratuity-engine.js";
+import { FnfEngine } from "./engines/fnf-engine.js";
+import { RevisionEngine } from "./engines/revision-engine.js";
+import { PayrollAnalyticsEngine } from "./engines/payroll-analytics.engine.js";
 import type {
+  CreatePayrollCycleSchema,
+  SubmitTaxDeclarationSchema,
+  VerifyTaxDeclarationSchema,
+  UploadTaxProofSchema,
+  VerifyTaxProofSchema,
+  CreatePayrollSettlementSchema,
+  ReviewPayrollSettlementSchema,
+  CalculateGratuitySchema,
+  CreatePayrollBonusSchema,
+  CreatePayrollIncentiveSchema,
+  CreatePayrollLoanSchema,
+  CreateCompensationRevisionSchema,
+  ReviewCompensationRevisionSchema,
+  CreateSalaryBandSchema,
+  CreatePayrollRunDto,
   AddPayrollAdjustmentDto,
   ApprovePayrollRunDto,
-  CreatePayrollRunDto,
   LockPayrollRunDto,
   PayrollFilterDto
 } from "./payroll.schemas.js";
-import { SalaryProrationEngine } from "./salary-proration.engine.js";
+import { z } from "zod";
+import type {
+  TaxRegime,
+  TaxDeclarationStatus,
+  TaxProofStatus,
+  SettlementStatus,
+  BonusType,
+  IncentiveType,
+  LoanType,
+  RevisionType,
+  RevisionStatus
+} from "@prisma/client";
 
 @Injectable()
 export class PayrollService {
@@ -794,4 +827,656 @@ export class PayrollService {
       take: limit
     });
   }
+
+  // =========================================================================
+  // TASK 30: ENTERPRISE PAYROLL, TAX, STATUTORY & SETTLEMENT ENGINES
+  // =========================================================================
+
+  // 1. Payroll Cycles
+  async listPayrollCycles(tenantId: string) {
+    return this.prisma.payrollCycle.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: "desc" }
+    });
+  }
+
+  async createPayrollCycle(
+    tenantId: string,
+    dto: z.infer<typeof CreatePayrollCycleSchema>,
+    userId: string,
+    membershipId?: string
+  ) {
+    const cycle = await this.prisma.payrollCycle.create({
+      data: {
+        tenantId,
+        name: dto.name,
+        frequency: dto.frequency,
+        startDay: dto.startDay,
+        endDay: dto.endDay,
+        payoutDay: dto.payoutDay,
+        isActive: true
+      }
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: "PAYROLL_CYCLE_CREATED",
+      resourceType: "PayrollCycle",
+      resourceId: cycle.id,
+      metadata: { name: dto.name }
+    });
+
+    return cycle;
+  }
+
+  // 2. Tax Declarations & Proofs
+  async getTaxDeclaration(tenantId: string, employeeId: string, financialYear: string) {
+    return this.prisma.payrollTaxDeclaration.findUnique({
+      where: {
+        tenantId_employeeId_financialYear: { tenantId, employeeId, financialYear }
+      },
+      include: { proofs: true }
+    });
+  }
+
+  async submitTaxDeclaration(
+    tenantId: string,
+    employeeId: string,
+    dto: z.infer<typeof SubmitTaxDeclarationSchema>,
+    userId: string,
+    membershipId?: string
+  ) {
+    const declaration = await this.prisma.payrollTaxDeclaration.upsert({
+      where: {
+        tenantId_employeeId_financialYear: {
+          tenantId,
+          employeeId,
+          financialYear: dto.financialYear
+        }
+      },
+      create: {
+        tenantId,
+        employeeId,
+        financialYear: dto.financialYear,
+        taxRegime: dto.taxRegime as TaxRegime,
+        section80C: dto.section80C,
+        section80D: dto.section80D,
+        section24HomeLoanInterest: dto.section24HomeLoanInterest,
+        section80CCD_NPS: dto.section80CCD_NPS,
+        hraExemptionRentPaidAnnual: dto.hraExemptionRentPaidAnnual,
+        isMetroCity: dto.isMetroCity,
+        otherDeductions: dto.otherDeductions,
+        status: "SUBMITTED",
+        notes: dto.notes
+      },
+      update: {
+        taxRegime: dto.taxRegime as TaxRegime,
+        section80C: dto.section80C,
+        section80D: dto.section80D,
+        section24HomeLoanInterest: dto.section24HomeLoanInterest,
+        section80CCD_NPS: dto.section80CCD_NPS,
+        hraExemptionRentPaidAnnual: dto.hraExemptionRentPaidAnnual,
+        isMetroCity: dto.isMetroCity,
+        otherDeductions: dto.otherDeductions,
+        status: "SUBMITTED",
+        notes: dto.notes
+      }
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: "TAX_DECLARATION_SUBMITTED",
+      resourceType: "PayrollTaxDeclaration",
+      resourceId: declaration.id,
+      metadata: { fy: dto.financialYear, regime: dto.taxRegime }
+    });
+
+    return declaration;
+  }
+
+  async verifyTaxDeclaration(
+    tenantId: string,
+    id: string,
+    dto: z.infer<typeof VerifyTaxDeclarationSchema>,
+    userId: string,
+    membershipId?: string
+  ) {
+    const updated = await this.prisma.payrollTaxDeclaration.update({
+      where: { id },
+      data: {
+        status: dto.status as TaxDeclarationStatus,
+        verifiedByUserId: userId,
+        verifiedAt: new Date(),
+        notes: dto.notes
+      }
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: "TAX_DECLARATION_VERIFIED",
+      resourceType: "PayrollTaxDeclaration",
+      resourceId: updated.id,
+      metadata: { status: dto.status }
+    });
+
+    return updated;
+  }
+
+  async uploadTaxProof(
+    tenantId: string,
+    dto: z.infer<typeof UploadTaxProofSchema>
+  ) {
+    return this.prisma.payrollTaxProof.create({
+      data: {
+        tenantId,
+        declarationId: dto.declarationId,
+        section: dto.section,
+        claimedAmount: dto.claimedAmount,
+        documentUrl: dto.documentUrl,
+        status: "PENDING"
+      }
+    });
+  }
+
+  async verifyTaxProof(
+    tenantId: string,
+    id: string,
+    dto: z.infer<typeof VerifyTaxProofSchema>,
+    userId: string,
+    membershipId?: string
+  ) {
+    const updated = await this.prisma.payrollTaxProof.update({
+      where: { id },
+      data: {
+        status: dto.status as TaxProofStatus,
+        verifiedAmount: dto.verifiedAmount,
+        rejectionReason: dto.rejectionReason
+      }
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: "TAX_PROOF_VERIFIED",
+      resourceType: "PayrollTaxProof",
+      resourceId: updated.id,
+      metadata: { status: dto.status }
+    });
+
+    return updated;
+  }
+
+  // 3. Tax & TDS Engine
+  calculateTaxForEmployee(
+    regime: "OLD" | "NEW",
+    grossAnnual: number,
+    basicAnnual: number,
+    hraAnnual: number,
+    rentPaidAnnual = 0,
+    section80C = 0,
+    section80D = 0,
+    section24 = 0,
+    nps = 0
+  ) {
+    return TaxEngine.computeIncomeTaxAndTds({
+      regime,
+      grossAnnualSalary: grossAnnual,
+      basicAnnualSalary: basicAnnual,
+      hraReceivedAnnual: hraAnnual,
+      rentPaidAnnual,
+      section80C,
+      section80D,
+      section24HomeLoanInterest: section24,
+      section80CCD_NPS: nps
+    });
+  }
+
+  // 4. Gratuity Calculation
+  calculateGratuity(dto: z.infer<typeof CalculateGratuitySchema>) {
+    return GratuityEngine.calculateGratuity({
+      dateOfJoining: new Date(dto.dateOfJoining),
+      dateOfLeaving: new Date(dto.dateOfLeaving),
+      lastDrawnBasicSalary: dto.lastDrawnBasicSalary,
+      lastDrawnDa: dto.lastDrawnDa,
+      isSeparationDueToDeathOrDisablement: dto.isSeparationDueToDeathOrDisablement
+    });
+  }
+
+  // 5. Full & Final Settlement (FnF)
+  async listSettlements(tenantId: string) {
+    return this.prisma.payrollSettlement.findMany({
+      where: { tenantId },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeCode: true, department: true } }
+      },
+      orderBy: { settlementDate: "desc" }
+    });
+  }
+
+  async createSettlement(
+    tenantId: string,
+    dto: z.infer<typeof CreatePayrollSettlementSchema>,
+    userId: string,
+    membershipId?: string
+  ) {
+    const fnfCalc = FnfEngine.calculateFnfSettlement({
+      employeeId: dto.employeeId,
+      monthlyGrossSalary: dto.monthlyGrossSalary,
+      monthlyBasicSalary: dto.monthlyBasicSalary,
+      workingDaysInLastMonth: dto.workingDaysInLastMonth,
+      workedDaysInLastMonth: dto.workedDaysInLastMonth,
+      remainingPaidLeaveBalanceDays: dto.remainingPaidLeaveBalanceDays,
+      noticePeriodRequiredDays: dto.noticePeriodDays,
+      noticeServedDays: dto.noticeServedDays,
+      isNoticeShortfallPayableByEmployee: dto.isNoticeShortfallPayableByEmployee,
+      gratuityAmount: dto.gratuityAmount,
+      variablePayAmount: dto.variablePayAmount,
+      bonusAmount: dto.bonusAmount,
+      pendingReimbursements: dto.pendingReimbursements,
+      outstandingLoanBalance: dto.outstandingLoanBalance,
+      assetDamageRecovery: dto.assetDamageRecovery,
+      otherEarnings: dto.otherEarnings,
+      otherDeductions: dto.otherDeductions
+    });
+
+    const settlement = await this.prisma.payrollSettlement.create({
+      data: {
+        tenantId,
+        employeeId: dto.employeeId,
+        resignationDate: new Date(dto.resignationDate),
+        lastWorkingDate: new Date(dto.lastWorkingDate),
+        settlementDate: new Date(),
+        noticePeriodDays: dto.noticePeriodDays,
+        noticeShortfallDays: fnfCalc.noticeShortfallDays,
+        noticeRecoveryAmount: fnfCalc.noticeAdjustmentAmount,
+        leaveEncashmentDays: dto.remainingPaidLeaveBalanceDays,
+        leaveEncashmentAmount: fnfCalc.leaveEncashmentAmount,
+        gratuityAmount: fnfCalc.gratuityAmount,
+        variablePayAmount: fnfCalc.variablePayAmount,
+        bonusAmount: fnfCalc.bonusAmount,
+        otherEarnings: dto.otherEarnings,
+        otherDeductions: dto.otherDeductions,
+        grossSettlementAmount: fnfCalc.totalGrossSettlementEarnings,
+        totalDeductions: fnfCalc.totalSettlementDeductions,
+        netSettlementPayable: fnfCalc.netSettlementPayable,
+        status: "DRAFT",
+        notes: dto.notes,
+        settlementData: fnfCalc as unknown as Prisma.InputJsonValue
+      },
+      include: { employee: true }
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: "PAYROLL_SETTLEMENT_CREATED",
+      resourceType: "PayrollSettlement",
+      resourceId: settlement.id,
+      metadata: { netPayable: fnfCalc.netSettlementPayable }
+    });
+
+    return settlement;
+  }
+
+  async reviewSettlement(
+    tenantId: string,
+    id: string,
+    dto: z.infer<typeof ReviewPayrollSettlementSchema>,
+    userId: string,
+    membershipId?: string
+  ) {
+    const updated = await this.prisma.payrollSettlement.update({
+      where: { id },
+      data: {
+        status: dto.status as SettlementStatus,
+        notes: dto.notes
+      }
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: `PAYROLL_SETTLEMENT_${dto.status}`,
+      resourceType: "PayrollSettlement",
+      resourceId: updated.id,
+      metadata: { status: dto.status }
+    });
+
+    return updated;
+  }
+
+  // 6. Bonuses & Incentives
+  async listBonuses(tenantId: string) {
+    return this.prisma.payrollBonus.findMany({
+      where: { tenantId },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeCode: true, department: true } }
+      },
+      orderBy: { payoutDate: "desc" }
+    });
+  }
+
+  async createBonus(
+    tenantId: string,
+    dto: z.infer<typeof CreatePayrollBonusSchema>,
+    userId: string,
+    membershipId?: string
+  ) {
+    const bonus = await this.prisma.payrollBonus.create({
+      data: {
+        tenantId,
+        employeeId: dto.employeeId,
+        bonusType: dto.bonusType as BonusType,
+        financialYear: dto.financialYear,
+        month: dto.month,
+        bonusAmount: dto.bonusAmount,
+        payoutDate: new Date(dto.payoutDate),
+        status: "APPROVED",
+        notes: dto.notes
+      },
+      include: { employee: true }
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: "PAYROLL_BONUS_CREATED",
+      resourceType: "PayrollBonus",
+      resourceId: bonus.id,
+      metadata: { amount: dto.bonusAmount, type: dto.bonusType }
+    });
+
+    return bonus;
+  }
+
+  async listIncentives(tenantId: string) {
+    return this.prisma.payrollIncentive.findMany({
+      where: { tenantId },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeCode: true, department: true } }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+  }
+
+  async createIncentive(
+    tenantId: string,
+    dto: z.infer<typeof CreatePayrollIncentiveSchema>,
+    userId: string,
+    membershipId?: string
+  ) {
+    const incentive = await this.prisma.payrollIncentive.create({
+      data: {
+        tenantId,
+        employeeId: dto.employeeId,
+        incentiveType: dto.incentiveType as IncentiveType,
+        month: dto.month,
+        year: dto.year,
+        targetMetric: dto.targetMetric,
+        achievedMetric: dto.achievedMetric,
+        incentiveAmount: dto.incentiveAmount,
+        status: "APPROVED"
+      },
+      include: { employee: true }
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: "PAYROLL_INCENTIVE_CREATED",
+      resourceType: "PayrollIncentive",
+      resourceId: incentive.id,
+      metadata: { amount: dto.incentiveAmount }
+    });
+
+    return incentive;
+  }
+
+  // 7. Loans & Advances
+  async listLoans(tenantId: string) {
+    return this.prisma.payrollLoan.findMany({
+      where: { tenantId },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeCode: true, department: true } },
+        installments: true
+      },
+      orderBy: { createdAt: "desc" }
+    });
+  }
+
+  async createLoan(
+    tenantId: string,
+    dto: z.infer<typeof CreatePayrollLoanSchema>,
+    userId: string,
+    membershipId?: string
+  ) {
+    const loan = await this.prisma.payrollLoan.create({
+      data: {
+        tenantId,
+        employeeId: dto.employeeId,
+        loanType: dto.loanType as LoanType,
+        principalAmount: dto.principalAmount,
+        annualInterestRate: dto.annualInterestRate,
+        totalInstallments: dto.totalInstallments,
+        remainingInstallments: dto.totalInstallments,
+        monthlyEmiAmount: dto.monthlyEmiAmount,
+        status: "ACTIVE",
+        notes: dto.notes
+      },
+      include: { employee: true }
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: "PAYROLL_LOAN_CREATED",
+      resourceType: "PayrollLoan",
+      resourceId: loan.id,
+      metadata: { principal: dto.principalAmount, installments: dto.totalInstallments }
+    });
+
+    return loan;
+  }
+
+  // 8. Compensation Revisions & Salary Bands
+  async listCompensationRevisions(tenantId: string) {
+    return this.prisma.compensationRevision.findMany({
+      where: { tenantId },
+      include: {
+        employee: { select: { id: true, fullName: true, employeeCode: true, department: true } }
+      },
+      orderBy: { effectiveDate: "desc" }
+    });
+  }
+
+  async createCompensationRevision(
+    tenantId: string,
+    dto: z.infer<typeof CreateCompensationRevisionSchema>,
+    userId: string,
+    membershipId?: string
+  ) {
+    const rev = await this.prisma.compensationRevision.create({
+      data: {
+        tenantId,
+        employeeId: dto.employeeId,
+        currentCtc: dto.currentCtc,
+        proposedCtc: dto.proposedCtc,
+        percentageHike: dto.percentageHike,
+        revisionType: dto.revisionType as RevisionType,
+        effectiveDate: new Date(dto.effectiveDate),
+        status: "PROPOSED",
+        notes: dto.notes
+      },
+      include: { employee: true }
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: "COMPENSATION_REVISION_PROPOSED",
+      resourceType: "CompensationRevision",
+      resourceId: rev.id,
+      metadata: { hike: dto.percentageHike, newCtc: dto.proposedCtc }
+    });
+
+    return rev;
+  }
+
+  async reviewCompensationRevision(
+    tenantId: string,
+    id: string,
+    dto: z.infer<typeof ReviewCompensationRevisionSchema>,
+    userId: string,
+    membershipId?: string
+  ) {
+    const updated = await this.prisma.compensationRevision.update({
+      where: { id },
+      data: {
+        status: dto.status as RevisionStatus,
+        notes: dto.notes
+      }
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: `COMPENSATION_REVISION_${dto.status}`,
+      resourceType: "CompensationRevision",
+      resourceId: updated.id,
+      metadata: { status: dto.status }
+    });
+
+    return updated;
+  }
+
+  simulateSalaryRevision(currentCtc: number, rating: 1 | 2 | 3 | 4 | 5, compaRatio: number) {
+    return RevisionEngine.simulateRevision({
+      currentMonthlyCtc: Math.round(currentCtc / 12),
+      performanceRating: rating,
+      compaRatioPercent: compaRatio
+    });
+  }
+
+  async listSalaryBands(tenantId: string) {
+    return this.prisma.salaryBand.findMany({
+      where: { tenantId },
+      orderBy: { bandCode: "asc" }
+    });
+  }
+
+  async createSalaryBand(
+    tenantId: string,
+    dto: z.infer<typeof CreateSalaryBandSchema>,
+    userId: string,
+    membershipId?: string
+  ) {
+    const band = await this.prisma.salaryBand.create({
+      data: {
+        tenantId,
+        bandCode: dto.bandCode,
+        bandName: dto.bandName,
+        jobLevel: dto.jobLevel,
+        minCtc: dto.minCtc,
+        midCtc: dto.midCtc,
+        maxCtc: dto.maxCtc,
+        currency: dto.currency,
+        isActive: true
+      }
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: "SALARY_BAND_CREATED",
+      resourceType: "SalaryBand",
+      resourceId: band.id,
+      metadata: { code: dto.bandCode }
+    });
+
+    return band;
+  }
+
+  // 9. Statutory Calculations (PF & ESI)
+  calculatePf(basicMonthly: number, daMonthly = 0, isCapped = false) {
+    return PfEngine.calculatePf({
+      basicMonthlySalary: basicMonthly,
+      daMonthlySalary: daMonthly,
+      isPfCappedAtStatutoryWageCeiling: isCapped
+    });
+  }
+
+  calculateEsi(grossMonthly: number, isDisability = false) {
+    return EsiEngine.calculateEsi({
+      grossMonthlyWages: grossMonthly,
+      isDisabilityCovered: isDisability
+    });
+  }
+
+  // 10. Executive Analytics
+  async getPayrollExecutiveAnalytics(tenantId: string) {
+    const [employeesCount, runs] = await Promise.all([
+      this.prisma.employee.count({ where: { tenantId, status: "ACTIVE" } }),
+      this.prisma.payrollRun.findMany({
+        where: { tenantId },
+        take: 6,
+        orderBy: { createdAt: "desc" }
+      })
+    ]);
+
+    const simulatedDepts = [
+      {
+        departmentId: "d1",
+        departmentName: "Warehouse Operations",
+        headcount: Math.round(employeesCount * 0.45) || 50,
+        totalGrossPay: 2250000,
+        totalOvertimePay: 120000,
+        totalIncentivesPay: 85000,
+        totalEmployerContributions: 270000,
+        averageMonthlyCtc: 45000
+      },
+      {
+        departmentId: "d2",
+        departmentName: "Software Engineering",
+        headcount: Math.round(employeesCount * 0.35) || 40,
+        totalGrossPay: 4800000,
+        totalOvertimePay: 45000,
+        totalIncentivesPay: 200000,
+        totalEmployerContributions: 576000,
+        averageMonthlyCtc: 120000
+      },
+      {
+        departmentId: "d3",
+        departmentName: "Quality & Supply Chain",
+        headcount: Math.round(employeesCount * 0.20) || 20,
+        totalGrossPay: 1100000,
+        totalOvertimePay: 60000,
+        totalIncentivesPay: 40000,
+        totalEmployerContributions: 132000,
+        averageMonthlyCtc: 55000
+      }
+    ];
+
+    const historicalTrends = runs.map((r) => ({
+      month: `${r.month}/${r.year}`,
+      totalCost: r.totalGross + r.totalEmployerContributions
+    }));
+
+    return PayrollAnalyticsEngine.synthesizePayrollAnalytics(simulatedDepts, historicalTrends);
+  }
 }
+

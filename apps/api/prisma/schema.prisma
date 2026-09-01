@@ -484,6 +484,18 @@ model Tenant {
   attendanceAnomalies AttendanceAnomaly[]
   contractorAttendances ContractorAttendance[]
   workforceSchedules  WorkforceSchedule[]
+  payrollCycles        PayrollCycle[]
+  payrollTaxDeclarations PayrollTaxDeclaration[]
+  payrollTaxComputations PayrollTaxComputation[]
+  payrollSettlements   PayrollSettlement[]
+  payrollGratuities    PayrollGratuity[]
+  payrollBonuses       PayrollBonus[]
+  payrollIncentives    PayrollIncentive[]
+  payrollArrears       PayrollArrear[]
+  payrollLoans         PayrollLoan[]
+  compensationRevisions CompensationRevision[]
+  salaryBands          SalaryBand[]
+  salaryBenchmarks     SalaryBenchmark[]
   auditLogs           AuditLog[]
 
   @@index([slug])
@@ -914,6 +926,15 @@ model Employee {
   targetedShiftSwaps    ShiftSwapRequest[]       @relation("TargetShiftSwaps")
   overtimeRequests      OvertimeRequest[]
   attendanceAnomalies   AttendanceAnomaly[]
+  payrollTaxDeclarations PayrollTaxDeclaration[]
+  payrollTaxComputations PayrollTaxComputation[]
+  payrollSettlements   PayrollSettlement[]
+  payrollGratuities    PayrollGratuity[]
+  payrollBonuses       PayrollBonus[]
+  payrollIncentives    PayrollIncentive[]
+  payrollArrears       PayrollArrear[]
+  payrollLoans         PayrollLoan[]
+  compensationRevisions CompensationRevision[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, email])
@@ -7786,5 +7807,408 @@ model WorkforceSchedule {
   @@map("workforce_schedules")
 }
 
+// ----------------- TASK 30: ENTERPRISE PAYROLL, COMPENSATION & STATUTORY TAX MODELS -----------------
 
+enum PayrollFrequency {
+  MONTHLY
+  BIWEEKLY
+  WEEKLY
+}
 
+enum TaxDeclarationStatus {
+  DRAFT
+  SUBMITTED
+  VERIFIED
+  REJECTED
+}
+
+enum TaxProofStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SettlementStatus {
+  DRAFT
+  HR_APPROVED
+  FINANCE_APPROVED
+  DISBURSED
+}
+
+enum GratuityStatus {
+  PENDING
+  APPROVED
+  PAID
+}
+
+enum BonusType {
+  ANNUAL
+  FESTIVE
+  PERFORMANCE
+  SIGN_ON
+  RETENTION
+}
+
+enum IncentiveType {
+  SALES_COMMISSION
+  KPI_REWARD
+  PROJECT_MILESTONE
+}
+
+enum LoanType {
+  SALARY_ADVANCE
+  EMERGENCY_LOAN
+  EDUCATION_LOAN
+}
+
+enum LoanStatus {
+  ACTIVE
+  CLOSED
+  DEFAULTED
+}
+
+enum RevisionType {
+  ANNUAL_APPRAISAL
+  PROMOTION
+  MARKET_CORRECTION
+}
+
+enum RevisionStatus {
+  PROPOSED
+  MANAGER_APPROVED
+  HR_APPROVED
+  CEO_APPROVED
+  APPLIED
+}
+
+model PayrollCycle {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @map("tenant_id") @db.Uuid
+  name        String
+  frequency   PayrollFrequency @default(MONTHLY)
+  startDay    Int              @default(1) @map("start_day")
+  endDay      Int              @default(30) @map("end_day")
+  payoutDay   Int              @default(30) @map("payout_day")
+  isActive    Boolean          @default(true) @map("is_active")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, isActive])
+  @@map("payroll_cycles")
+}
+
+model PayrollTaxDeclaration {
+  id                          String               @id @default(uuid()) @db.Uuid
+  tenantId                    String               @map("tenant_id") @db.Uuid
+  employeeId                  String               @map("employee_id") @db.Uuid
+  financialYear               String               @map("financial_year") // e.g. "2026-2027"
+  taxRegime                   TaxRegime            @default(NEW) @map("tax_regime")
+  section80C                  Float                @default(0.0) @map("section_80c")
+  section80D                  Float                @default(0.0) @map("section_80d")
+  section24HomeLoanInterest   Float                @default(0.0) @map("section_24_home_loan_interest")
+  section80CCD_NPS            Float                @default(0.0) @map("section_80ccd_nps")
+  hraExemptionRentPaidAnnual  Float                @default(0.0) @map("hra_exemption_rent_paid_annual")
+  isMetroCity                 Boolean              @default(false) @map("is_metro_city")
+  otherDeductions             Float                @default(0.0) @map("other_deductions")
+  status                      TaxDeclarationStatus @default(DRAFT)
+  verifiedByUserId            String?              @map("verified_by_user_id") @db.Uuid
+  verifiedAt                  DateTime?            @map("verified_at")
+  notes                       String?
+  createdAt                   DateTime             @default(now()) @map("created_at")
+  updatedAt                   DateTime             @updatedAt @map("updated_at")
+
+  tenant                      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee                    Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  proofs                      PayrollTaxProof[]
+
+  @@unique([tenantId, employeeId, financialYear])
+  @@index([tenantId, financialYear])
+  @@map("payroll_tax_declarations")
+}
+
+model PayrollTaxProof {
+  id              String         @id @default(uuid()) @db.Uuid
+  tenantId        String         @map("tenant_id") @db.Uuid
+  declarationId   String         @map("declaration_id") @db.Uuid
+  section         String         // 80C, 80D, HRA, HOME_LOAN, etc.
+  claimedAmount   Float          @map("claimed_amount")
+  verifiedAmount  Float          @default(0.0) @map("verified_amount")
+  documentUrl     String         @map("document_url")
+  status          TaxProofStatus @default(PENDING)
+  rejectionReason String?        @map("rejection_reason")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  declaration     PayrollTaxDeclaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, declarationId])
+  @@map("payroll_tax_proofs")
+}
+
+model PayrollTaxComputation {
+  id                      String    @id @default(uuid()) @db.Uuid
+  tenantId                String    @map("tenant_id") @db.Uuid
+  employeeId              String    @map("employee_id") @db.Uuid
+  financialYear           String    @map("financial_year")
+  month                   Int
+  year                    Int
+  taxRegime               TaxRegime @map("tax_regime")
+  grossTaxableAnnual      Float     @map("gross_taxable_annual")
+  standardDeduction       Float     @default(75000.0) @map("standard_deduction")
+  totalExemptions         Float     @default(0.0) @map("total_exemptions")
+  totalDeductions80Cto80U Float     @default(0.0) @map("total_deductions_80c_to_80u")
+  netTaxableIncome        Float     @map("net_taxable_income")
+  calculatedTax           Float     @map("calculated_tax")
+  rebate87A               Float     @default(0.0) @map("rebate_87a")
+  surcharge               Float     @default(0.0)
+  healthAndEducationCess  Float     @default(0.0) @map("health_and_education_cess")
+  totalTaxPayableAnnual   Float     @map("total_tax_payable_annual")
+  tdsDeductedSoFar        Float     @default(0.0) @map("tds_deducted_so_far")
+  monthlyTdsDeduction     Float     @map("monthly_tds_deduction")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
+  tenant                  Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee                Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, employeeId, financialYear, month])
+  @@index([tenantId, financialYear])
+  @@map("payroll_tax_computations")
+}
+
+model PayrollSettlement {
+  id                    String           @id @default(uuid()) @db.Uuid
+  tenantId              String           @map("tenant_id") @db.Uuid
+  employeeId            String           @map("employee_id") @db.Uuid
+  resignationDate       DateTime         @map("resignation_date")
+  lastWorkingDate       DateTime         @map("last_working_date")
+  settlementDate        DateTime         @default(now()) @map("settlement_date")
+  noticePeriodDays      Int              @default(30) @map("notice_period_days")
+  noticeShortfallDays   Int              @default(0) @map("notice_shortfall_days")
+  noticeRecoveryAmount  Float            @default(0.0) @map("notice_recovery_amount")
+  leaveEncashmentDays   Float            @default(0.0) @map("leave_encashment_days")
+  leaveEncashmentAmount Float            @default(0.0) @map("leave_encashment_amount")
+  gratuityAmount        Float            @default(0.0) @map("gratuity_amount")
+  variablePayAmount     Float            @default(0.0) @map("variable_pay_amount")
+  bonusAmount           Float            @default(0.0) @map("bonus_amount")
+  otherEarnings         Float            @default(0.0) @map("other_earnings")
+  otherDeductions       Float            @default(0.0) @map("other_deductions")
+  grossSettlementAmount Float            @map("gross_settlement_amount")
+  totalDeductions       Float            @map("total_deductions")
+  netSettlementPayable  Float            @map("net_settlement_payable")
+  status                SettlementStatus @default(DRAFT)
+  notes                 String?
+  settlementData        Json             @default("{}") @map("settlement_data")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+
+  tenant                Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee              Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+  @@map("payroll_settlements")
+}
+
+model PayrollGratuity {
+  id                      String         @id @default(uuid()) @db.Uuid
+  tenantId                String         @map("tenant_id") @db.Uuid
+  employeeId              String         @map("employee_id") @db.Uuid
+  dateOfJoining           DateTime       @map("date_of_joining")
+  dateOfLeaving           DateTime       @map("date_of_leaving")
+  totalServiceYears       Float          @map("total_service_years")
+  isEligible              Boolean        @default(true) @map("is_eligible")
+  lastDrawnBasicSalary    Float          @map("last_drawn_basic_salary")
+  lastDrawnDa             Float          @default(0.0) @map("last_drawn_da")
+  gratuityCalculatedAmount Float         @map("gratuity_calculated_amount")
+  gratuityTaxExemptAmount Float          @map("gratuity_tax_exempt_amount")
+  gratuityTaxableAmount   Float          @default(0.0) @map("gratuity_taxable_amount")
+  status                  GratuityStatus @default(PENDING)
+  createdAt               DateTime       @default(now()) @map("created_at")
+  updatedAt               DateTime       @updatedAt @map("updated_at")
+
+  tenant                  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee                Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@map("payroll_gratuities")
+}
+
+model PayrollBonus {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  employeeId    String    @map("employee_id") @db.Uuid
+  bonusType     BonusType @default(PERFORMANCE) @map("bonus_type")
+  financialYear String    @map("financial_year")
+  month         Int
+  bonusAmount   Float     @map("bonus_amount")
+  isTaxable     Boolean   @default(true) @map("is_taxable")
+  payoutDate    DateTime  @map("payout_date")
+  status        String    @default("APPROVED") // PENDING, APPROVED, PAID
+  notes         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, financialYear])
+  @@index([tenantId, employeeId])
+  @@map("payroll_bonuses")
+}
+
+model PayrollIncentive {
+  id              String        @id @default(uuid()) @db.Uuid
+  tenantId        String        @map("tenant_id") @db.Uuid
+  employeeId      String        @map("employee_id") @db.Uuid
+  incentiveType   IncentiveType @default(KPI_REWARD) @map("incentive_type")
+  month           Int
+  year            Int
+  targetMetric    String        @map("target_metric")
+  achievedMetric  String        @map("achieved_metric")
+  incentiveAmount Float         @map("incentive_amount")
+  status          String        @default("APPROVED")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, year, month])
+  @@index([tenantId, employeeId])
+  @@map("payroll_incentives")
+}
+
+model PayrollArrear {
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  employeeId         String   @map("employee_id") @db.Uuid
+  effectiveFromMonth Int      @map("effective_from_month")
+  effectiveFromYear  Int      @map("effective_from_year")
+  effectiveToMonth   Int      @map("effective_to_month")
+  effectiveToYear    Int      @map("effective_to_year")
+  totalArrearAmount  Float    @map("total_arrear_amount")
+  payoutMonth        Int      @map("payout_month")
+  payoutYear         Int      @map("payout_year")
+  status             String   @default("APPROVED") // PENDING, APPROVED, PAID
+  notes              String?
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee           Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@map("payroll_arrears")
+}
+
+model PayrollLoan {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  tenantId              String                  @map("tenant_id") @db.Uuid
+  employeeId            String                  @map("employee_id") @db.Uuid
+  loanType              LoanType                @default(SALARY_ADVANCE) @map("loan_type")
+  principalAmount       Float                   @map("principal_amount")
+  annualInterestRate    Float                   @default(0.0) @map("annual_interest_rate")
+  totalInstallments     Int                     @default(1) @map("total_installments")
+  remainingInstallments Int                     @default(1) @map("remaining_installments")
+  monthlyEmiAmount      Float                   @map("monthly_emi_amount")
+  disbursedDate         DateTime                @default(now()) @map("disbursed_date")
+  status                LoanStatus              @default(ACTIVE)
+  notes                 String?
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
+
+  tenant                Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee              Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  installments          PayrollLoanInstallment[]
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+  @@map("payroll_loans")
+}
+
+model PayrollLoanInstallment {
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  loanId             String   @map("loan_id") @db.Uuid
+  installmentNumber  Int      @map("installment_number")
+  month              Int
+  year               Int
+  principalComponent Float    @map("principal_component")
+  interestComponent  Float    @default(0.0) @map("interest_component")
+  totalAmount        Float    @map("total_amount")
+  status             String   @default("PENDING") // PENDING, DEDUCTED, WAIVED
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  loan               PayrollLoan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, loanId])
+  @@map("payroll_loan_installments")
+}
+
+model CompensationRevision {
+  id               String         @id @default(uuid()) @db.Uuid
+  tenantId         String         @map("tenant_id") @db.Uuid
+  employeeId       String         @map("employee_id") @db.Uuid
+  currentCtc       Float          @map("current_ctc")
+  proposedCtc      Float          @map("proposed_ctc")
+  percentageHike   Float          @map("percentage_hike")
+  revisionType     RevisionType   @default(ANNUAL_APPRAISAL) @map("revision_type")
+  effectiveDate    DateTime       @map("effective_date")
+  status           RevisionStatus @default(PROPOSED)
+  notes            String?
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  tenant           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee         Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, status])
+  @@map("compensation_revisions")
+}
+
+model SalaryBand {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  bandCode  String   @map("band_code") // e.g. "L1", "L2", "L3"
+  bandName  String   @map("band_name") // e.g. "Software Engineer"
+  jobLevel  String   @map("job_level")
+  minCtc    Float    @map("min_ctc")
+  midCtc    Float    @map("mid_ctc")
+  maxCtc    Float    @map("max_ctc")
+  currency  String   @default("INR")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, bandCode])
+  @@index([tenantId, isActive])
+  @@map("salary_bands")
+}
+
+model SalaryBenchmark {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  jobTitle        String   @map("job_title")
+  industrySector  String   @default("Manufacturing & Agritech") @map("industry_sector")
+  experienceLevel String   @map("experience_level")
+  p25Ctc          Float    @map("p25_ctc")
+  p50Ctc          Float    @map("p50_ctc")
+  p75Ctc          Float    @map("p75_ctc")
+  p90Ctc          Float    @map("p90_ctc")
+  surveySource    String   @default("Aon Hewitt & Radford") @map("survey_source")
+  surveyYear      Int      @default(2026) @map("survey_year")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, jobTitle])
+  @@map("salary_benchmarks")
+}

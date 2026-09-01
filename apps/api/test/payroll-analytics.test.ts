@@ -1,59 +1,74 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AnalyticsService } from "../src/modules/analytics/analytics.service.js";
+import { describe, expect, it } from "vitest";
+import { PayrollAnalyticsEngine } from "../src/modules/payroll/engines/payroll-analytics.engine.js";
+import { RevisionEngine } from "../src/modules/payroll/engines/revision-engine.js";
+import { BonusEngine } from "../src/modules/payroll/engines/bonus-engine.js";
+import { IncentiveEngine } from "../src/modules/payroll/engines/incentive-engine.js";
 
-describe("Payroll Analytics Service & Engine", () => {
-  let service: AnalyticsService;
-  let mockAnalyticsEngine: any;
-  const tenantId = "11111111-1111-1111-1111-111111111111";
+describe("Payroll Analytics, Revisions, Bonus & Incentive Engines (Task 30)", () => {
+  it("should synthesize executive payroll metrics across departments", () => {
+    const res = PayrollAnalyticsEngine.synthesizePayrollAnalytics([
+      {
+        departmentId: "d1",
+        departmentName: "Operations",
+        headcount: 50,
+        totalGrossPay: 2000000,
+        totalOvertimePay: 100000,
+        totalIncentivesPay: 50000,
+        totalEmployerContributions: 240000,
+        averageMonthlyCtc: 40000
+      },
+      {
+        departmentId: "d2",
+        departmentName: "Engineering",
+        headcount: 20,
+        totalGrossPay: 2000000,
+        totalOvertimePay: 20000,
+        totalIncentivesPay: 100000,
+        totalEmployerContributions: 240000,
+        averageMonthlyCtc: 100000
+      }
+    ]);
 
-  beforeEach(() => {
-    mockAnalyticsEngine = {
-      calculatePayrollAnalytics: vi.fn().mockResolvedValue({
-        costTrends: [
-          { month: 8, year: 2026, totalGross: 1200000, totalNet: 1020000, totalDeductions: 180000, totalEmployerContributions: 144000, totalCost: 1344000 }
-        ],
-        departmentCostBreakdown: [
-          { departmentName: "Farming Ops", grossCost: 700000, netCost: 610000, employeeCount: 20, averageCostPerEmployee: 35000 }
-        ],
-        salaryBands: [
-          { band: "₹25,000 - ₹50,000", count: 18, totalCost: 650000, percentage: 90.0 }
-        ],
-        allowanceComponentBreakdown: [
-          { componentName: "Basic", code: "BASIC", totalAmount: 600000, percentage: 50.0 }
-        ],
-        deductionComponentBreakdown: [
-          { componentName: "Provident Fund", code: "PF", totalAmount: 72000, percentage: 40.0 }
-        ],
-        overtimeCostTrend: [{ month: 8, year: 2026, amount: 48000 }],
-        growthRate: { monthlyPercentage: 2.5, yearlyPercentage: 8.0 },
-        costCenterAnalysis: [
-          { businessUnitName: "North Farm", grossCost: 700000, employeeCount: 20 }
-        ],
-        efficiencyMetrics: {
-          averageCostPerEmployee: 60000,
-          takeHomeRatioPercentage: 85.0,
-          statutoryCostRatioPercentage: 12.0
-        }
-      })
-    };
-
-    service = new AnalyticsService(
-      {} as any,
-      {} as any,
-      mockAnalyticsEngine,
-      {} as any,
-      {} as any,
-      {} as any
-    );
+    expect(res.totalHeadcount).toBe(70);
+    expect(res.totalMonthlyGrossCost).toBe(4000000);
+    expect(res.totalOvertimeSpend).toBe(120000);
+    expect(res.overtimeToGrossRatio).toBe(3.0); // 120,000 / 4,000,000 = 3.0%
+    expect(res.totalEmployerStatutoryCost).toBe(480000);
   });
 
-  it("fetches payroll analytics with salary bands and efficiency metrics", async () => {
-    const res = await service.getPayrollAnalytics(tenantId);
-    expect(res.costTrends).toHaveLength(1);
-    expect(res.costTrends[0]?.totalCost).toBe(1344000);
-    expect(res.departmentCostBreakdown[0]?.departmentName).toBe("Farming Ops");
-    expect(res.efficiencyMetrics.takeHomeRatioPercentage).toBe(85.0);
-    expect(mockAnalyticsEngine.calculatePayrollAnalytics).toHaveBeenCalledWith(tenantId);
+  it("should simulate salary revisions with merit matrix and compa-ratios", () => {
+    // Rating 5 (Outstanding) & below-market compa-ratio (85%) => 18% hike
+    const res = RevisionEngine.simulateRevision({
+      currentMonthlyCtc: 100000,
+      performanceRating: 5,
+      compaRatioPercent: 85
+    });
+
+    expect(res.meritHikePercentage).toBe(18.0);
+    expect(res.newMonthlyCtc).toBe(118000);
+    expect(res.monthlyIncrementAmount).toBe(18000);
+  });
+
+  it("should compute statutory bonus within 8.33% to 20% limits", () => {
+    const res = BonusEngine.calculateBonus({
+      annualBasicSalary: 360000,
+      bonusType: "ANNUAL_STATUTORY",
+      statutoryBonusPercentage: 8.33
+    });
+
+    expect(res.isStatutoryCompliant).toBe(true);
+    expect(res.bonusAmount).toBe(29988); // 360,000 * 8.33%
+  });
+
+  it("should calculate tiered sales commission accurately", () => {
+    const res = IncentiveEngine.calculateIncentive({
+      targetAmount: 1000000,
+      achievedAmount: 1100000, // 110% achievement
+      baseIncentivePool: 50000
+    });
+
+    expect(res.achievementPercent).toBe(110.0);
+    expect(res.appliedMultiplier).toBe(1.0);
+    expect(res.totalIncentivePayout).toBe(50000);
   });
 });

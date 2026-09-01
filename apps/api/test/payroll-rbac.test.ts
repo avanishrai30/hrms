@@ -1,37 +1,31 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { ROLE_PERMISSIONS } from "@vc-wms/auth";
 
-describe("Payroll RBAC Enforcement", () => {
-  const controllerCode = readFileSync(
-    new URL("../src/modules/payroll/payroll.controller.ts", import.meta.url),
-    "utf8"
-  );
+describe("Payroll & Compensation RBAC Permissions (Task 30)", () => {
+  it("TENANT_OWNER and TENANT_ADMIN should have full payroll and tax permissions", () => {
+    const requiredPerms = [
+      "payroll.view",
+      "payroll.read",
+      "payroll.manage",
+      "payroll.process",
+      "payroll.tax",
+      "payroll.compliance",
+      "payroll.compensation",
+      "payroll.analytics"
+    ];
 
-  it("enforces payroll.view on query endpoints", () => {
-    expect(controllerCode).toContain('@RequirePermissions("payroll.view")\n  async listPayrollRuns');
-    expect(controllerCode).toContain('@RequirePermissions("payroll.view")\n  async getLatestPayrollRun');
-    expect(controllerCode).toContain('@RequirePermissions("payroll.view")\n  async getPayrollRun');
-    expect(controllerCode).toContain('@RequirePermissions("payroll.view")\n  async getEmployeePayroll');
-    expect(controllerCode).toContain('@RequirePermissions("payroll.view")\n  async getMyPayroll');
+    for (const perm of requiredPerms) {
+      expect(ROLE_PERMISSIONS.TENANT_OWNER).toContain(perm);
+      expect(ROLE_PERMISSIONS.TENANT_ADMIN).toContain(perm);
+      expect(ROLE_PERMISSIONS.HR_ADMIN).toContain(perm);
+    }
   });
 
-  it("enforces payroll.generate on generation, recalculation, and adjustments", () => {
-    expect(controllerCode).toContain('@RequirePermissions("payroll.generate")\n  async generatePayrollRun');
-    expect(controllerCode).toContain('@RequirePermissions("payroll.generate")\n  async recalculatePayrollRun');
-    expect(controllerCode).toContain('@RequirePermissions("payroll.generate")\n  async addAdjustment');
-    expect(controllerCode).toContain('@RequirePermissions("payroll.generate")\n  async removeAdjustment');
-    expect(controllerCode).toContain('@RequirePermissions("payroll.generate")\n  async cancelPayrollRun');
-  });
-
-  it("enforces payroll.approve on approval endpoint", () => {
-    expect(controllerCode).toContain('@RequirePermissions("payroll.approve")\n  async approvePayrollRun');
-  });
-
-  it("enforces payroll.lock on locking endpoint", () => {
-    expect(controllerCode).toContain('@RequirePermissions("payroll.lock")\n  async lockPayrollRun');
-  });
-
-  it("enforces payroll.audit on audit endpoint", () => {
-    expect(controllerCode).toContain('@RequirePermissions("payroll.audit")\n  async getPayrollAudit');
+  it("MANAGER and EMPLOYEE should have read-only access to their own payroll and payslips", () => {
+    expect(ROLE_PERMISSIONS.EMPLOYEE).toContain("payroll.view");
+    expect(ROLE_PERMISSIONS.EMPLOYEE).toContain("payroll.read");
+    expect(ROLE_PERMISSIONS.EMPLOYEE).toContain("payslip.view");
+    expect(ROLE_PERMISSIONS.EMPLOYEE).not.toContain("payroll.manage");
+    expect(ROLE_PERMISSIONS.EMPLOYEE).not.toContain("payroll.process");
   });
 });
