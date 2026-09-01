@@ -13,6 +13,7 @@
     "dev:web": "pnpm --filter @vc-wms/web dev",
     "dev:api": "pnpm --filter @vc-wms/api start:dev",
     "setup:local": "node scripts/setup-local.mjs",
+    "deploy:server": "bash scripts/deploy-server.sh",
     "prisma:generate": "pnpm --filter @vc-wms/api prisma:generate",
     "db:seed": "pnpm --filter @vc-wms/api exec prisma db seed"
   },
