@@ -4,7 +4,7 @@ services:
     container_name: hrms-postgres
     restart: always
     ports:
-  - "5432:5432"
+      - "5432:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-vc_hrms_prod}
       POSTGRES_USER: ${POSTGRES_USER:-hrms_admin}
@@ -23,6 +23,8 @@ services:
     image: redis:7-alpine
     container_name: hrms-redis
     restart: always
+    ports:
+      - "6379:6379"
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-RedisSecure2026!}"]
     volumes:
       - redis_data:/data
@@ -54,7 +56,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-RedisSecure2026!}
       JWT_SECRET: ${JWT_SECRET:-EnterpriseJwtSecretKey2026Prod!}
       COOKIE_SECRET: ${COOKIE_SECRET:-EnterpriseCookieSecretKey2026Prod!}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     networks:
       - hrms-net
 
