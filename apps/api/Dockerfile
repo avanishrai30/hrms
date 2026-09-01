@@ -23,4 +23,4 @@ WORKDIR /app
 COPY --from=builder /app /app
 
 EXPOSE 4000
-CMD ["node", "apps/api/dist/main.js"]
+CMD ["apps/api/node_modules/.bin/tsx", "apps/api/src/main.ts"]
