@@ -11,12 +11,31 @@ export class ApiClientError extends Error {
   }
 }
 
+function validationIssueMessage(parsed: unknown) {
+  if (!parsed || typeof parsed !== "object") return null;
+  const record = parsed as Record<string, unknown>;
+  if (record.code !== "VALIDATION_FAILED") return null;
+  const issues = record.issues;
+  if (!issues || typeof issues !== "object") return "Some sign-in details are invalid.";
+  const fieldErrors = (issues as Record<string, unknown>).fieldErrors;
+  if (!fieldErrors || typeof fieldErrors !== "object") return "Some sign-in details are invalid.";
+  const messages = Object.entries(fieldErrors as Record<string, unknown>)
+    .flatMap(([field, value]) =>
+      Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string").map((item) => `${field}: ${item}`)
+        : []
+    );
+  return messages.length ? messages.join(" ") : "Some sign-in details are invalid.";
+}
+
 function normalizeApiError(status: number, body: string) {
   if (status === 401) return "Your session has expired. Sign in again to continue.";
   if (status === 403) return "You do not have access to this area.";
   if (status >= 500) return "We could not reach AIavro right now. Try again.";
   try {
     const parsed = JSON.parse(body) as { message?: unknown };
+    const validationMessage = validationIssueMessage(parsed);
+    if (validationMessage) return validationMessage;
     if (typeof parsed.message === "string") return parsed.message;
     if (Array.isArray(parsed.message)) return parsed.message.join(" ");
   } catch {
