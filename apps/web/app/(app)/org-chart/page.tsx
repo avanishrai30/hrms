@@ -13,7 +13,10 @@ import {
 } from "lucide-react";
 import { useOrgTree, useOrgChart, type OrgNodeView } from "../../../lib/queries/use-people-queries";
 import { usePermissionGate } from "../../../lib/session-store";
-import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
+import { Card, CardHeader, CardTitle, CardDescription } from "../../../components/ui/card";
+import { Badge } from "../../../components/ui/badge";
+import { Button } from "../../../components/ui/button";
+import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
 
 function OrgTreeNode({ node, level = 0 }: { node: OrgNodeView; level?: number }) {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -22,52 +25,52 @@ function OrgTreeNode({ node, level = 0 }: { node: OrgNodeView; level?: number })
 
   return (
     <div className="space-y-2">
-      <div
-        className={`rounded-card bg-surface-raised border border-border-subtle p-4 shadow-card hover:border-primary/40 transition flex items-center justify-between gap-3 max-w-xl ${
-          level > 0 ? "ml-4 sm:ml-8 border-l-4 border-l-primary/60" : ""
+      <Card
+        className={`border border-border bg-card p-3 shadow-xs transition hover:shadow-sm flex items-center justify-between gap-3 max-w-xl ${
+          level > 0 ? "ml-4 sm:ml-8 border-l-4 border-l-primary" : ""
         }`}
       >
         <div className="flex items-center gap-3 min-w-0">
           {hasChildren ? (
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="w-6 h-6 rounded-pill hover:bg-surface-muted flex items-center justify-center text-foreground-muted transition"
+              className="size-6 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground transition"
               aria-label={isExpanded ? "Collapse node" : "Expand node"}
             >
-              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
             </button>
           ) : (
-            <div className="w-6 h-6 flex items-center justify-center text-foreground-muted/40">
-              <User className="w-3.5 h-3.5" />
+            <div className="size-6 flex items-center justify-center text-muted-foreground/40">
+              <User className="size-3" />
             </div>
           )}
 
-          <div className="w-9 h-9 rounded-panel bg-primary-soft text-primary font-bold flex items-center justify-center text-xs shrink-0">
-            {initial}
-          </div>
+          <Avatar className="h-8 w-8 border border-border">
+            <AvatarFallback>{initial}</AvatarFallback>
+          </Avatar>
 
           <div className="min-w-0">
             <Link
               href={node.id ? (`/employees/${node.id}` as Route) : ("#" as Route)}
-              className="text-xs font-bold text-foreground hover:text-primary transition truncate block"
+              className="text-xs font-semibold text-foreground hover:underline truncate block"
             >
               {node.name}
             </Link>
-            <p className="text-[10px] text-foreground-secondary truncate">
+            <p className="text-[11px] text-muted-foreground truncate">
               {node.title || node.designation || "—"} {node.department ? `• ${node.department}` : ""}
             </p>
           </div>
         </div>
 
         {hasChildren && (
-          <span className="px-2 py-0.5 rounded-pill bg-primary/10 text-primary text-[10px] font-bold shrink-0">
+          <Badge variant="secondary" className="text-[10px] px-2">
             {node.children!.length} direct
-          </span>
+          </Badge>
         )}
-      </div>
+      </Card>
 
       {hasChildren && isExpanded && (
-        <div className="space-y-2 relative before:absolute before:left-3 before:top-0 before:bottom-2 before:w-0.5 before:bg-border-subtle">
+        <div className="space-y-2 relative before:absolute before:left-3 before:top-0 before:bottom-2 before:w-px before:bg-border">
           {node.children!.map((child: OrgNodeView, idx: number) => (
             <OrgTreeNode key={child.id || idx} node={child} level={level + 1} />
           ))}
@@ -89,12 +92,11 @@ export default function OrganizationHierarchyPage() {
 
   if (gate.isLoading || (gate.isAuthorized && isLoading)) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 animate-pulse">
-        <div className="h-8 w-64 rounded-control bg-surface-muted/60" />
+      <div className="flex flex-col gap-5 max-w-5xl mx-auto">
+        <div className="h-8 w-48 rounded-md bg-muted animate-pulse" />
         <div className="space-y-3">
-          <SkeletonLoader className="h-20 max-w-xl rounded-card" />
-          <SkeletonLoader className="h-20 ml-8 max-w-xl rounded-card" />
-          <SkeletonLoader className="h-20 ml-16 max-w-xl rounded-card" />
+          <div className="h-16 max-w-xl rounded-xl border border-border bg-muted/40 animate-pulse" />
+          <div className="h-16 ml-8 max-w-xl rounded-xl border border-border bg-muted/30 animate-pulse" />
         </div>
       </div>
     );
@@ -102,49 +104,50 @@ export default function OrganizationHierarchyPage() {
 
   if (!gate.isAuthorized) {
     return (
-      <div className="p-8 max-w-lg mx-auto text-center mt-12">
-        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
-          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
-          <h2 className="text-base font-bold text-foreground">Hierarchy Access Restricted</h2>
-          <p className="text-xs text-foreground-muted">
-            You do not have permission (`directory.view`) to explore the organizational hierarchy.
-          </p>
-        </div>
+      <div className="flex items-center justify-center p-12">
+        <Card className="max-w-md w-full text-center p-6 border-border shadow-xs">
+          <CardHeader className="items-center pb-2">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600 mb-2">
+              <ShieldCheck className="size-5" />
+            </div>
+            <CardTitle className="text-base">Hierarchy Access Restricted</CardTitle>
+            <CardDescription className="text-xs">
+              You do not have permission to view the reporting hierarchy.
+            </CardDescription>
+          </CardHeader>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
+    <div className="flex flex-col gap-5 max-w-5xl mx-auto">
       {/* 1. Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Organization Hierarchy</h1>
-          <p className="text-xs text-foreground-muted mt-0.5">
-            Interactive reporting tree from leadership down to functional units.
+          <h1 className="text-xl font-bold tracking-tight text-foreground">Organization Hierarchy</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Interactive reporting tree from leadership down through functional departments.
           </p>
         </div>
 
-        <Link
-          href={"/directory" as Route}
-          className="px-3.5 py-2 rounded-control bg-surface-raised border border-border-subtle hover:bg-surface-muted text-xs font-semibold text-foreground transition inline-flex items-center gap-1.5 shadow-sm self-start sm:self-auto"
-        >
-          <Users className="w-4 h-4 text-primary" />
-          <span>People Directory</span>
-        </Link>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={"/directory" as Route}>
+            <Users className="size-3.5 mr-1.5 text-primary" />
+            <span>Directory View</span>
+          </Link>
+        </Button>
       </div>
 
-      {/* 2. Tree Canvas */}
+      {/* 2. Org Tree Content */}
       {isError || !rootNode ? (
-        <div className="py-16 text-center rounded-card bg-surface-raised border border-border-subtle flex flex-col items-center justify-center text-foreground-muted">
-          <Network className="w-8 h-8 mb-2 opacity-50" />
-          <p className="text-xs font-bold text-foreground">No organizational reporting tree configured</p>
-          <p className="text-[11px] text-foreground-muted mt-0.5">
-            Reporting structures will appear once manager assignments are configured.
-          </p>
-        </div>
+        <Card className="border-dashed border-border py-12 text-center text-xs text-muted-foreground">
+          <Network className="size-8 mx-auto mb-2 opacity-40" />
+          <p className="font-semibold text-foreground">Hierarchy tree unavailable</p>
+          <p className="text-[11px] mt-0.5">Ensure department managers and employee reporting lines are configured.</p>
+        </Card>
       ) : (
-        <div className="p-6 rounded-card bg-surface border border-border-subtle shadow-card space-y-4 overflow-x-auto">
+        <div className="py-2">
           <OrgTreeNode node={rootNode} />
         </div>
       )}

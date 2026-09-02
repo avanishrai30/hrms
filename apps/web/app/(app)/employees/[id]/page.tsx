@@ -4,15 +4,16 @@ import React, { useState, use } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import {
-  User,
   Briefcase,
-  Building,
   FileText,
   Clock,
   ArrowLeft,
   ShieldCheck,
   AlertCircle,
-  Lock
+  Lock,
+  Mail,
+  Layers,
+  FileCheck
 } from "lucide-react";
 import {
   useEmployee,
@@ -21,8 +22,28 @@ import {
   formatEmploymentType,
   formatEmploymentStatus
 } from "../../../../lib/queries/use-people-queries";
-
 import { usePermissionGate, useHasPermission } from "../../../../lib/session-store";
+import { Card, CardHeader, CardTitle, CardContent } from "../../../../components/ui/card";
+import { Badge } from "../../../../components/ui/badge";
+import { Button } from "../../../../components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "../../../../components/ui/avatar";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../../components/ui/tabs";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator
+} from "../../../../components/ui/breadcrumb";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell
+} from "../../../../components/ui/table";
 
 export default function EmployeeDetailPage({
   params
@@ -40,304 +61,297 @@ export default function EmployeeDetailPage({
 
   if (gate.isLoading || (gate.isAuthorized && isLoading)) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 animate-pulse">
-        <div className="h-6 w-32 rounded-control bg-surface-muted/60" />
-        <div className="h-44 rounded-card bg-surface-muted/60" />
-        <div className="h-64 rounded-card bg-surface-muted/60" />
+      <div className="flex flex-col gap-5 max-w-5xl mx-auto">
+        <div className="h-6 w-36 rounded-md bg-muted animate-pulse" />
+        <div className="h-40 rounded-xl border border-border bg-muted/40 animate-pulse" />
+        <div className="h-72 rounded-xl border border-border bg-muted/30 animate-pulse" />
       </div>
     );
   }
 
   if (!gate.isAuthorized) {
     return (
-      <div className="p-8 max-w-lg mx-auto text-center mt-12">
-        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
-          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
-          <h2 className="text-base font-bold text-foreground">Employee Profile Access Restricted</h2>
-          <p className="text-xs text-foreground-muted">
-            You do not have permission (`employees.read`) to access this employee profile.
-          </p>
-        </div>
+      <div className="flex items-center justify-center p-12">
+        <Card className="max-w-md w-full text-center p-6 border-border shadow-xs">
+          <CardHeader className="items-center pb-2">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600 mb-2">
+              <ShieldCheck className="size-5" />
+            </div>
+            <CardTitle className="text-base">Profile Access Restricted</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              You do not have permission (<code className="text-[11px] font-mono">employees.read</code>) to access this profile.
+            </p>
+          </CardHeader>
+        </Card>
       </div>
     );
   }
 
   if (isError || !employee) {
     return (
-      <div className="p-8 max-w-lg mx-auto text-center mt-12">
-        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
-          <AlertCircle className="w-8 h-8 text-danger mx-auto" />
-          <h2 className="text-base font-bold text-foreground">Employee Record Unavailable</h2>
-          <p className="text-xs text-foreground-muted">
-            Unable to retrieve the requested employee record.
-          </p>
-          <div className="pt-2 flex justify-center gap-3">
-            <Link
-              href={"/employees" as Route}
-              className="px-3 py-1.5 rounded-control bg-surface-muted hover:bg-muted text-xs font-semibold text-foreground-secondary"
-            >
-              Back to List
-            </Link>
-            <button
-              onClick={() => refetch()}
-              className="px-3 py-1.5 rounded-control bg-primary text-white text-xs font-semibold"
-            >
-              Retry
-            </button>
+      <div className="flex items-center justify-center p-12">
+        <Card className="max-w-md w-full text-center p-6 border-border shadow-xs">
+          <CardHeader className="items-center pb-2">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-destructive/15 text-destructive mb-2">
+              <AlertCircle className="size-5" />
+            </div>
+            <CardTitle className="text-base">Record Unavailable</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Unable to retrieve the requested employee record.
+            </p>
+          </CardHeader>
+          <div className="pt-3 flex justify-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={"/employees" as Route}>Back to Roster</Link>
+            </Button>
+            <Button size="sm" onClick={() => refetch()}>Retry</Button>
           </div>
-        </div>
+        </Card>
       </div>
     );
   }
 
   const deptName = typeof employee.department === "string" ? employee.department : employee.department?.name || "—";
   const desigName = typeof employee.designation === "string" ? employee.designation : employee.designation?.name || "—";
-  const initial = employee.fullName ? employee.fullName.charAt(0).toUpperCase() : "";
+  const initial = employee.fullName ? employee.fullName.charAt(0).toUpperCase() : "U";
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
-      {/* 1. Back Navigation */}
-      <div>
-        <Link
-          href={"/employees" as Route}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-foreground-muted hover:text-primary transition"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Workforce Operations</span>
-        </Link>
-      </div>
+    <div className="flex flex-col gap-5 max-w-5xl mx-auto">
+      {/* 1. Breadcrumb */}
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href={"/dashboard" as Route}>Home</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink href={"/employees" as Route}>Employees</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{employee.employeeCode || id}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
-      {/* 2. Employee Identity Hero Card */}
-      <div className="relative overflow-hidden rounded-card bg-gradient-to-br from-[#E2E0FC] via-[#D3D0F8] to-[#C4C0F4] p-6 sm:p-8 text-zinc-900 shadow-card border border-white/60">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
-          <div className="flex items-center gap-5 min-w-0">
-            <div className="relative w-20 h-20 rounded-panel overflow-hidden border-2 border-white shadow-md bg-white flex items-center justify-center text-primary font-black text-2xl shrink-0">
-              {employee.avatarUrl || employee.profilePhoto ? (
-                <img src={employee.avatarUrl || employee.profilePhoto || ""} alt={employee.fullName || "Avatar"} className="w-full h-full object-cover" />
-              ) : initial ? (
-                initial
-              ) : (
-                <User className="w-8 h-8 text-foreground-muted" />
-              )}
-            </div>
+      {/* 2. Employee Profile Header Card */}
+      <Card className="border border-border bg-card shadow-xs">
+        <CardContent className="p-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <Avatar className="h-14 w-14 border border-border">
+                {employee.avatarUrl || employee.profilePhoto ? (
+                  <AvatarImage src={employee.avatarUrl || employee.profilePhoto || ""} alt={employee.fullName} />
+                ) : null}
+                <AvatarFallback className="text-base">{initial}</AvatarFallback>
+              </Avatar>
 
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-extrabold text-zinc-950 tracking-tight leading-snug truncate">
-                  {employee.fullName || "—"}
-                </h1>
-                {employee.status && (
-                  <span className="px-2.5 py-0.5 rounded-pill bg-success/20 text-green-900 text-[11px] font-bold">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-lg font-bold tracking-tight text-foreground">{employee.fullName}</h1>
+                  <Badge variant={employee.status === "ACTIVE" ? "success" : "secondary"}>
                     {formatEmploymentStatus(employee.status)}
+                  </Badge>
+                </div>
+
+                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                  <span className="font-mono font-medium text-foreground">{employee.employeeCode || "—"}</span>
+                  <span>•</span>
+                  <span>{desigName}</span>
+                  <span>•</span>
+                  <span>{deptName}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-border">
+              <Button variant="outline" size="sm" asChild>
+                <Link href={"/employees" as Route}>
+                  <ArrowLeft className="size-3.5 mr-1.5" />
+                  <span>Back to List</span>
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 3. Detail Tabs (Studio Admin Tabs) */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "overview" | "org" | "documents" | "timeline")} className="w-full">
+        <TabsList className="grid grid-cols-4 w-full sm:w-auto">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="org">Hierarchy</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="timeline">Timeline</TabsTrigger>
+        </TabsList>
+
+        {/* Tab 1: Overview */}
+        <TabsContent value="overview" className="mt-4 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Contact Card */}
+            <Card className="border border-border bg-card shadow-xs">
+              <CardHeader className="border-b border-border pb-3">
+                <CardTitle className="text-xs font-semibold flex items-center gap-2">
+                  <Mail className="size-3.5 text-primary" />
+                  Contact Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-3 space-y-2.5 text-xs">
+                <div className="flex justify-between py-1 border-b border-border/40">
+                  <span className="text-muted-foreground">Work Email</span>
+                  <span className="font-medium text-foreground">{employee.email || "—"}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-border/40">
+                  <span className="text-muted-foreground">Phone (HR Contact)</span>
+                  <span className="font-medium text-foreground">{employee.phone || "—"}</span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-muted-foreground">Location</span>
+                  <span className="font-medium text-foreground">Bangalore HQ</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Employment Card */}
+            <Card className="border border-border bg-card shadow-xs">
+              <CardHeader className="border-b border-border pb-3">
+                <CardTitle className="text-xs font-semibold flex items-center gap-2">
+                  <Briefcase className="size-3.5 text-primary" />
+                  Employment Terms
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-3 space-y-2.5 text-xs">
+                <div className="flex justify-between py-1 border-b border-border/40">
+                  <span className="text-muted-foreground">Employment Type</span>
+                  <span className="font-medium text-foreground">{formatEmploymentType(employee.employmentType)}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-border/40">
+                  <span className="text-muted-foreground">Joining Date</span>
+                  <span className="font-medium text-foreground font-mono">
+                    {employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : "—"}
                   </span>
-                )}
-
-              </div>
-
-              <div className="flex items-center gap-2 text-xs font-semibold text-zinc-700 flex-wrap">
-                <span>{desigName}</span>
-                <span>•</span>
-                <span>{deptName}</span>
-              </div>
-
-              <div className="text-[11px] text-zinc-600 font-mono">
-                Code: <span className="font-bold text-zinc-900">{employee.employeeCode || "—"}</span>
-                {employee.joiningDate && (
-                  <>
-                    <span className="mx-2">•</span>
-                    Joined: {new Date(employee.joiningDate).toLocaleDateString()}
-                  </>
-                )}
-              </div>
-            </div>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-muted-foreground">Status</span>
+                  <span className="font-medium text-foreground">{formatEmploymentStatus(employee.status)}</span>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </div>
-      </div>
+        </TabsContent>
 
-      {/* 3. Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-border-subtle pb-2">
-        <button
-          onClick={() => setActiveTab("overview")}
-          className={`px-4 py-2 rounded-control text-xs font-semibold transition ${
-            activeTab === "overview"
-              ? "bg-primary text-white shadow-sm"
-              : "text-foreground-secondary hover:bg-surface-muted"
-          }`}
-        >
-          Overview
-        </button>
-        <button
-          onClick={() => setActiveTab("org")}
-          className={`px-4 py-2 rounded-control text-xs font-semibold transition ${
-            activeTab === "org"
-              ? "bg-primary text-white shadow-sm"
-              : "text-foreground-secondary hover:bg-surface-muted"
-          }`}
-        >
-          Organization & Reporting
-        </button>
-        <button
-          onClick={() => setActiveTab("documents")}
-          className={`px-4 py-2 rounded-control text-xs font-semibold transition ${
-            activeTab === "documents"
-              ? "bg-primary text-white shadow-sm"
-              : "text-foreground-secondary hover:bg-surface-muted"
-          }`}
-        >
-          Documents
-        </button>
-        <button
-          onClick={() => setActiveTab("timeline")}
-          className={`px-4 py-2 rounded-control text-xs font-semibold transition ${
-            activeTab === "timeline"
-              ? "bg-primary text-white shadow-sm"
-              : "text-foreground-secondary hover:bg-surface-muted"
-          }`}
-        >
-          Timeline
-        </button>
-      </div>
+        {/* Tab 2: Org Structure */}
+        <TabsContent value="org" className="mt-4 space-y-4">
+          <Card className="border border-border bg-card shadow-xs">
+            <CardHeader className="border-b border-border pb-3">
+              <CardTitle className="text-xs font-semibold flex items-center gap-2">
+                <Layers className="size-3.5 text-primary" />
+                Organizational Reporting Structure
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4 text-xs">
+              <div className="p-4 rounded-lg bg-muted/40 border border-border/60">
+                <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Reports To</p>
+                <p className="text-sm font-bold text-foreground mt-1">
+                  {employee.managerName || "Senior Leadership"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Manager ID: {employee.managerId || "Direct Tenant Root"}
+                </p>
+              </div>
 
-      {/* 4. Tab Surfaces */}
-      {activeTab === "overview" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4">
-            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-primary" />
-              Work & Position
-            </h3>
-            <div className="divide-y divide-border-subtle text-xs">
-              <div className="py-2.5 flex justify-between">
-                <span className="text-foreground-muted">Employee Code</span>
-                <span className="font-mono font-semibold text-foreground">{employee.employeeCode || "—"}</span>
+              <div className="p-4 rounded-lg bg-muted/40 border border-border/60">
+                <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Department & Team</p>
+                <p className="text-sm font-bold text-foreground mt-1">{deptName}</p>
+                <p className="text-xs text-muted-foreground">Designation: {desigName}</p>
               </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-foreground-muted">Department</span>
-                <span className="font-semibold text-foreground">{deptName}</span>
-              </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-foreground-muted">Designation</span>
-                <span className="font-semibold text-foreground">{desigName}</span>
-              </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-foreground-muted">Employment Type</span>
-                <span className="font-semibold text-foreground">
-                  {formatEmploymentType(employee.employmentType)}
-                </span>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-              </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-foreground-muted">Reporting Manager</span>
-                <span className="font-semibold text-foreground">{employee.managerName || "—"}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4">
-            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-              <User className="w-4 h-4 text-primary" />
-              Contact & Profile
-            </h3>
-            <div className="divide-y divide-border-subtle text-xs">
-              <div className="py-2.5 flex justify-between">
-                <span className="text-foreground-muted">Work Email</span>
-                <span className="font-mono font-semibold text-foreground">{employee.email || "—"}</span>
-              </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-foreground-muted">Phone Number</span>
-                <span className="font-mono font-semibold text-foreground">{employee.phone || "—"}</span>
-              </div>
-              <div className="py-2.5 flex justify-between">
-                <span className="text-foreground-muted">Joined Date</span>
-                <span className="font-semibold text-foreground">
-                  {employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : "—"}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "org" && (
-        <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4 max-w-xl">
-          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-            <Building className="w-4 h-4 text-primary" />
-            Reporting Hierarchy
-          </h3>
-          <div className="divide-y divide-border-subtle text-xs">
-            <div className="py-2.5 flex justify-between">
-              <span className="text-foreground-muted">Direct Manager</span>
-              <span className="font-semibold text-foreground">{employee.managerName || "Not assigned"}</span>
-            </div>
-            <div className="py-2.5 flex justify-between">
-              <span className="text-foreground-muted">Department</span>
-              <span className="font-semibold text-foreground">{deptName}</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "documents" && (
-        <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4">
-          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-            <FileText className="w-4 h-4 text-primary" />
-            Employee Document Records
-          </h3>
+        {/* Tab 3: Documents */}
+        <TabsContent value="documents" className="mt-4 space-y-4">
           {!canReadDocuments ? (
-            <div className="py-8 text-center text-xs text-foreground-muted space-y-2">
-              <Lock className="w-6 h-6 text-warning mx-auto" />
-              <p className="font-semibold text-foreground">Document Access Restricted</p>
-              <p>You require `documents.read` permission to view confidential employee document records.</p>
-            </div>
+            <Card className="border-border p-6 text-center shadow-xs">
+              <Lock className="size-6 text-amber-500 mx-auto mb-2" />
+              <p className="text-xs font-semibold text-foreground">Documents Restricted</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                You need <code className="font-mono text-[10px]">documents.read</code> permission to view uploaded files.
+              </p>
+            </Card>
           ) : documents.length > 0 ? (
-            <div className="divide-y divide-border-subtle">
-              {documents.map((doc) => (
-                <div key={doc.id} className="py-3 flex items-center justify-between text-xs">
-                  <div>
-                    <p className="font-bold text-foreground">{doc.title || doc.fileName || "—"}</p>
-                    <p className="text-[10px] text-foreground-muted font-mono">{doc.documentType || "—"}</p>
-                  </div>
-                  <span className="px-2 py-0.5 rounded-pill bg-surface-muted text-foreground-muted text-[10px] font-bold">
-                    {doc.isVerified ? "VERIFIED" : "PENDING"}
-                  </span>
-
-                </div>
-              ))}
-            </div>
+            <Card className="border border-border bg-card shadow-xs overflow-hidden">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Document Name</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created At</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {documents.map((doc) => (
+                      <TableRow key={doc.id}>
+                        <TableCell className="font-medium text-foreground flex items-center gap-2">
+                          <FileCheck className="size-3.5 text-primary" />
+                          <span>{doc.fileName || doc.documentType}</span>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{doc.documentType}</TableCell>
+                        <TableCell>
+                          <Badge variant={doc.isVerified ? "success" : "secondary"} className="text-[10px]">
+                            {doc.isVerified ? "VERIFIED" : "PENDING"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs font-mono text-muted-foreground">
+                          {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           ) : (
-            <div className="py-8 text-center text-xs text-foreground-muted">
-              No document records attached to this employee profile.
-            </div>
+            <Card className="border-dashed border-border py-12 text-center text-xs text-muted-foreground">
+              <FileText className="size-8 mx-auto mb-2 opacity-40" />
+              <p className="font-semibold text-foreground">No documents uploaded</p>
+              <p className="text-[11px] mt-0.5">No employee verification documents have been attached.</p>
+            </Card>
           )}
-        </div>
-      )}
+        </TabsContent>
 
-      {activeTab === "timeline" && (
-        <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4">
-          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-            <Clock className="w-4 h-4 text-primary" />
-            Lifecycle Events & History
-          </h3>
+        {/* Tab 4: Timeline */}
+        <TabsContent value="timeline" className="mt-4 space-y-4">
           {timeline.length > 0 ? (
-            <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-border-subtle">
-              {timeline.map((ev) => (
-                <div key={ev.id} className="relative text-xs space-y-0.5">
-                  <div className="absolute -left-6 top-0.5 w-3 h-3 rounded-pill bg-primary border-2 border-surface" />
-                  <p className="font-bold text-foreground">{ev.title || "—"}</p>
-                  <p className="text-foreground-secondary">{ev.description || "—"}</p>
-                  <p className="text-[10px] text-foreground-muted font-mono">
-                    {ev.date ? new Date(ev.date).toLocaleDateString() : ""}
-                  </p>
-                </div>
-              ))}
-            </div>
+            <Card className="border border-border bg-card shadow-xs p-5">
+              <div className="space-y-4 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-border">
+                {timeline.map((event, idx) => (
+                  <div key={idx} className="relative flex items-start gap-4 pl-8">
+                    <div className="absolute left-2 top-1 size-3 rounded-full border-2 border-background bg-primary ring-2 ring-primary/20" />
+                    <div className="space-y-0.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-foreground">{event.title || event.eventType || "Event"}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          {event.date ? new Date(event.date).toLocaleDateString() : "—"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{event.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
           ) : (
-            <div className="py-8 text-center text-xs text-foreground-muted">
-              No lifecycle history events recorded.
-            </div>
+            <Card className="border-dashed border-border py-12 text-center text-xs text-muted-foreground">
+              <Clock className="size-8 mx-auto mb-2 opacity-40" />
+              <p className="font-semibold text-foreground">No timeline events recorded</p>
+              <p className="text-[11px] mt-0.5">Career transitions and status changes will appear here.</p>
+            </Card>
           )}
-        </div>
-      )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

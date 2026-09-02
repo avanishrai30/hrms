@@ -6,57 +6,102 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        canvas: "hsl(var(--canvas))",
-        surface: {
-          DEFAULT: "hsl(var(--surface))",
-          raised: "hsl(var(--surface-raised))",
-          muted: "hsl(var(--surface-muted))",
-          accent: "hsl(var(--surface-accent))",
-          highlight: "hsl(var(--surface-highlight))"
-        },
-        muted: "hsl(var(--muted))",
-        border: {
-          DEFAULT: "hsl(var(--border))",
-          subtle: "hsl(var(--border-subtle))",
-          strong: "hsl(var(--border-strong))"
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: {
+          DEFAULT: "hsl(var(--foreground))",
+          secondary: "hsl(var(--muted-foreground))",
+          muted: "hsl(var(--muted-foreground))"
         },
         primary: {
           DEFAULT: "hsl(var(--primary))",
-          hover: "hsl(var(--primary-hover))",
-          soft: "hsl(var(--primary-soft))",
-          foreground: "hsl(var(--primary-foreground))"
+          foreground: "hsl(var(--primary-foreground))",
+          soft: "hsl(var(--secondary))",
+          hover: "hsl(var(--primary) / 0.9)"
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))"
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))"
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))"
         },
         accent: {
-          purple: "hsl(var(--accent-purple))",
-          lavender: "hsl(var(--accent-lavender))",
-          lilac: "hsl(var(--accent-lilac))"
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))"
         },
-        foreground: {
-          DEFAULT: "hsl(var(--text-primary))",
-          secondary: "hsl(var(--text-secondary))",
-          muted: "hsl(var(--text-muted))"
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))"
         },
-        success: "hsl(var(--success))",
-        warning: "hsl(var(--warning))",
-        danger: "hsl(var(--danger))",
-        info: "hsl(var(--info))"
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))"
+        },
+        sidebar: {
+          DEFAULT: "hsl(var(--sidebar))",
+          foreground: "hsl(var(--sidebar-foreground))",
+          primary: "hsl(var(--sidebar-primary))",
+          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
+          accent: "hsl(var(--sidebar-accent))",
+          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
+          border: "hsl(var(--sidebar-border))",
+          ring: "hsl(var(--sidebar-ring))"
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          soft: "hsl(var(--success) / 0.1)",
+          foreground: "hsl(var(--success-foreground))"
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          soft: "hsl(var(--warning) / 0.1)",
+          foreground: "hsl(var(--warning-foreground))"
+        },
+        danger: {
+          DEFAULT: "hsl(var(--destructive))",
+          soft: "hsl(var(--destructive) / 0.1)",
+          foreground: "hsl(var(--destructive-foreground))"
+        },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          soft: "hsl(var(--info) / 0.1)",
+          foreground: "hsl(var(--info-foreground))"
+        },
+        // Semantic surface aliases
+        canvas: "hsl(var(--background))",
+        surface: {
+          DEFAULT: "hsl(var(--card))",
+          raised: "hsl(var(--card))",
+          muted: "hsl(var(--muted))",
+          accent: "hsl(var(--accent))",
+          highlight: "hsl(var(--muted))"
+        }
       },
       borderRadius: {
-        control: "10px",
-        card: "16px",
-        panel: "20px",
-        overlay: "24px",
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+        control: "calc(var(--radius) - 2px)",
+        card: "var(--radius)",
+        panel: "var(--radius)",
         pill: "9999px"
       },
       boxShadow: {
-        card: "0 2px 10px -2px rgba(99, 102, 241, 0.04), 0 1px 3px 0 rgba(15, 23, 42, 0.03)",
-        "card-hover": "0 8px 24px -4px rgba(99, 102, 241, 0.08), 0 2px 6px 0 rgba(15, 23, 42, 0.04)",
-        panel: "0 4px 20px -2px rgba(79, 70, 229, 0.06)",
-        dropdown: "0 10px 30px -5px rgba(15, 23, 42, 0.1), 0 4px 10px -2px rgba(15, 23, 42, 0.05)"
+        xs: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        card: "0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06)",
+        dropdown: "0 4px 16px -2px rgb(0 0 0 / 0.1), 0 2px 6px -1px rgb(0 0 0 / 0.06)"
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "Inter", "system-ui", "sans-serif"],
-        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "monospace"]
+        sans: ["var(--font-sans)", "Inter", "-apple-system", "BlinkMacSystemFont", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"]
       }
     }
   },
@@ -64,4 +109,3 @@ const config: Config = {
 };
 
 export default config;
-

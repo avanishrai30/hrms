@@ -3,31 +3,58 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
   Users,
   Clock,
   Calendar,
   CreditCard,
-  GraduationCap,
-  Sparkles,
-  Search,
-  Bell,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  Menu,
-  X,
+  Building2,
   Briefcase,
   ShieldCheck,
+  GraduationCap,
+  Sparkles,
   Laptop,
-  Building2,
-  BarChart3
+  CheckCircle2,
+  FolderOpen,
+  Bell,
+  Sun,
+  Moon,
+  LogOut,
+  User as UserIcon,
+  ChevronUp
 } from "lucide-react";
 import type { PermissionCode } from "@vc-wms/shared-types";
 import { useSessionStore } from "../lib/session-store";
 import { useEmployeeProfile } from "../lib/queries/use-dashboard-queries";
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarTrigger,
+  SidebarInset
+} from "./ui/sidebar";
+import { Separator } from "./ui/separator";
+import { SearchDialog } from "./search-dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator
+} from "./ui/dropdown-menu";
+import { Button } from "./ui/button";
 
 interface NavItem {
   href: Route;
@@ -44,318 +71,247 @@ interface NavSection {
 
 const navSections: NavSection[] = [
   {
-    title: "Core",
+    title: "Overview",
     items: [
-      { href: "/dashboard" as Route, label: "Home", icon: Home },
-      { href: "/search" as Route, label: "Global Search", icon: Search },
-      { href: "/ai" as Route, label: "AI Copilot", icon: Sparkles, badge: "New" }
+      { href: "/dashboard" as Route, label: "Home Dashboard", icon: Home },
+      { href: "/ai" as Route, label: "AI Copilot", icon: Sparkles, badge: "New" },
+      { href: "/directory" as Route, label: "Workforce Directory", icon: Building2 }
     ]
   },
   {
-    title: "Self Service & People",
+    title: "People & Organization",
     items: [
-      { href: "/ess" as Route, label: "My Self Service", icon: Users },
-      { href: "/directory" as Route, label: "Directory", icon: Building2 },
-      { href: "/org-chart" as Route, label: "Org Chart", icon: Briefcase },
       { href: "/employees" as Route, label: "Employees", icon: Users, permission: "employees.read" },
-      { href: "/recruitment" as Route, label: "Recruitment ATS", icon: Briefcase, permission: "recruitment.read" }
+      { href: "/organization" as Route, label: "Organization Structure", icon: Building2, permission: "organization.view" },
+      { href: "/org-chart" as Route, label: "Org Hierarchy Chart", icon: Briefcase },
+      { href: "/organization/business-units" as Route, label: "Business Units", icon: Building2, permission: "organization.view" },
+      { href: "/organization/teams" as Route, label: "Teams", icon: Users, permission: "organization.view" },
+      { href: "/locations" as Route, label: "Work Locations", icon: Building2, permission: "location.view" }
     ]
   },
   {
     title: "Time & Schedule",
     items: [
-      { href: "/attendance" as Route, label: "Attendance", icon: Clock },
+      { href: "/attendance" as Route, label: "Attendance Tracker", icon: Clock },
       { href: "/leave" as Route, label: "Leave & Time Off", icon: Calendar },
-      { href: "/meeting-rooms" as Route, label: "Meeting Rooms", icon: Building2 },
-      { href: "/parking" as Route, label: "Parking Bays", icon: Briefcase }
+      { href: "/leave/calendar" as Route, label: "Team Calendar", icon: Calendar }
     ]
   },
   {
-    title: "Finance & Payroll",
+    title: "Employee Self Service",
     items: [
+      { href: "/profile" as Route, label: "My Profile", icon: UserIcon },
       { href: "/payslips" as Route, label: "My Payslips", icon: CreditCard },
+      { href: "/documents" as Route, label: "My Documents", icon: FolderOpen },
+      { href: "/requests" as Route, label: "Service Requests", icon: CheckCircle2 },
+      { href: "/id-card" as Route, label: "Digital ID Card", icon: ShieldCheck }
+    ]
+  },
+  {
+    title: "Manager Workspace",
+    items: [
+      { href: "/mss" as Route, label: "Manager Overview", icon: Users, permission: "mss.read" },
+      { href: "/mss/team" as Route, label: "Direct Reports", icon: Users, permission: "mss.read" },
+      { href: "/mss/approvals" as Route, label: "Pending Approvals", icon: CheckCircle2, permission: "mss.read" }
+    ]
+  },
+  {
+    title: "Enterprise Modules",
+    items: [
       { href: "/payroll" as Route, label: "Enterprise Payroll", icon: CreditCard, permission: "payroll.read" },
-      { href: "/finance" as Route, label: "Finance & Accounts", icon: CreditCard, permission: "finance.view" }
-    ]
-  },
-  {
-    title: "Talent & Growth",
-    items: [
-      { href: "/performance" as Route, label: "Performance & OKRs", icon: BarChart3 },
-      { href: "/learning" as Route, label: "Learning & LMS", icon: GraduationCap },
-      { href: "/engagement" as Route, label: "Culture & Rewards", icon: Sparkles }
-    ]
-  },
-  {
-    title: "Workplace & Operations",
-    items: [
+      { href: "/performance" as Route, label: "Performance & OKRs", icon: Sparkles },
+      { href: "/learning" as Route, label: "Learning LMS", icon: GraduationCap },
       { href: "/assets" as Route, label: "Asset Management", icon: Laptop },
-      { href: "/vendors" as Route, label: "Vendor Ecosystem", icon: ShieldCheck, permission: "vendors.manage" },
-      { href: "/contractors" as Route, label: "Contractor Muster", icon: Users, permission: "contractors.manage" },
-      { href: "/visitors" as Route, label: "Visitor Passes", icon: ShieldCheck }
-    ]
-  },
-  {
-    title: "Intelligence & Admin",
-    items: [
-      { href: "/admin/executive-intelligence" as Route, label: "Executive AI", icon: BarChart3, permission: "executive.intelligence" },
-      { href: "/analytics" as Route, label: "Analytics Hub", icon: BarChart3, permission: "analytics.view" },
-      { href: "/admin/system-health" as Route, label: "System Health", icon: Settings, permission: "system.health" },
-      { href: "/audit-logs" as Route, label: "Audit Ledger", icon: ShieldCheck, permission: "audit.read" }
+      { href: "/vendors" as Route, label: "Vendor Ecosystem", icon: ShieldCheck, permission: "vendors.manage" }
     ]
   }
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const tenantName = useSessionStore((state) => state.tenantName) || "VC Organics";
-  const permissions = useSessionStore((state) => state.permissions) || [];
-  const profileQuery = useEmployeeProfile();
-  const profile = profileQuery.data;
-  const userDisplayName = profile?.fullName || profile?.firstName || "My Workspace";
-  const initialLetter = (profile?.firstName?.charAt(0) || profile?.fullName?.charAt(0) || tenantName.charAt(0) || "U").toUpperCase();
+  const router = useRouter();
+  const { permissions, clear } = useSessionStore();
+  const { data: profile } = useEmployeeProfile();
+  const [isDark, setIsDark] = useState(false);
 
-  const filterItem = (item: NavItem) => {
-    if (!item.permission) return true;
-    return permissions.includes(item.permission);
+  const toggleTheme = () => {
+    setIsDark(!isDark);
+    if (!isDark) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
   };
 
+  const handleLogout = () => {
+    clear();
+    router.push("/login" as Route);
+  };
+
+  const displayName = profile?.fullName || "User";
+  const userRole = typeof profile?.designation === "string" ? profile.designation : profile?.designation?.name || "Employee";
+  const initial = displayName.charAt(0).toUpperCase();
+
   return (
-    <div className="min-h-screen bg-canvas flex text-foreground font-sans antialiased">
-      {/* 1. Desktop Sidebar */}
-      <aside
-        className={`hidden lg:flex flex-col border-r border-border-subtle bg-surface transition-all duration-300 z-30 shrink-0 sticky top-0 h-screen ${
-          isCollapsed ? "w-20" : "w-64"
-        }`}
-      >
-        {/* Brand & Workspace Identity */}
-        <div className="p-4 flex items-center justify-between border-b border-border-subtle">
-          {!isCollapsed ? (
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-panel bg-primary flex items-center justify-center text-white font-extrabold text-lg shadow-md">
-                A
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <h1 className="text-sm font-bold tracking-tight text-foreground">AIavro</h1>
-                  <span className="px-1.5 py-0.2 rounded-pill bg-primary-soft text-[10px] font-bold text-primary">OS</span>
-                </div>
-                <p className="text-[11px] text-foreground-muted font-medium truncate">{tenantName}</p>
-              </div>
+    <SidebarProvider defaultOpen={true}>
+      <Sidebar variant="sidebar" collapsible="icon">
+        {/* 1. Sidebar Brand Header */}
+        <SidebarHeader>
+          <div className="flex items-center gap-2.5 px-2 py-1.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-extrabold text-sm shadow-xs shrink-0">
+              A
             </div>
-          ) : (
-            <div className="w-full flex justify-center">
-              <div className="w-9 h-9 rounded-panel bg-primary flex items-center justify-center text-white font-extrabold text-lg shadow-md">
-                A
-              </div>
-            </div>
-          )}
-
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="hidden lg:flex p-1.5 rounded-control hover:bg-surface-muted text-foreground-muted hover:text-foreground transition"
-            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-          >
-            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-          </button>
-        </div>
-
-        {/* Navigation Sections */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-          {navSections.map((section) => {
-            const visibleItems = section.items.filter(filterItem);
-            if (visibleItems.length === 0) return null;
-
-            return (
-              <div key={section.title} className="space-y-1">
-                {!isCollapsed && (
-                  <h2 className="px-3 text-[10px] font-bold uppercase tracking-wider text-foreground-muted/70">
-                    {section.title}
-                  </h2>
-                )}
-                {visibleItems.map((item) => {
-                  const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-                  const Icon = item.icon;
-
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`group relative flex items-center gap-3 px-3 py-2 rounded-card text-xs font-semibold transition-all ${
-                        isActive
-                          ? "bg-primary text-white shadow-sm"
-                          : "text-foreground-secondary hover:bg-surface-muted hover:text-foreground"
-                      } ${isCollapsed ? "justify-center px-0 py-2.5" : ""}`}
-                      title={isCollapsed ? item.label : undefined}
-                    >
-                      <Icon
-                        className={`w-4 h-4 shrink-0 ${
-                          isActive ? "text-white" : "text-foreground-muted group-hover:text-primary transition-colors"
-                        }`}
-                      />
-                      {!isCollapsed && <span className="truncate">{item.label}</span>}
-                      {!isCollapsed && item.badge && (
-                        <span className="ml-auto px-1.5 py-0.5 rounded-pill bg-accent-purple/20 text-accent-purple text-[10px] font-bold">
-                          {item.badge}
-                        </span>
-                      )}
-
-                      {/* Tooltip in Collapsed Mode */}
-                      {isCollapsed && (
-                        <div className="absolute left-full ml-2 px-2.5 py-1 rounded-control bg-[#18153B] text-white text-xs font-semibold whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-dropdown z-50">
-                          {item.label}
-                        </div>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </nav>
-
-        {/* User Account / Tenant Context Footer */}
-        <div className="p-3 border-t border-border-subtle bg-surface-muted/30">
-          {!isCollapsed ? (
-            <div className="flex items-center justify-between gap-2 p-2 rounded-card bg-surface border border-border-subtle shadow-sm">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-8 h-8 rounded-pill bg-primary-soft text-primary font-bold text-xs flex items-center justify-center shrink-0">
-                  {initialLetter}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-foreground truncate">{userDisplayName}</p>
-                  <p className="text-[10px] text-foreground-muted truncate">{tenantName}</p>
-                </div>
-              </div>
-              <Link href={"/profile" as Route} className="text-foreground-muted hover:text-foreground transition p-1">
-                <Settings className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          ) : (
-            <div className="flex justify-center py-1">
-              <div className="w-8 h-8 rounded-pill bg-primary-soft text-primary font-bold text-xs flex items-center justify-center">
-                {initialLetter}
-              </div>
-            </div>
-          )}
-        </div>
-      </aside>
-
-      {/* 2. Main App Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Topbar Header */}
-        <header className="sticky top-0 z-20 h-16 bg-surface/80 backdrop-blur-md border-b border-border-subtle px-4 sm:px-6 flex items-center justify-between gap-4">
-          {/* Left: Mobile hamburger & breadcrumb */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsMobileOpen(true)}
-              className="lg:hidden p-2 rounded-control hover:bg-surface-muted text-foreground-secondary transition"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-foreground-muted hidden sm:inline">{tenantName}</span>
-              <span className="text-xs text-foreground-muted hidden sm:inline">/</span>
-              <span className="text-xs font-bold text-foreground capitalize">
-                {pathname === "/dashboard" ? "Overview" : pathname.replace(/^\//, "").replace(/-/g, " ")}
-              </span>
+            <div className="flex flex-col min-w-0 group-data-[collapsible=icon]/sidebar-wrapper:hidden">
+              <span className="text-xs font-bold tracking-tight text-foreground truncate">AIavro HRMS</span>
+              <span className="text-[10px] text-muted-foreground truncate">VC Organics</span>
             </div>
           </div>
+        </SidebarHeader>
 
-          {/* Right: Quick actions (Search, Notifications, Copilot, Profile) */}
-          <div className="flex items-center gap-2.5">
-            <Link
-              href={"/search" as Route}
-              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-pill bg-surface-muted border border-border-subtle text-xs text-foreground-muted hover:text-foreground transition"
+        {/* 2. Grouped Navigation Content */}
+        <SidebarContent>
+          {navSections.map((section) => {
+            const filteredItems = section.items.filter((item) => {
+              if (!item.permission) return true;
+              return permissions.includes(item.permission);
+            });
+
+            if (filteredItems.length === 0) return null;
+
+            return (
+              <SidebarGroup key={section.title}>
+                <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {filteredItems.map((item) => {
+                      const Icon = item.icon;
+                      const isActive =
+                        pathname === item.href ||
+                        (item.href !== "/dashboard" && pathname?.startsWith(`${item.href}/`));
+
+                      return (
+                        <SidebarMenuItem key={item.href}>
+                          <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
+                            <Link href={item.href} prefetch={false}>
+                              <Icon />
+                              <span>{item.label}</span>
+                              {item.badge && (
+                                <span className="ml-auto rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                                  {item.badge}
+                                </span>
+                              )}
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            );
+          })}
+        </SidebarContent>
+
+        {/* 3. Sidebar Footer / NavUser */}
+        <SidebarFooter>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left text-xs hover:bg-sidebar-accent transition outline-none group-data-[collapsible=icon]/sidebar-wrapper:justify-center">
+                <Avatar className="h-7 w-7 shrink-0">
+                  {profile?.avatarUrl ? (
+                    <AvatarImage src={profile.avatarUrl} alt={displayName} />
+                  ) : null}
+                  <AvatarFallback>{initial}</AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col min-w-0 group-data-[collapsible=icon]/sidebar-wrapper:hidden flex-1">
+                  <span className="font-semibold text-foreground truncate">{displayName}</span>
+                  <span className="text-[10px] text-muted-foreground truncate">{userRole}</span>
+                </div>
+                <ChevronUp className="h-3.5 w-3.5 text-muted-foreground ml-auto group-data-[collapsible=icon]/sidebar-wrapper:hidden" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="start" className="w-56">
+              <DropdownMenuLabel>
+                <div className="flex flex-col space-y-1">
+                  <p className="text-xs font-semibold leading-none">{displayName}</p>
+                  <p className="text-[11px] leading-none text-muted-foreground">{profile?.email || profile?.workEmail || "user@vcorganics.com"}</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href={"/profile" as Route} className="cursor-pointer">
+                  <UserIcon className="mr-2 h-3.5 w-3.5" />
+                  <span>My Profile</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={"/id-card" as Route} className="cursor-pointer">
+                  <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                  <span>Digital ID Card</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
+                <LogOut className="mr-2 h-3.5 w-3.5" />
+                <span>Log Out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </SidebarFooter>
+      </Sidebar>
+
+      {/* 4. Main Inset Area with Standard Studio Admin Header */}
+      <SidebarInset>
+        <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center justify-between border-b border-border bg-background/80 px-4 lg:px-6 backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <SidebarTrigger />
+            <Separator orientation="vertical" className="h-4" />
+            <SearchDialog />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              aria-label="Toggle theme"
             >
-              <Search className="w-3.5 h-3.5" />
-              <span>Search anything...</span>
-              <kbd className="px-1.5 py-0.5 rounded bg-surface border border-border-subtle text-[10px] font-mono">⌘K</kbd>
-            </Link>
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
 
-            <Link
-              href={"/notifications" as Route}
-              className="relative p-2 rounded-pill bg-surface hover:bg-surface-muted border border-border-subtle text-foreground-secondary transition"
-              title="Notifications"
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground relative"
+              aria-label="Notifications"
             >
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-pill bg-primary" />
-            </Link>
+              <Bell className="h-4 w-4" />
+              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-primary" />
+            </Button>
 
-            <Link
-              href={"/ai" as Route}
-              className="px-3 py-1.5 rounded-pill bg-primary text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm hover:brightness-105 active:scale-95"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">AI Copilot</span>
-            </Link>
+            <Separator orientation="vertical" className="h-4" />
 
-            <Link href={"/profile" as Route} className="flex items-center gap-2 pl-2 border-l border-border-subtle">
-              <div className="w-8 h-8 rounded-pill bg-gradient-to-br from-primary to-accent-purple text-white text-xs font-bold flex items-center justify-center shadow-sm">
-                {initialLetter}
+            <div className="flex items-center gap-2 pl-1">
+              <Avatar className="h-7 w-7">
+                {profile?.avatarUrl ? (
+                  <AvatarImage src={profile.avatarUrl} alt={displayName} />
+                ) : null}
+                <AvatarFallback>{initial}</AvatarFallback>
+              </Avatar>
+              <div className="hidden sm:flex flex-col text-left">
+                <span className="text-xs font-semibold leading-tight text-foreground">{displayName}</span>
+                <span className="text-[10px] text-muted-foreground leading-none">{userRole}</span>
               </div>
-            </Link>
+            </div>
           </div>
         </header>
 
-        {/* Page Children Container */}
-        <main className="flex-1 pb-12 overflow-x-hidden">{children}</main>
-      </div>
-
-      {/* 3. Mobile Slide-out Drawer */}
-      {isMobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex">
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsMobileOpen(false)} />
-          <div className="relative w-72 max-w-[80vw] bg-surface h-full shadow-2xl flex flex-col z-50">
-            <div className="p-4 flex items-center justify-between border-b border-border-subtle">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-panel bg-primary flex items-center justify-center text-white font-bold">
-                  A
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-foreground">AIavro</h2>
-                  <p className="text-[10px] text-foreground-muted">{tenantName}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsMobileOpen(false)}
-                className="p-1.5 rounded-control hover:bg-surface-muted text-foreground-muted"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <nav className="flex-1 overflow-y-auto p-4 space-y-4">
-              {navSections.map((section) => (
-                <div key={section.title} className="space-y-1">
-                  <h3 className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted px-2">
-                    {section.title}
-                  </h3>
-                  {section.items.filter(filterItem).map((item) => {
-                    const isActive = pathname === item.href;
-                    const Icon = item.icon;
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setIsMobileOpen(false)}
-                        className={`flex items-center gap-3 px-3 py-2 rounded-card text-xs font-semibold ${
-                          isActive ? "bg-primary text-white" : "text-foreground-secondary hover:bg-surface-muted"
-                        }`}
-                      >
-                        <Icon className="w-4 h-4" />
-                        <span>{item.label}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              ))}
-            </nav>
-          </div>
+        {/* 5. Page Content Container */}
+        <div className="min-h-0 min-w-0 flex-1 p-4 md:p-6 overflow-x-hidden">
+          {children}
         </div>
-      )}
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
