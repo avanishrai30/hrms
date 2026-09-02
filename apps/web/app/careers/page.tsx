@@ -1,148 +1,91 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { Badge, Button, Input, Panel } from "../../components/ui";
+import { Search } from "lucide-react";
+import { useMemo, useState } from "react";
+import { AiavroWordmark } from "../../components/aiavro-brand";
+import { Button } from "../../components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
+import { Input } from "../../components/ui/input";
+import { EmptyState, ErrorState, LoadingState } from "../../components/page-primitives";
+import { formatDateTime, formatTalentLabel, usePublicJobs } from "../../lib/queries/use-talent-queries";
 
 export default function PublicCareersPage() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedDept, setSelectedDept] = useState("ALL");
-
-  const jobs = [
-    {
-      id: "job-1",
-      slug: "senior-full-stack-engineer-req-2026-001",
-      title: "Senior Full Stack Engineer",
-      company: "VC Organics",
-      department: "Engineering",
-      location: "Bengaluru / Hybrid",
-      employmentType: "Full-Time",
-      experience: "3 - 7 years",
-      skills: ["TypeScript", "NestJS", "React", "PostgreSQL", "AWS"],
-      summary: "Build resilient, mission-critical workforce automation, AI copilot engines, and supply chain telemetry platforms."
-    },
-    {
-      id: "job-2",
-      slug: "product-operations-lead-req-2026-002",
-      title: "Product Operations Lead",
-      company: "VC Organics",
-      department: "Operations",
-      location: "Mumbai",
-      employmentType: "Full-Time",
-      experience: "4 - 8 years",
-      skills: ["Operations", "Process Design", "Jira", "SQL"],
-      summary: "Drive cross-functional product rollout, logistics workflows, and standard operating procedure excellence."
-    },
-    {
-      id: "job-3",
-      slug: "talent-acquisition-specialist-req-2026-003",
-      title: "Talent Acquisition Specialist",
-      company: "VC Organics",
-      department: "Human Resources",
-      location: "Bengaluru",
-      employmentType: "Full-Time",
-      experience: "2 - 5 years",
-      skills: ["Recruitment", "ATS", "Sourcing", "Tech Hiring"],
-      summary: "Lead end-to-end recruitment pipelines, campus initiatives, and employer branding across India."
-    }
-  ];
-
-  const filteredJobs = jobs.filter((j) => {
-    const matchesSearch =
-      j.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      j.skills.some((s) => s.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      j.location.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDept = selectedDept === "ALL" || j.department === selectedDept;
-    return matchesSearch && matchesDept;
-  });
+  const [query, setQuery] = useState("");
+  const jobs = usePublicJobs();
+  const rows = jobs.data ?? [];
+  const filteredJobs = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return rows;
+    return rows.filter((job) =>
+      [job.title, job.companyName, job.department, job.location, job.employmentType, ...(job.skills ?? [])]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term))
+    );
+  }, [query, rows]);
 
   return (
-    <div className="min-h-screen bg-zinc-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto space-y-8">
-        {/* Hero Section */}
-        <div className="text-center space-y-4">
-          <Badge tone="success">We're Hiring Across India</Badge>
-          <h1 className="text-4xl font-extrabold text-zinc-900 tracking-tight sm:text-5xl">
-            Build the Future of Enterprise Workforce Tech
-          </h1>
-          <p className="text-base text-zinc-600 max-w-2xl mx-auto">
-            Join VC Organics in creating high-impact software, intelligent automation, and sustainable operations. Explore our open positions below.
-          </p>
-          <div className="pt-2 flex justify-center gap-4">
-            <Link href={"/candidate-portal" as Route}>
-              <Button variant="secondary">🔍 Track Existing Application</Button>
-            </Link>
+    <main className="min-h-screen bg-background px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl space-y-8">
+        <header className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-3">
+            <AiavroWordmark className="h-7 w-auto" />
+            <div>
+              <h1 className="text-3xl font-semibold tracking-tight text-foreground">Open roles</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                Explore active roles published by tenant hiring teams on AIavro.
+              </p>
+            </div>
           </div>
-        </div>
+          <Button asChild variant="outline">
+            <Link href={"/candidate-portal" as Route}>Track application</Link>
+          </Button>
+        </header>
 
-        {/* Search & Filter Bar */}
-        <Panel className="p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white shadow-xs">
-          <div className="flex-1 max-w-md">
-            <Input
-              placeholder="Search by job title, skill, or location..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-2 overflow-x-auto">
-            {["ALL", "Engineering", "Operations", "Human Resources"].map((dept) => (
-              <button
-                key={dept}
-                onClick={() => setSelectedDept(dept)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
-                  selectedDept === dept
-                    ? "bg-primary text-white border-primary"
-                    : "bg-white text-zinc-600 border-border hover:bg-zinc-50"
-                }`}
-              >
-                {dept}
-              </button>
-            ))}
-          </div>
-        </Panel>
+        <Card size="sm">
+          <CardContent className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input className="h-10 pl-9" placeholder="Search roles..." value={query} onChange={(event) => setQuery(event.target.value)} />
+          </CardContent>
+        </Card>
 
-        {/* Jobs Listing */}
-        <div className="space-y-4">
-          {filteredJobs.length === 0 ? (
-            <Panel className="p-12 text-center text-zinc-500">
-              No open positions match your search criteria. Check back soon!
-            </Panel>
-          ) : (
-            filteredJobs.map((job) => (
-              <Panel
-                key={job.id}
-                className="p-6 bg-white hover:border-primary transition duration-150 shadow-xs space-y-3"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <div>
-                    <h2 className="text-xl font-bold text-zinc-900">{job.title}</h2>
-                    <p className="text-sm text-zinc-500">
-                      {job.company} • {job.department} • <span className="text-zinc-700 font-medium">{job.location}</span>
-                    </p>
-                  </div>
-                  <Link href={`/careers/jobs/${job.slug}` as Route}>
-                    <Button variant="primary">View & Apply →</Button>
-                  </Link>
+        {jobs.isLoading ? <LoadingState label="Loading roles" /> : null}
+        {jobs.error ? <ErrorState message={jobs.error.message} /> : null}
+        {!jobs.isLoading && !jobs.error && filteredJobs.length === 0 ? <EmptyState title="No open jobs" /> : null}
+
+        <div className="grid gap-4">
+          {filteredJobs.map((job) => (
+            <Card key={job.id} className="transition hover:border-primary/40">
+              <CardHeader>
+                <div className="min-w-0">
+                  <CardTitle className="text-lg">{job.title}</CardTitle>
+                  <CardDescription>
+                    {job.companyName} · {job.department ?? "-"} · {job.location ?? "-"}
+                  </CardDescription>
                 </div>
-
-                <p className="text-sm text-zinc-600 leading-relaxed">{job.summary}</p>
-
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/50 text-xs text-zinc-500">
+                <Button asChild>
+                  <Link href={`/careers/jobs/${job.slug}` as Route}>View role</Link>
+                </Button>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span className="rounded-md bg-muted px-2 py-1">{formatTalentLabel(job.employmentType)}</span>
+                  <span className="rounded-md bg-muted px-2 py-1">{job.experienceRange ?? "-"}</span>
+                  <span className="rounded-md bg-muted px-2 py-1">Published {formatDateTime(job.publishedAt)}</span>
+                </div>
+                {job.skills?.length ? (
                   <div className="flex flex-wrap gap-1.5">
-                    {job.skills.map((s) => (
-                      <span key={s} className="px-2 py-0.5 rounded bg-zinc-100 text-zinc-700 font-medium">
-                        {s}
-                      </span>
+                    {job.skills.map((skill) => (
+                      <span key={skill} className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground">{skill}</span>
                     ))}
                   </div>
-                  <span>Experience: <strong className="text-zinc-800">{job.experience}</strong></span>
-                </div>
-              </Panel>
-            ))
-          )}
+                ) : null}
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
-    </div>
+    </main>
   );
 }

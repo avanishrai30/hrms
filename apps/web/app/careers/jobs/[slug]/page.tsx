@@ -1,172 +1,157 @@
 "use client";
 
 import { use, useState } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { Badge, Button, Field, Input, Panel } from "../../../../components/ui";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { AiavroWordmark } from "../../../../components/aiavro-brand";
+import { Button } from "../../../../components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../../components/ui/card";
+import { Input } from "../../../../components/ui/input";
+import { EmptyState, ErrorState, LoadingState } from "../../../../components/page-primitives";
+import { formatDateTime, formatTalentLabel, usePublicApply, usePublicJob } from "../../../../lib/queries/use-talent-queries";
 
 export default function PublicJobDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
-
-  const [appliedCode, setAppliedCode] = useState<string | null>(null);
+  const job = usePublicJob(slug);
+  const apply = usePublicApply();
   const [form, setForm] = useState({
     fullName: "",
     email: "",
     mobile: "",
     currentLocation: "",
-    experienceYears: "4",
-    currentCtc: "1800000",
-    expectedCtc: "2400000",
-    noticePeriodDays: "30",
-    skills: "TypeScript, NestJS, React, PostgreSQL",
+    experienceYears: "",
+    currentCtc: "",
+    expectedCtc: "",
+    noticePeriodDays: "",
+    skills: "",
     linkedinUrl: "",
     githubUrl: "",
+    portfolioUrl: "",
+    education: "",
     summary: ""
   });
 
-  const handleApply = (e: React.FormEvent) => {
-    e.preventDefault();
-    const generatedCode = `APP-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-    setAppliedCode(generatedCode);
+  const handleApply = (event: React.FormEvent) => {
+    event.preventDefault();
+    apply.mutate({
+      jobSlug: slug,
+      fullName: form.fullName,
+      email: form.email,
+      mobile: form.mobile,
+      currentLocation: form.currentLocation || undefined,
+      experienceYears: form.experienceYears ? Number(form.experienceYears) : undefined,
+      currentCtc: form.currentCtc ? Number(form.currentCtc) : undefined,
+      expectedCtc: form.expectedCtc ? Number(form.expectedCtc) : undefined,
+      noticePeriodDays: form.noticePeriodDays ? Number(form.noticePeriodDays) : undefined,
+      skills: form.skills.split(",").map((skill) => skill.trim()).filter(Boolean),
+      linkedinUrl: form.linkedinUrl || undefined,
+      githubUrl: form.githubUrl || undefined,
+      portfolioUrl: form.portfolioUrl || undefined,
+      education: form.education || undefined,
+      summary: form.summary || undefined
+    });
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <Link href={"/careers" as Route} className="text-xs font-semibold text-primary hover:underline">
-          ← Back to All Openings
-        </Link>
+    <main className="min-h-screen bg-background px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl space-y-6">
+        <header className="flex items-center justify-between border-b border-border pb-5">
+          <AiavroWordmark className="h-7 w-auto" />
+          <Button asChild variant="outline">
+            <Link href={"/careers" as Route}>
+              <ArrowLeft className="h-4 w-4" />
+              Roles
+            </Link>
+          </Button>
+        </header>
 
-        {appliedCode ? (
-          <Panel className="p-8 text-center bg-white space-y-4 shadow-md rounded-panel">
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-3xl">
-              🎉
-            </div>
-            <h1 className="text-2xl font-bold text-zinc-900">Application Submitted Successfully!</h1>
-            <p className="text-sm text-zinc-600 max-w-md mx-auto">
-              Thank you for applying for this position at VC Organics. Our talent acquisition team has received your profile and resume.
-            </p>
-            <div className="p-4 bg-zinc-50 border border-border rounded-panel inline-block">
-              <span className="text-xs text-zinc-400 block uppercase">Your Application Tracking Code</span>
-              <span className="text-xl font-mono font-bold text-primary">{appliedCode}</span>
-            </div>
-            <div className="pt-2">
-              <Link href={"/candidate-portal" as Route}>
-                <Button variant="primary">Track Application in Candidate Portal →</Button>
-              </Link>
-            </div>
-          </Panel>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Job Description Column */}
-            <div className="lg:col-span-2 space-y-6">
-              <Panel className="p-6 bg-white space-y-4 shadow-xs">
-                <div>
-                  <Badge tone="success">Full-Time Opening</Badge>
-                  <h1 className="mt-2 text-2xl font-extrabold text-zinc-900 capitalize">
-                    {slug.replace(/-/g, " ")}
-                  </h1>
-                  <p className="text-sm text-zinc-500">VC Organics • Engineering • Bengaluru / Hybrid</p>
+        {job.isLoading ? <LoadingState label="Loading role" /> : null}
+        {job.error ? <ErrorState message={job.error.message} /> : null}
+        {!job.isLoading && !job.error && !job.data ? <EmptyState title="No open jobs" /> : null}
+
+        {apply.data ? (
+          <Card className="mx-auto max-w-xl text-center">
+            <CardContent className="grid gap-4 py-8">
+              <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" />
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Application received</h1>
+                <p className="mt-2 text-sm text-muted-foreground">Use this application code to track your status.</p>
+              </div>
+              <div className="rounded-xl border border-border bg-muted p-4">
+                <span className="text-xs text-muted-foreground">Application code</span>
+                <p className="mt-1 font-mono text-xl font-semibold">{apply.data.applicationCode}</p>
+              </div>
+              <Button asChild>
+                <Link href={"/candidate-portal" as Route}>Track application</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : job.data ? (
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-2xl">{job.data.title}</CardTitle>
+                <CardDescription>{job.data.companyName} · {job.data.department ?? "-"} · {job.data.location ?? "-"}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5 text-sm leading-6">
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span className="rounded-md bg-muted px-2 py-1">{formatTalentLabel(job.data.employmentType)}</span>
+                  <span className="rounded-md bg-muted px-2 py-1">{job.data.experienceRange ?? "-"}</span>
+                  <span className="rounded-md bg-muted px-2 py-1">Published {formatDateTime(job.data.publishedAt)}</span>
                 </div>
-
-                <div className="border-t border-border pt-4 space-y-4 text-sm text-zinc-700 leading-relaxed">
-                  <h2 className="text-base font-bold text-zinc-900">About the Role</h2>
-                  <p>
-                    We are seeking a talented engineer to build, scale, and optimize next-generation human capital management,
-                    intelligent AI copilots, and real-time distributed supply chain systems.
-                  </p>
-
-                  <h2 className="text-base font-bold text-zinc-900">Key Responsibilities</h2>
-                  <ul className="list-disc pl-5 space-y-1">
-                    <li>Design high-throughput APIs in NestJS and PostgreSQL with multi-tenant isolation.</li>
-                    <li>Develop modern, accessible, and fast web UIs with Next.js App Router and Tailwind CSS.</li>
-                    <li>Integrate AI capabilities including vector semantic search, resume entity parsers, and prediction engines.</li>
-                    <li>Collaborate with product and operations leads to architect enterprise workflows.</li>
-                  </ul>
-
-                  <h2 className="text-base font-bold text-zinc-900">Qualifications</h2>
-                  <ul className="list-disc pl-5 space-y-1">
-                    <li>3+ years of production experience in TypeScript, Node.js, and React.</li>
-                    <li>Strong foundation in relational databases (PostgreSQL / Prisma ORM).</li>
-                    <li>Experience with cloud infrastructure (AWS / Docker / Kubernetes).</li>
-                  </ul>
-                </div>
-              </Panel>
-            </div>
-
-            {/* Application Form Column */}
-            <div>
-              <Panel className="p-6 bg-white space-y-4 shadow-xs">
-                <h2 className="text-lg font-bold text-zinc-900 border-b border-border pb-2">Apply for Position</h2>
-                <form onSubmit={handleApply} className="space-y-3">
-                  <Field label="Full Name">
-                    <Input
-                      required
-                      value={form.fullName}
-                      onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="Email Address">
-                    <Input
-                      required
-                      type="email"
-                      value={form.email}
-                      onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="Mobile Number">
-                    <Input
-                      required
-                      value={form.mobile}
-                      onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-                    />
-                  </Field>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Field label="Exp (Yrs)">
-                      <Input
-                        type="number"
-                        value={form.experienceYears}
-                        onChange={(e) => setForm({ ...form, experienceYears: e.target.value })}
-                      />
-                    </Field>
-                    <Field label="Notice (Days)">
-                      <Input
-                        type="number"
-                        value={form.noticePeriodDays}
-                        onChange={(e) => setForm({ ...form, noticePeriodDays: e.target.value })}
-                      />
-                    </Field>
+                {job.data.skills?.length ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {job.data.skills.map((skill) => (
+                      <span key={skill} className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground">{skill}</span>
+                    ))}
                   </div>
-                  <Field label="Current Location">
-                    <Input
-                      value={form.currentLocation}
-                      onChange={(e) => setForm({ ...form, currentLocation: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="Skills / Summary">
-                    <Input
-                      value={form.skills}
-                      onChange={(e) => setForm({ ...form, skills: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="Upload Resume (PDF)">
-                    <input
-                      type="file"
-                      accept=".pdf,.docx"
-                      className="w-full text-xs text-zinc-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-panel file:border file:border-border file:text-xs file:font-semibold file:bg-zinc-50 hover:file:bg-zinc-100"
-                    />
-                  </Field>
-                  <div className="pt-2">
-                    <Button variant="primary" type="submit" className="w-full">
-                      Submit Application 🚀
-                    </Button>
+                ) : null}
+                <section className="whitespace-pre-wrap border-t border-border pt-5 text-muted-foreground">
+                  {job.data.jobDescription ?? "-"}
+                </section>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Apply</CardTitle>
+                <CardDescription>Submit candidate profile details for this role.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleApply} className="grid gap-3">
+                  <Field label="Full name"><Input required value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></Field>
+                  <Field label="Email"><Input required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></Field>
+                  <Field label="Mobile"><Input required value={form.mobile} onChange={(event) => setForm({ ...form, mobile: event.target.value })} /></Field>
+                  <Field label="Current location"><Input value={form.currentLocation} onChange={(event) => setForm({ ...form, currentLocation: event.target.value })} /></Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Experience"><Input type="number" min="0" step="0.5" value={form.experienceYears} onChange={(event) => setForm({ ...form, experienceYears: event.target.value })} /></Field>
+                    <Field label="Notice days"><Input type="number" min="0" value={form.noticePeriodDays} onChange={(event) => setForm({ ...form, noticePeriodDays: event.target.value })} /></Field>
                   </div>
+                  <Field label="Skills"><Input value={form.skills} onChange={(event) => setForm({ ...form, skills: event.target.value })} /></Field>
+                  <Field label="LinkedIn URL"><Input value={form.linkedinUrl} onChange={(event) => setForm({ ...form, linkedinUrl: event.target.value })} /></Field>
+                  <Field label="Portfolio URL"><Input value={form.portfolioUrl} onChange={(event) => setForm({ ...form, portfolioUrl: event.target.value })} /></Field>
+                  <Field label="Summary"><Input value={form.summary} onChange={(event) => setForm({ ...form, summary: event.target.value })} /></Field>
+                  {apply.error ? <p className="text-sm text-destructive">{apply.error.message}</p> : null}
+                  <Button type="submit" disabled={apply.isPending}>
+                    {apply.isPending ? "Submitting" : "Submit application"}
+                  </Button>
                 </form>
-              </Panel>
-            </div>
+              </CardContent>
+            </Card>
           </div>
-        )}
+        ) : null}
       </div>
-    </div>
+    </main>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="grid gap-2 text-sm font-medium text-foreground">
+      {label}
+      {children}
+    </label>
   );
 }

@@ -319,11 +319,27 @@ export class RecruitmentService {
   // 3. CANDIDATE MANAGEMENT & RESUME PARSING
   // =========================================================================
 
-  async listCandidates(tenantId: string, query?: string, status?: string) {
+  async listCandidates(tenantId: string, query?: string, status?: string, limit?: string, offset?: string) {
+    const trimmedQuery = query?.trim();
+    const take = limit ? Math.min(Math.max(Number(limit) || 25, 1), 100) : undefined;
+    const skip = offset ? Math.max(Number(offset) || 0, 0) : undefined;
+
     return this.prisma.candidate.findMany({
       where: {
         tenantId,
-        ...(status ? { status: status as CandidateStatus } : {})
+        ...(status ? { status: status as CandidateStatus } : {}),
+        ...(trimmedQuery
+          ? {
+              OR: [
+                { fullName: { contains: trimmedQuery, mode: "insensitive" } },
+                { email: { contains: trimmedQuery, mode: "insensitive" } },
+                { mobile: { contains: trimmedQuery, mode: "insensitive" } },
+                { candidateCode: { contains: trimmedQuery, mode: "insensitive" } },
+                { currentLocation: { contains: trimmedQuery, mode: "insensitive" } },
+                { skills: { has: trimmedQuery } }
+              ]
+            }
+          : {})
       },
       include: {
         candidateSkills: true,
@@ -332,7 +348,9 @@ export class RecruitmentService {
           include: { requisition: true, interviews: true, offers: true }
         }
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
+      ...(take ? { take } : {}),
+      ...(skip ? { skip } : {})
     });
   }
 

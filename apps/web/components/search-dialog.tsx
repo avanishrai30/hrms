@@ -74,7 +74,16 @@ export const COMMAND_ROUTES: RouteItem[] = [
   // Finance & Admin
   { title: "Enterprise Payroll", href: "/payroll" as Route, icon: CreditCard, section: "Finance", permission: "payroll.read" },
   { title: "Asset Management", href: "/assets" as Route, icon: Laptop, section: "Operations" },
-  { title: "Learning & LMS", href: "/learning" as Route, icon: GraduationCap, section: "Talent" }
+  { title: "Learning & LMS", href: "/learning" as Route, icon: GraduationCap, section: "Talent" },
+
+  // Talent Acquisition
+  { title: "Talent Acquisition", href: "/ats" as Route, icon: Users, section: "Talent", permission: "recruitment.read" },
+  { title: "Job Requisitions", href: "/ats/jobs" as Route, icon: Briefcase, section: "Talent", permission: "recruitment.read" },
+  { title: "Candidates Database", href: "/ats/candidates" as Route, icon: Users, section: "Talent", permission: "candidates.read" },
+  { title: "Hiring Pipeline", href: "/ats/pipeline" as Route, icon: Sparkles, section: "Talent", permission: "applications.read" },
+  { title: "Interviews Schedule", href: "/ats/interviews" as Route, icon: Clock, section: "Talent", permission: "interviews.read" },
+  { title: "Offer Management", href: "/ats/offers" as Route, icon: CheckCircle2, section: "Talent", permission: "offers.read" },
+  { title: "Preboarding Tasks", href: "/ats/preboarding" as Route, icon: FolderOpen, section: "Talent", permission: "preboarding.read" }
 ];
 
 export function SearchDialog() {

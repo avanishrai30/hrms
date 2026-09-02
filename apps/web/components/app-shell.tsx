@@ -120,6 +120,7 @@ const navSections: NavSection[] = [
   {
     title: "Enterprise Modules",
     items: [
+      { href: "/ats" as Route, label: "Talent Acquisition", icon: Users, permission: "recruitment.read" },
       { href: "/payroll" as Route, label: "Enterprise Payroll", icon: CreditCard, permission: "payroll.read" },
       { href: "/performance" as Route, label: "Performance & OKRs", icon: Sparkles },
       { href: "/learning" as Route, label: "Learning LMS", icon: GraduationCap },

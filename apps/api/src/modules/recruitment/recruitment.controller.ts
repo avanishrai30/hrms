@@ -88,10 +88,12 @@ export class RecruitmentController {
   async listCandidates(
     @Req() req: Request,
     @Query("query") query?: string,
-    @Query("status") status?: string
+    @Query("status") status?: string,
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string
   ) {
     const tenant = requireTenantContext(req);
-    return this.recruitmentService.listCandidates(tenant.tenantId, query, status);
+    return this.recruitmentService.listCandidates(tenant.tenantId, query, status, limit, offset);
   }
 
   @Get("candidates/:id")

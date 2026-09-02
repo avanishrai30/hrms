@@ -8,9 +8,9 @@ export function PageHeader({
   eyebrow
 }: {
   title: string;
-  description?: string;
-  actions?: ReactNode;
-  eyebrow?: string;
+  description?: string | undefined;
+  actions?: ReactNode | undefined;
+  eyebrow?: string | undefined;
 }) {
   return (
     <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -28,7 +28,17 @@ export function Surface({ children, className }: { children: ReactNode; classNam
   return <section className={cn("rounded-overlay border border-border bg-surface p-5 shadow-sm", className)}>{children}</section>;
 }
 
-export function Section({ title, description, children, className }: { title: string; description?: string | undefined; children: ReactNode; className?: string | undefined }) {
+export function Section({
+  title,
+  description,
+  children,
+  className
+}: {
+  title: string;
+  description?: string | undefined;
+  children: ReactNode;
+  className?: string | undefined;
+}) {
   return (
     <Surface className={className}>
       <div className="mb-4">
@@ -40,11 +50,19 @@ export function Section({ title, description, children, className }: { title: st
   );
 }
 
-export function MetricStrip({ children, className }: { children: ReactNode; className?: string }) {
+export function MetricStrip({ children, className }: { children: ReactNode; className?: string | undefined }) {
   return <div className={cn("grid gap-3 sm:grid-cols-2 xl:grid-cols-4", className)}>{children}</div>;
 }
 
-export function Metric({ label, value, detail }: { label: string; value: ReactNode; detail?: ReactNode }) {
+export function Metric({
+  label,
+  value,
+  detail
+}: {
+  label: string;
+  value: ReactNode;
+  detail?: ReactNode | undefined;
+}) {
   return (
     <Surface className="p-4">
       <p className="text-sm text-zinc-500">{label}</p>
@@ -54,7 +72,7 @@ export function Metric({ label, value, detail }: { label: string; value: ReactNo
   );
 }
 
-export function LoadingState({ label = "Loading" }: { label?: string }) {
+export function LoadingState({ label = "Loading" }: { label?: string | undefined }) {
   return (
     <div className="grid gap-3" aria-live="polite" aria-busy="true">
       <p className="text-sm text-zinc-500">{label}</p>
@@ -64,7 +82,15 @@ export function LoadingState({ label = "Loading" }: { label?: string }) {
   );
 }
 
-export function EmptyState({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
+export function EmptyState({
+  title,
+  description,
+  action
+}: {
+  title: string;
+  description?: string | undefined;
+  action?: ReactNode | undefined;
+}) {
   return (
     <div className="rounded-panel border border-dashed border-border bg-canvas p-6 text-center">
       <h3 className="text-sm font-semibold text-zinc-950">{title}</h3>
@@ -82,8 +108,8 @@ export function PermissionState({
   title = "You do not have access to this area.",
   description = "Ask a tenant administrator to grant the required permission if this page should be available to your role."
 }: {
-  title?: string;
-  description?: string;
+  title?: string | undefined;
+  description?: string | undefined;
 }) {
   return (
     <div className="mx-auto grid min-h-[55vh] max-w-xl place-items-center px-4 py-10 text-center">
@@ -95,7 +121,13 @@ export function PermissionState({
   );
 }
 
-export function StatusBadge({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "success" | "warning" | "danger" }) {
+export function StatusBadge({
+  children,
+  tone = "neutral"
+}: {
+  children: ReactNode;
+  tone?: "neutral" | "success" | "warning" | "danger" | undefined;
+}) {
   return (
     <span
       className={cn(
