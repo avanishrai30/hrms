@@ -92,7 +92,7 @@ self.addEventListener("fetch", (event) => {
 
 // Push notification listener
 self.addEventListener("push", (event) => {
-  let payload = { title: "VC-WMS Notification", body: "You have an update." };
+  let payload = { title: "AIavro Notification", body: "You have an update." };
   try {
     if (event.data) {
       payload = event.data.json();
@@ -115,7 +115,7 @@ self.addEventListener("push", (event) => {
     ]
   };
 
-  event.waitUntil(self.registration.showNotification(payload.title || "VC-WMS Notification", options));
+  event.waitUntil(self.registration.showNotification(payload.title || "AIavro Notification", options));
 });
 
 // Notification click handler

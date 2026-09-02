@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import type { PermissionCode, TenantBrandingView } from "@vc-wms/shared-types";
+import { decodePermissions, getAccessToken, setAccessToken } from "./auth-token";
 
 interface SessionState {
   accessToken: string | null;
@@ -14,12 +15,17 @@ interface SessionState {
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
-  accessToken: null,
-  tenantName: "Workspace",
-  permissions: [],
+  accessToken: getAccessToken(),
+  tenantName: "VC Organics Workspace",
+  permissions: decodePermissions(getAccessToken()),
   branding: null,
-  setSession: (accessToken, tenantName, permissions) => set({ accessToken, tenantName, permissions }),
+  setSession: (accessToken, tenantName, permissions) => {
+    setAccessToken(accessToken);
+    set({ accessToken, tenantName, permissions: permissions.length ? permissions : decodePermissions(accessToken) });
+  },
   setBranding: (branding) => set({ branding, tenantName: branding.displayName }),
-  clear: () => set({ accessToken: null, permissions: [], branding: null })
+  clear: () => {
+    setAccessToken(null);
+    set({ accessToken: null, permissions: [], branding: null });
+  }
 }));
-

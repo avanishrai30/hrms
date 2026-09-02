@@ -15,6 +15,13 @@ import {
   type VerifyOtpDto
 } from "./auth.schemas.js";
 
+const refreshCookieOptions = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+  path: "/"
+};
+
 @Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -26,11 +33,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response
   ) {
     const result = await this.authService.emailLogin(body, request);
-    response.cookie("vc_wms_refresh", result.refreshToken, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production"
-    });
+    response.cookie("vc_wms_refresh", result.refreshToken, refreshCookieOptions);
     return { accessToken: result.accessToken, user: result.user, tenant: result.tenant };
   }
 
@@ -46,29 +49,21 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response
   ) {
     const result = await this.authService.verifyOtp(body, request);
-    response.cookie("vc_wms_refresh", result.refreshToken, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production"
-    });
+    response.cookie("vc_wms_refresh", result.refreshToken, refreshCookieOptions);
     return { accessToken: result.accessToken, user: result.user, tenant: result.tenant };
   }
 
   @Post("refresh")
   async refresh(@Req() request: AuthenticatedRequest, @Res({ passthrough: true }) response: Response) {
     const result = await this.authService.refresh(request.cookies?.vc_wms_refresh);
-    response.cookie("vc_wms_refresh", result.refreshToken, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production"
-    });
+    response.cookie("vc_wms_refresh", result.refreshToken, refreshCookieOptions);
     return { accessToken: result.accessToken, user: result.user, tenant: result.tenant };
   }
 
   @Post("logout")
   async logout(@Req() request: AuthenticatedRequest, @Res({ passthrough: true }) response: Response) {
     await this.authService.logout(request.cookies?.vc_wms_refresh);
-    response.clearCookie("vc_wms_refresh");
+    response.clearCookie("vc_wms_refresh", refreshCookieOptions);
     return { ok: true };
   }
 
@@ -88,4 +83,3 @@ export class PlatformAuthController {
     return this.authService.platformLogin(body);
   }
 }
-

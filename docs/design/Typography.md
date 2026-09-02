@@ -135,4 +135,7 @@ Avoid:
 - "Something went wrong" without a next step.
 - "Invalid biometric data."
 - "Unauthorized" as user-facing copy.
+# AIavro Typography Alignment
+
+AIavro product chrome uses a modern sans-serif system stack through `--font-sans`. Product labels should use `AIavro`; tenant names such as `VC Organics` appear as workspace context. Avoid legacy `VC-WMS` naming in typography examples, metadata, notifications, and login copy.
 

@@ -4,12 +4,16 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "VC-WMS",
-  description: "Multi-tenant workforce management SaaS platform"
+  title: "AIavro Workforce",
+  description: "AIavro multi-tenant workforce management platform",
+  icons: {
+    icon: "/brand/aiavro-favicon.png",
+    apple: "/brand/aiavro-favicon.png"
+  }
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1f8f5f",
+  themeColor: "#101417",
   width: "device-width",
   initialScale: 1
 };
@@ -23,4 +27,3 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     </html>
   );
 }
-

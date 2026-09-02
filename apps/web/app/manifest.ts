@@ -2,20 +2,19 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "VC-WMS",
-    short_name: "VC-WMS",
-    description: "Multi-tenant workforce management SaaS platform",
+    name: "AIavro Workforce",
+    short_name: "AIavro",
+    description: "AIavro multi-tenant workforce management platform",
     start_url: "/dashboard",
     display: "standalone",
-    background_color: "#f7f8f5",
-    theme_color: "#1f8f5f",
+    background_color: "#f6f7f4",
+    theme_color: "#101417",
     icons: [
       {
-        src: "/icon.svg",
-        sizes: "any",
-        type: "image/svg+xml"
+        src: "/brand/aiavro-favicon.png",
+        sizes: "1024x1024",
+        type: "image/png"
       }
     ]
   };
 }
-

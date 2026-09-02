@@ -4,12 +4,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Route } from "next";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Button, Panel, Badge } from "../../../components/ui";
+import { Button } from "../../../components/ui";
+import { EmptyState, ErrorState, LoadingState, PageHeader, PermissionState, StatusBadge, Surface } from "../../../components/page-primitives";
 import { apiRequest } from "../../../lib/api";
 import { cn } from "@vc-wms/ui";
 import { ImportDialog } from "../../../components/import-dialog";
 import { ExportDialog } from "../../../components/export-dialog";
 import { BulkDialog } from "../../../components/bulk-dialog";
+import { useSessionStore } from "../../../lib/session-store";
 
 interface Employee {
   id: string;
@@ -27,6 +29,7 @@ interface Employee {
 
 export default function EmployeesPage() {
   const queryClient = useQueryClient();
+  const permissions = useSessionStore((state) => state.permissions);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [archived, setArchived] = useState(false);
@@ -91,18 +94,23 @@ export default function EmployeesPage() {
     }
   };
 
+  if (!permissions.includes("employees.read")) {
+    return <PermissionState title="Employees are not available for your role." />;
+  }
+
   return (
     <div className="mx-auto grid max-w-[1440px] gap-6 p-4 md:p-6 lg:p-8">
-      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Employees</h1>
-          <p className="mt-1 text-sm text-zinc-600">Manage tenant employees, departments, and designation assignments.</p>
-        </div>
-        <Link href="/employees/new">
-          <Button>Add employee</Button>
-        </Link>
-      </header>
-      <Panel>
+      <PageHeader
+        eyebrow="People"
+        title="Employees"
+        description="Manage tenant employees, departments, and designation assignments."
+        actions={
+          <Link href="/employees/new">
+            <Button>Add employee</Button>
+          </Link>
+        }
+      />
+      <Surface>
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-border pb-5">
           <div className="flex flex-wrap items-end gap-3 flex-1">
             <label className="grid gap-2 text-sm min-w-[200px] flex-1 lg:flex-none">
@@ -189,9 +197,13 @@ export default function EmployeesPage() {
           </div>
         </div>
         
-        {employees.isLoading ? <p className="mt-5 text-sm text-zinc-600">Loading employees...</p> : null}
-        {employees.isError ? <p className="mt-5 text-sm text-danger">Employees could not be loaded.</p> : null}
-        {employees.data?.length === 0 ? <p className="mt-5 text-sm text-zinc-600">No employees yet. Add the first employee to start setup.</p> : null}
+        {employees.isLoading ? <div className="mt-5"><LoadingState label="Loading employees" /></div> : null}
+        {employees.isError ? <div className="mt-5"><ErrorState message="Employees could not be loaded." /></div> : null}
+        {employees.data?.length === 0 ? (
+          <div className="mt-5">
+            <EmptyState title="No employees yet" description="Add the first employee to start setup." />
+          </div>
+        ) : null}
         {employees.data && employees.data.length > 0 ? (
           <div className="mt-5 overflow-x-auto">
             <table className="w-full min-w-[800px] text-left text-sm">
@@ -237,7 +249,7 @@ export default function EmployeesPage() {
                     <td className="px-3 py-3 text-zinc-700">{employee.memberships?.[0]?.roles?.[0]?.role.name ?? "No access"}</td>
                     <td className="px-3 py-3 text-zinc-700">{new Date(employee.joiningDate).toLocaleDateString()}</td>
                     <td className="px-3 py-3">
-                      <Badge tone={employee.status === "ACTIVE" ? "success" : employee.status === "ARCHIVED" ? "danger" : "neutral"}>{employee.status}</Badge>
+                      <StatusBadge tone={employee.status === "ACTIVE" ? "success" : employee.status === "ARCHIVED" ? "danger" : "neutral"}>{employee.status}</StatusBadge>
                     </td>
                   </tr>
                 ))}
@@ -252,7 +264,7 @@ export default function EmployeesPage() {
           <Button variant="secondary" type="button" disabled={selectedIds.length === 0} onClick={() => setBulkOp('status')}>Bulk status</Button>
           <Button variant="danger" type="button" disabled={selectedIds.length === 0} onClick={() => setBulkOp('archive')}>Bulk archive</Button>
         </div>
-      </Panel>
+      </Surface>
 
       <ImportDialog 
         open={importOpen} 

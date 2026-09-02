@@ -4,8 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import type { Route } from "next";
 import Link from "next/link";
 import { use } from "react";
-import { Badge, Button, Panel } from "../../../../components/ui";
+import { Button } from "../../../../components/ui";
+import { ErrorState, LoadingState, PermissionState, Section, StatusBadge, Surface } from "../../../../components/page-primitives";
 import { apiRequest } from "../../../../lib/api";
+import { useSessionStore } from "../../../../lib/session-store";
 
 interface EmployeeDocument {
   id: string;
@@ -65,15 +67,20 @@ interface EmployeeDetail {
 
 export default function EmployeeProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const permissions = useSessionStore((state) => state.permissions);
   const employee = useQuery({
     queryKey: ["employee", id],
     queryFn: () => apiRequest<EmployeeDetail>(`/employees/${id}`)
   });
 
+  if (!permissions.includes("employees.read")) {
+    return <PermissionState title="Employee profiles are not available for your role." />;
+  }
+
   return (
     <div className="mx-auto grid max-w-6xl gap-6 p-4 md:p-6 lg:p-8">
-      {employee.isLoading ? <Panel>Loading employee...</Panel> : null}
-      {employee.isError ? <Panel className="text-danger">Employee could not be loaded.</Panel> : null}
+      {employee.isLoading ? <Surface><LoadingState label="Loading employee profile" /></Surface> : null}
+      {employee.isError ? <ErrorState message="Employee could not be loaded." /> : null}
       {employee.data ? (
         <>
           <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -83,9 +90,9 @@ export default function EmployeeProfilePage({ params }: { params: Promise<{ id: 
               </div>
               <div>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <Badge tone={employee.data.status === "ACTIVE" ? "success" : employee.data.status === "ARCHIVED" ? "danger" : "neutral"}>
+                  <StatusBadge tone={employee.data.status === "ACTIVE" ? "success" : employee.data.status === "ARCHIVED" ? "danger" : "neutral"}>
                     {employee.data.status}
-                  </Badge>
+                  </StatusBadge>
                   <span className="text-xs font-medium text-zinc-500">{employee.data.employeeCode}</span>
                 </div>
                 <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">{employee.data.fullName}</h1>
@@ -98,7 +105,7 @@ export default function EmployeeProfilePage({ params }: { params: Promise<{ id: 
           </header>
 
           <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-            <Panel>
+            <Surface>
               <p className="text-sm font-semibold text-zinc-950">Profile completion</p>
               <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
                 <div className="h-full rounded-full bg-primary" style={{ width: `${employee.data.profileCompletionScore}%` }} />
@@ -109,7 +116,7 @@ export default function EmployeeProfilePage({ params }: { params: Promise<{ id: 
                 <span>{employee.data.phone ?? "Phone not provided"}</span>
                 <span>Joined {new Date(employee.data.joiningDate).toLocaleDateString()}</span>
               </div>
-            </Panel>
+            </Surface>
 
             <div className="grid gap-4 md:grid-cols-2">
               <InfoPanel title="Personal information" data={{
@@ -137,8 +144,7 @@ export default function EmployeeProfilePage({ params }: { params: Promise<{ id: 
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <Panel>
-              <h2 className="text-base font-semibold text-zinc-950">Documents</h2>
+            <Section title="Documents">
               <div className="mt-4 divide-y divide-border">
                 {employee.data.documents.length ? employee.data.documents.map((document) => (
                   <div className="flex items-center justify-between gap-3 py-3" key={document.id}>
@@ -146,29 +152,26 @@ export default function EmployeeProfilePage({ params }: { params: Promise<{ id: 
                       <p className="text-sm font-medium text-zinc-950">{document.customTypeLabel ?? document.documentType}</p>
                       <p className="text-xs text-zinc-500">{document.fileName} - v{document.version}</p>
                     </div>
-                    <Badge tone={document.status === "ACTIVE" ? "success" : "neutral"}>{document.status}</Badge>
+                    <StatusBadge tone={document.status === "ACTIVE" ? "success" : "neutral"}>{document.status}</StatusBadge>
                   </div>
                 )) : <p className="text-sm text-zinc-600">No document metadata yet.</p>}
               </div>
-            </Panel>
+            </Section>
 
-            <Panel>
-              <h2 className="text-base font-semibold text-zinc-950">Permissions summary</h2>
+            <Section title="Permissions summary">
               <div className="mt-4 flex flex-wrap gap-2">
-                {employee.data.permissionsSummary.roles.map((role) => <Badge key={role.code}>{role.name}</Badge>)}
+                {employee.data.permissionsSummary.roles.map((role) => <StatusBadge key={role.code}>{role.name}</StatusBadge>)}
                 {!employee.data.permissionsSummary.roles.length ? <p className="text-sm text-zinc-600">No user access assigned.</p> : null}
               </div>
               <p className="mt-4 text-sm text-zinc-600">{employee.data.permissionsSummary.permissions.length} server-side permissions granted.</p>
-            </Panel>
+            </Section>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <Panel>
-              <h2 className="text-base font-semibold text-zinc-950">Timeline</h2>
+            <Section title="Timeline">
               <Timeline events={employee.data.timelineEvents} />
-            </Panel>
-            <Panel>
-              <h2 className="text-base font-semibold text-zinc-950">Status history</h2>
+            </Section>
+            <Section title="Status history">
               <div className="mt-4 grid gap-3">
                 {employee.data.statusHistory.length ? employee.data.statusHistory.map((entry) => (
                   <div className="rounded-control border border-border p-3" key={entry.id}>
@@ -178,7 +181,7 @@ export default function EmployeeProfilePage({ params }: { params: Promise<{ id: 
                   </div>
                 )) : <p className="text-sm text-zinc-600">No status transitions yet.</p>}
               </div>
-            </Panel>
+            </Section>
           </div>
         </>
       ) : null}
@@ -189,7 +192,7 @@ export default function EmployeeProfilePage({ params }: { params: Promise<{ id: 
 function InfoPanel({ title, data }: { title: string; data: Record<string, unknown> }) {
   const entries = Object.entries(data).filter(([, value]) => value);
   return (
-    <Panel>
+    <Surface>
       <h2 className="text-base font-semibold text-zinc-950">{title}</h2>
       <dl className="mt-4 grid gap-3 text-sm">
         {entries.length ? entries.map(([label, value]) => (
@@ -199,7 +202,7 @@ function InfoPanel({ title, data }: { title: string; data: Record<string, unknow
           </div>
         )) : <p className="text-sm text-zinc-600">Not provided.</p>}
       </dl>
-    </Panel>
+    </Surface>
   );
 }
 

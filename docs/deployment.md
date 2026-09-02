@@ -22,6 +22,17 @@ cp production.env.example .env
 nano .env # Set production passwords and API keys
 ```
 
+Required production auth variables:
+
+- `BOOTSTRAP_PASSWORD`
+- `JWT_ACCESS_SECRET`
+- `JWT_REFRESH_SECRET`
+- `COOKIE_SECRET`
+- `PLATFORM_ADMIN_EMAILS`
+- `VC_ORGANICS_OWNER_EMAIL`
+
+Do not rely on legacy `JWT_SECRET`; tenant login and RBAC token verification use `JWT_ACCESS_SECRET` and refresh rotation uses `JWT_REFRESH_SECRET`.
+
 ---
 
 ## 3. SSL Certificate Setup (Let's Encrypt)
@@ -55,4 +66,7 @@ docker compose ps
 ```bash
 # Run Prisma migrations inside the API container
 docker compose exec api npx prisma migrate deploy
+
+# Seed idempotent bootstrap data. BOOTSTRAP_PASSWORD must come from /opt/vc-hrms/.env.
+docker compose exec api npx tsx prisma/seed.ts
 ```

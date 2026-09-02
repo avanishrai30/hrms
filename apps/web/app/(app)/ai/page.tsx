@@ -50,7 +50,7 @@ export default function AiCopilotPage() {
       {
         id: "welcome-1",
         role: "assistant",
-        content: "👋 Hello! I am your **VC-WMS HR Intelligence Copilot**.\n\nI can answer questions about your **leave balances**, **shift timings**, **payroll & tax deductions**, **company policies**, and **workforce insights**.\n\nHow can I help you today?",
+        content: "Hello! I am your **AIavro HR Assistant** for this tenant workspace.\n\nI can answer authorized questions about your **leave balances**, **shift timings**, **payroll & tax deductions**, **company policies**, and **workforce insights**.\n\nHow can I help you today?",
         createdAt: new Date().toISOString(),
         quickReplies: [
           "How many leave days do I have?",
@@ -130,7 +130,7 @@ export default function AiCopilotPage() {
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h1 className="text-base font-bold text-neutral-900 dark:text-neutral-100">HR Intelligence Copilot</h1>
+              <h1 className="text-base font-bold text-neutral-900 dark:text-neutral-100">AIavro HR Assistant</h1>
               <Badge tone="success">Active</Badge>
             </div>
             <p className="text-xs text-neutral-500">Multi-Model Grounded Assistant (RAG & Internal APIs)</p>

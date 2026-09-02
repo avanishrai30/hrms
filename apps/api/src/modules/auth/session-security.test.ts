@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 describe("session security implementation", () => {
   const service = readFileSync(new URL("./auth.service.ts", import.meta.url), "utf8");
+  const controller = readFileSync(new URL("./auth.controller.ts", import.meta.url), "utf8");
 
   it("creates tenant sessions with device, IP, user agent, expiry, and audit records", () => {
     expect(service).toContain("deviceFingerprint");
@@ -56,5 +57,13 @@ describe("session security implementation", () => {
 
   it("uses separate JWT payload for platform login", () => {
     expect(service).toContain('typ: "platform"');
+  });
+
+  it("sets secure refresh cookie attributes consistently", () => {
+    expect(controller).toContain("httpOnly: true");
+    expect(controller).toContain('sameSite: "lax"');
+    expect(controller).toContain('secure: process.env.NODE_ENV === "production"');
+    expect(controller).toContain('path: "/"');
+    expect(controller).toContain('response.clearCookie("vc_wms_refresh", refreshCookieOptions)');
   });
 });

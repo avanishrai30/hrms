@@ -17,7 +17,7 @@ export default function AiAssistantPage() {
     {
       role: "assistant",
       content:
-        "Hello! I am VC Organics HR AI Copilot. I can help you query workforce analytics, leave policies, payroll distributions, attendance patterns, and draft official HR documents. What can I do for you today?",
+        "Hello! I am the AIavro HR Assistant for the VC Organics workspace. I can help with authorized workforce analytics, leave policies, payroll distributions, attendance patterns, and HR drafts. What can I do for you today?",
       timestamp: "Just now"
     }
   ]);
@@ -60,13 +60,13 @@ export default function AiAssistantPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">🤖 AI HR Copilot & Assistant</h1>
+          <h1 className="text-2xl font-bold text-slate-900">AIavro HR Assistant</h1>
           <p className="text-sm text-slate-600">
             Role-aware, multi-tenant enterprise AI assistant with tool calling across HRMS, Payroll, Attendance, and Knowledge Base.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge tone="success">MODEL: VC-HR-LLM-v2 (GUARDRAILS ACTIVE)</Badge>
+          <Badge tone="success">Tenant guardrails active</Badge>
         </div>
       </div>
 

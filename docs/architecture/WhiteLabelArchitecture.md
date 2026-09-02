@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Define tenant branding and custom domain support for VC-WMS as a SaaS platform.
+Define tenant branding and custom domain support for AIavro Workforce as a SaaS platform.
+
+AIavro is the platform owner and product identity. VC Organics is Tenant #1 and appears as workspace context. Tenant white-label settings may customize workspace surfaces, custom domains, email templates, and tenant-facing accents, but they must not overwrite AIavro product chrome unless a future commercial plan explicitly enables full private-label mode.
 
 ## Branding Scope
 

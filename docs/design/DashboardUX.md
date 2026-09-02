@@ -139,4 +139,8 @@ Permission:
 
 - Hide actions users cannot perform.
 - Show permission messaging only when user navigates directly to restricted areas.
+# AIavro Dashboard Alignment
 
+Dashboards should present AIavro as the platform shell and the tenant as the workspace context. VC Organics-specific content belongs in tenant-scoped data, onboarding states, and workspace labels, not in product identity. Dashboard navigation should come from the grouped information architecture in `InformationArchitecture.md` instead of a flat feature list.
+
+The Phase 2 home dashboard reads existing APIs for attendance, leave balances, leave requests, payslips, announcements, and employee directory availability. It must show unavailable/empty states rather than manufactured production metrics when an API is missing or unauthorized.

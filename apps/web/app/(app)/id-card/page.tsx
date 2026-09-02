@@ -124,7 +124,7 @@ export default function DigitalIdCardPage() {
                   </div>
                 </div>
                 <p className="text-xs text-zinc-300 font-medium max-w-[200px]">
-                  Scan to verify authentic identity on VC-WMS Gateway
+                  Scan to verify authentic identity on AIavro Gateway
                 </p>
               </div>
 
