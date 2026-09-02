@@ -1,278 +1,356 @@
 "use client";
 
+import React, { useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { cn } from "@vc-wms/ui";
-import { AiavroMark, AiavroWordmark, DEFAULT_TENANT_WORKSPACE } from "./aiavro-brand";
-import { apiRequest } from "../lib/api";
-import { filterGroups, isActive, routeCommandItems, employeeDock } from "../lib/navigation";
+import { usePathname } from "next/navigation";
+import {
+  Home,
+  Users,
+  Clock,
+  Calendar,
+  CreditCard,
+  GraduationCap,
+  Sparkles,
+  Search,
+  Bell,
+  Settings,
+  ChevronLeft,
+  ChevronRight,
+  Menu,
+  X,
+  Briefcase,
+  ShieldCheck,
+  Laptop,
+  Building2,
+  BarChart3
+} from "lucide-react";
+import type { PermissionCode } from "@vc-wms/shared-types";
 import { useSessionStore } from "../lib/session-store";
 
-export function AppShell({ children }: { children: ReactNode }) {
+interface NavItem {
+  href: Route;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  permission?: PermissionCode;
+  badge?: string;
+}
+
+interface NavSection {
+  title: string;
+  items: NavItem[];
+}
+
+const navSections: NavSection[] = [
+  {
+    title: "Core",
+    items: [
+      { href: "/dashboard" as Route, label: "Home", icon: Home },
+      { href: "/search" as Route, label: "Global Search", icon: Search },
+      { href: "/ai" as Route, label: "AI Copilot", icon: Sparkles, badge: "New" }
+    ]
+  },
+  {
+    title: "Self Service & People",
+    items: [
+      { href: "/ess" as Route, label: "My Self Service", icon: Users },
+      { href: "/directory" as Route, label: "Directory", icon: Building2 },
+      { href: "/org-chart" as Route, label: "Org Chart", icon: Briefcase },
+      { href: "/employees" as Route, label: "Employees", icon: Users, permission: "employees.read" },
+      { href: "/recruitment" as Route, label: "Recruitment ATS", icon: Briefcase, permission: "recruitment.read" }
+    ]
+  },
+  {
+    title: "Time & Schedule",
+    items: [
+      { href: "/attendance" as Route, label: "Attendance", icon: Clock },
+      { href: "/leave" as Route, label: "Leave & Time Off", icon: Calendar },
+      { href: "/meeting-rooms" as Route, label: "Meeting Rooms", icon: Building2 },
+      { href: "/parking" as Route, label: "Parking Bays", icon: Briefcase }
+    ]
+  },
+  {
+    title: "Finance & Payroll",
+    items: [
+      { href: "/payslips" as Route, label: "My Payslips", icon: CreditCard },
+      { href: "/payroll" as Route, label: "Enterprise Payroll", icon: CreditCard, permission: "payroll.read" },
+      { href: "/finance" as Route, label: "Finance & Accounts", icon: CreditCard, permission: "finance.view" }
+    ]
+  },
+  {
+    title: "Talent & Growth",
+    items: [
+      { href: "/performance" as Route, label: "Performance & OKRs", icon: BarChart3 },
+      { href: "/learning" as Route, label: "Learning & LMS", icon: GraduationCap },
+      { href: "/engagement" as Route, label: "Culture & Rewards", icon: Sparkles }
+    ]
+  },
+  {
+    title: "Workplace & Operations",
+    items: [
+      { href: "/assets" as Route, label: "Asset Management", icon: Laptop },
+      { href: "/vendors" as Route, label: "Vendor Ecosystem", icon: ShieldCheck, permission: "vendors.manage" },
+      { href: "/contractors" as Route, label: "Contractor Muster", icon: Users, permission: "contractors.manage" },
+      { href: "/visitors" as Route, label: "Visitor Passes", icon: ShieldCheck }
+    ]
+  },
+  {
+    title: "Intelligence & Admin",
+    items: [
+      { href: "/admin/executive-intelligence" as Route, label: "Executive AI", icon: BarChart3, permission: "executive.intelligence" },
+      { href: "/analytics" as Route, label: "Analytics Hub", icon: BarChart3, permission: "analytics.view" },
+      { href: "/admin/system-health" as Route, label: "System Health", icon: Settings, permission: "system.health" },
+      { href: "/audit-logs" as Route, label: "Audit Ledger", icon: ShieldCheck, permission: "audit.read" }
+    ]
+  }
+];
+
+export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const tenantName = useSessionStore((state) => state.tenantName);
-  const accessToken = useSessionStore((state) => state.accessToken);
-  const permissions = useSessionStore((state) => state.permissions);
-  const setSession = useSessionStore((state) => state.setSession);
-  const clearSession = useSessionStore((state) => state.clear);
-  const [sessionReady, setSessionReady] = useState(Boolean(accessToken));
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [commandOpen, setCommandOpen] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
-  const [commandQuery, setCommandQuery] = useState("");
-  const groups = filterGroups(permissions);
-  const activeGroup = groups.find((group) => isActive(pathname, group.href) || group.items.some((item) => isActive(pathname, item.href))) ?? groups[0];
-  const visibleDock = employeeDock.filter((item) => !item.permission || permissions.includes(item.permission));
-  const commandItems = useMemo(() => routeCommandItems(permissions, commandQuery), [commandQuery, permissions]);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const tenantName = useSessionStore((state) => state.tenantName) || "VC Organics";
+  const permissions = useSessionStore((state) => state.permissions) || [];
 
-  useEffect(() => {
-    if (accessToken) {
-      setSessionReady(true);
-      return;
-    }
-    let cancelled = false;
-    apiRequest<{ accessToken: string; tenant: { name: string } }>("/auth/refresh", { method: "POST" })
-      .then((result) => {
-        if (cancelled) return;
-        setSession(result.accessToken, result.tenant.name, []);
-        setSessionReady(true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        clearSession();
-        const next = encodeURIComponent(pathname);
-        router.replace(`/login?next=${next}`);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, clearSession, pathname, router, setSession]);
-
-  useEffect(() => {
-    const onSessionExpired = () => {
-      clearSession();
-      const next = encodeURIComponent(window.location.pathname);
-      router.replace(`/login?next=${next}`);
-    };
-    window.addEventListener("aiavro:session-expired", onSessionExpired);
-    return () => window.removeEventListener("aiavro:session-expired", onSessionExpired);
-  }, [clearSession, router]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setCommandOpen(true);
-      }
-      if (event.key === "Escape") {
-        setCommandOpen(false);
-        setMobileOpen(false);
-        setAccountOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  useEffect(() => {
-    setMobileOpen(false);
-    setCommandOpen(false);
-  }, [pathname]);
-
-  async function logout() {
-    await apiRequest("/auth/logout", { method: "POST" }).catch(() => undefined);
-    clearSession();
-    window.location.assign("/login");
-  }
-
-  if (!sessionReady) {
-    return (
-      <div className="grid min-h-dvh place-items-center bg-canvas p-6 text-center">
-        <div className="rounded-overlay border border-border bg-surface p-6 shadow-sm">
-          <AiavroMark className="mx-auto mb-4" />
-          <p className="text-sm font-semibold text-zinc-950">Checking your AIavro session</p>
-          <p className="mt-2 text-sm text-zinc-500">Protected workspace content will load after authentication is confirmed.</p>
-        </div>
-      </div>
-    );
-  }
+  const filterItem = (item: NavItem) => {
+    if (!item.permission) return true;
+    return permissions.includes(item.permission);
+  };
 
   return (
-    <div className="min-h-dvh bg-canvas text-zinc-950">
+    <div className="min-h-screen bg-canvas flex text-foreground font-sans antialiased">
+      {/* 1. Desktop Sidebar */}
       <aside
-        className={cn(
-          "fixed inset-y-0 left-0 hidden border-r border-border bg-surface px-4 py-5 transition-[width] duration-200 motion-reduce:transition-none lg:block",
-          collapsed ? "w-[88px]" : "w-[280px]"
-        )}
+        className={`hidden lg:flex flex-col border-r border-border-subtle bg-surface transition-all duration-300 z-30 shrink-0 sticky top-0 h-screen ${
+          isCollapsed ? "w-20" : "w-64"
+        }`}
       >
-        <div className="flex items-center gap-3 px-2">
-          <AiavroMark />
-          <div className={cn("min-w-0", collapsed && "hidden")}>
-            <AiavroWordmark className="h-5" />
-            <p className="mt-1 truncate text-xs text-zinc-500">{tenantName || DEFAULT_TENANT_WORKSPACE}</p>
-          </div>
+        {/* Brand & Workspace Identity */}
+        <div className="p-4 flex items-center justify-between border-b border-border-subtle">
+          {!isCollapsed ? (
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-panel bg-primary flex items-center justify-center text-white font-extrabold text-lg shadow-md">
+                A
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <h1 className="text-sm font-bold tracking-tight text-foreground">AIavro</h1>
+                  <span className="px-1.5 py-0.2 rounded-pill bg-primary-soft text-[10px] font-bold text-primary">OS</span>
+                </div>
+                <p className="text-[11px] text-foreground-muted font-medium truncate">{tenantName}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="w-full flex justify-center">
+              <div className="w-9 h-9 rounded-panel bg-primary flex items-center justify-center text-white font-extrabold text-lg shadow-md">
+                A
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="hidden lg:flex p-1.5 rounded-control hover:bg-surface-muted text-foreground-muted hover:text-foreground transition"
+            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
+            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          </button>
         </div>
-        <button
-          className="mt-4 h-9 w-full rounded-control border border-border text-xs font-medium text-zinc-600 transition hover:bg-muted focus-visible:outline-primary"
-          type="button"
-          onClick={() => setCollapsed((value) => !value)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? "Open" : "Collapse"}
-        </button>
-        <nav className="mt-7 grid gap-1" aria-label="Primary navigation">
-          {groups.map((group) => (
-            <Link
-              key={group.label}
-              href={group.href}
-              className={cn(
-                "flex items-center justify-between rounded-control px-3 py-2.5 text-sm font-medium text-zinc-600 transition hover:bg-muted hover:text-zinc-950",
-                activeGroup?.label === group.label && "bg-zinc-950 text-white hover:bg-zinc-900 hover:text-white"
-              )}
-            >
-              <span className="truncate">{collapsed ? group.label.slice(0, 1) : group.label}</span>
-              {!collapsed ? <span className="text-xs opacity-60">{group.items.length}</span> : null}
-            </Link>
-          ))}
+
+        {/* Navigation Sections */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+          {navSections.map((section) => {
+            const visibleItems = section.items.filter(filterItem);
+            if (visibleItems.length === 0) return null;
+
+            return (
+              <div key={section.title} className="space-y-1">
+                {!isCollapsed && (
+                  <h2 className="px-3 text-[10px] font-bold uppercase tracking-wider text-foreground-muted/70">
+                    {section.title}
+                  </h2>
+                )}
+                {visibleItems.map((item) => {
+                  const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                  const Icon = item.icon;
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`group relative flex items-center gap-3 px-3 py-2 rounded-card text-xs font-semibold transition-all ${
+                        isActive
+                          ? "bg-primary text-white shadow-sm"
+                          : "text-foreground-secondary hover:bg-surface-muted hover:text-foreground"
+                      } ${isCollapsed ? "justify-center px-0 py-2.5" : ""}`}
+                      title={isCollapsed ? item.label : undefined}
+                    >
+                      <Icon
+                        className={`w-4 h-4 shrink-0 ${
+                          isActive ? "text-white" : "text-foreground-muted group-hover:text-primary transition-colors"
+                        }`}
+                      />
+                      {!isCollapsed && <span className="truncate">{item.label}</span>}
+                      {!isCollapsed && item.badge && (
+                        <span className="ml-auto px-1.5 py-0.5 rounded-pill bg-accent-purple/20 text-accent-purple text-[10px] font-bold">
+                          {item.badge}
+                        </span>
+                      )}
+
+                      {/* Tooltip in Collapsed Mode */}
+                      {isCollapsed && (
+                        <div className="absolute left-full ml-2 px-2.5 py-1 rounded-control bg-[#18153B] text-white text-xs font-semibold whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-dropdown z-50">
+                          {item.label}
+                        </div>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            );
+          })}
         </nav>
-        <div className={cn("absolute inset-x-4 bottom-5 rounded-panel border border-border bg-canvas p-3", collapsed && "hidden")}>
-          <p className="text-xs font-medium text-zinc-900">Workspace</p>
-          <p className="mt-1 truncate text-sm text-zinc-600">{tenantName || DEFAULT_TENANT_WORKSPACE}</p>
+
+        {/* User Account / Tenant Context Footer */}
+        <div className="p-3 border-t border-border-subtle bg-surface-muted/30">
+          {!isCollapsed ? (
+            <div className="flex items-center justify-between gap-2 p-2 rounded-card bg-surface border border-border-subtle shadow-sm">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-pill bg-primary-soft text-primary font-bold text-xs flex items-center justify-center shrink-0">
+                  A
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-foreground truncate">Avanish Rai</p>
+                  <p className="text-[10px] text-foreground-muted truncate">{tenantName}</p>
+                </div>
+              </div>
+              <Link href={"/profile" as Route} className="text-foreground-muted hover:text-foreground transition p-1">
+                <Settings className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          ) : (
+            <div className="flex justify-center py-1">
+              <div className="w-8 h-8 rounded-pill bg-primary-soft text-primary font-bold text-xs flex items-center justify-center">
+                A
+              </div>
+            </div>
+          )}
         </div>
       </aside>
 
-      <header className={cn("sticky top-0 z-10 border-b border-border bg-canvas/95 backdrop-blur transition-[margin] duration-200 motion-reduce:transition-none", collapsed ? "lg:ml-[88px]" : "lg:ml-[280px]")}>
-        <div className="flex min-h-16 items-center justify-between gap-4 px-4 lg:px-8">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="lg:hidden">
-              <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
-                <AiavroMark className="h-8 w-8" />
-              </button>
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-zinc-950">{activeGroup?.label ?? "Workspace"}</p>
-              <p className="truncate text-xs text-zinc-500">{tenantName || DEFAULT_TENANT_WORKSPACE}</p>
-            </div>
-          </div>
-          <div className="hidden min-w-0 flex-1 justify-center px-4 md:flex">
+      {/* 2. Main App Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Topbar Header */}
+        <header className="sticky top-0 z-20 h-16 bg-surface/80 backdrop-blur-md border-b border-border-subtle px-4 sm:px-6 flex items-center justify-between gap-4">
+          {/* Left: Mobile hamburger & breadcrumb */}
+          <div className="flex items-center gap-3">
             <button
-              className="h-10 w-full max-w-lg rounded-control border border-border bg-surface px-3 text-left text-sm text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-700"
-              type="button"
-              onClick={() => setCommandOpen(true)}
+              onClick={() => setIsMobileOpen(true)}
+              className="lg:hidden p-2 rounded-control hover:bg-surface-muted text-foreground-secondary transition"
             >
-              Search AIavro or press Cmd K
+              <Menu className="w-5 h-5" />
             </button>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-foreground-muted hidden sm:inline">{tenantName}</span>
+              <span className="text-xs text-foreground-muted hidden sm:inline">/</span>
+              <span className="text-xs font-bold text-foreground capitalize">
+                {pathname === "/dashboard" ? "Overview" : pathname.replace(/^\//, "").replace(/-/g, " ")}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Link className="rounded-control border border-border bg-surface px-3 py-2 text-sm text-zinc-700 transition hover:bg-muted" href={"/notifications" as Route}>
-              Alerts
+
+          {/* Right: Quick actions (Search, Notifications, Copilot, Profile) */}
+          <div className="flex items-center gap-2.5">
+            <Link
+              href={"/search" as Route}
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-pill bg-surface-muted border border-border-subtle text-xs text-foreground-muted hover:text-foreground transition"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Search anything...</span>
+              <kbd className="px-1.5 py-0.5 rounded bg-surface border border-border-subtle text-[10px] font-mono">⌘K</kbd>
             </Link>
-            <Link className="hidden rounded-control border border-border bg-surface px-3 py-2 text-sm text-zinc-700 transition hover:bg-muted sm:inline-flex" href={"/helpdesk" as Route}>
-              Help
+
+            <Link
+              href={"/notifications" as Route}
+              className="relative p-2 rounded-pill bg-surface hover:bg-surface-muted border border-border-subtle text-foreground-secondary transition"
+              title="Notifications"
+            >
+              <Bell className="w-4 h-4" />
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-pill bg-primary" />
             </Link>
-            <div className="relative">
-              <button className="rounded-control bg-zinc-950 px-3 py-2 text-sm font-medium text-white transition hover:bg-zinc-800" type="button" onClick={() => setAccountOpen((value) => !value)}>
-                Account
-              </button>
-              {accountOpen ? (
-                <div className="absolute right-0 top-12 w-56 rounded-overlay border border-border bg-surface p-2 shadow-lg">
-                  <p className="px-2 py-2 text-xs text-zinc-500">{tenantName || DEFAULT_TENANT_WORKSPACE}</p>
-                  <Link className="block rounded-control px-2 py-2 text-sm text-zinc-700 hover:bg-muted" href="/profile">
-                    My profile
-                  </Link>
-                  <button className="block w-full rounded-control px-2 py-2 text-left text-sm text-red-700 hover:bg-red-50" type="button" onClick={() => void logout()}>
-                    Sign out
-                  </button>
+
+            <Link
+              href={"/ai" as Route}
+              className="px-3 py-1.5 rounded-pill bg-primary text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm hover:brightness-105 active:scale-95"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">AI Copilot</span>
+            </Link>
+
+            <Link href={"/profile" as Route} className="flex items-center gap-2 pl-2 border-l border-border-subtle">
+              <div className="w-8 h-8 rounded-pill bg-gradient-to-br from-primary to-accent-purple text-white text-xs font-bold flex items-center justify-center shadow-sm">
+                A
+              </div>
+            </Link>
+          </div>
+        </header>
+
+        {/* Page Children Container */}
+        <main className="flex-1 pb-12 overflow-x-hidden">{children}</main>
+      </div>
+
+      {/* 3. Mobile Slide-out Drawer */}
+      {isMobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsMobileOpen(false)} />
+          <div className="relative w-72 max-w-[80vw] bg-surface h-full shadow-2xl flex flex-col z-50">
+            <div className="p-4 flex items-center justify-between border-b border-border-subtle">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-panel bg-primary flex items-center justify-center text-white font-bold">
+                  A
                 </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-        {activeGroup ? (
-          <nav className="flex gap-2 overflow-x-auto px-4 pb-3 lg:px-8" aria-label={`${activeGroup.label} navigation`}>
-            {activeGroup.items.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "whitespace-nowrap rounded-control px-3 py-1.5 text-sm font-medium text-zinc-600 transition hover:bg-muted hover:text-zinc-950",
-                  isActive(pathname, item.href) && "bg-surface text-zinc-950 shadow-sm"
-                )}
+                <div>
+                  <h2 className="text-sm font-bold text-foreground">AIavro</h2>
+                  <p className="text-[10px] text-foreground-muted">{tenantName}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsMobileOpen(false)}
+                className="p-1.5 rounded-control hover:bg-surface-muted text-foreground-muted"
               >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        ) : null}
-      </header>
-
-      <main className={cn("pb-20 transition-[margin] duration-200 motion-reduce:transition-none lg:pb-8", collapsed ? "lg:ml-[88px]" : "lg:ml-[280px]")}>{children}</main>
-
-      <nav
-        className="fixed inset-x-0 bottom-0 grid h-16 border-t border-border bg-surface lg:hidden"
-        style={{ gridTemplateColumns: `repeat(${visibleDock.length}, minmax(0, 1fr))` }}
-        aria-label="Mobile navigation"
-      >
-        {visibleDock.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn("grid place-items-center text-xs font-medium text-zinc-500", isActive(pathname, item.href) && "text-zinc-950")}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
-
-      {mobileOpen ? (
-        <div className="fixed inset-0 z-40 bg-black/35 lg:hidden" role="presentation" onClick={() => setMobileOpen(false)}>
-          <aside className="h-full w-[300px] bg-surface p-4 shadow-xl" role="dialog" aria-modal="true" aria-label="Navigation" onClick={(event) => event.stopPropagation()}>
-            <div className="mb-5 flex items-center justify-between">
-              <AiavroWordmark />
-              <button className="rounded-control border border-border px-3 py-2 text-sm" type="button" onClick={() => setMobileOpen(false)}>
-                Close
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <nav className="grid gap-1">
-              {groups.map((group) => (
-                <Link key={group.href} className={cn("rounded-control px-3 py-2 text-sm font-medium text-zinc-700", activeGroup?.label === group.label && "bg-zinc-950 text-white")} href={group.href}>
-                  {group.label}
-                </Link>
+
+            <nav className="flex-1 overflow-y-auto p-4 space-y-4">
+              {navSections.map((section) => (
+                <div key={section.title} className="space-y-1">
+                  <h3 className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted px-2">
+                    {section.title}
+                  </h3>
+                  {section.items.filter(filterItem).map((item) => {
+                    const isActive = pathname === item.href;
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setIsMobileOpen(false)}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-card text-xs font-semibold ${
+                          isActive ? "bg-primary text-white" : "text-foreground-secondary hover:bg-surface-muted"
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               ))}
             </nav>
-          </aside>
-        </div>
-      ) : null}
-
-      {commandOpen ? (
-        <div className="fixed inset-0 z-50 grid place-items-start bg-black/35 px-4 pt-24" role="presentation" onClick={() => setCommandOpen(false)}>
-          <div className="mx-auto w-full max-w-xl rounded-overlay border border-border bg-surface p-2 shadow-2xl" role="dialog" aria-modal="true" aria-label="Command menu" onClick={(event) => event.stopPropagation()}>
-            <input
-              autoFocus
-              className="h-12 w-full rounded-control border border-border bg-canvas px-3 text-sm text-zinc-950 outline-none focus:border-zinc-400"
-              placeholder="Jump to a page"
-              value={commandQuery}
-              onChange={(event) => setCommandQuery(event.target.value)}
-            />
-            <div className="mt-2 max-h-80 overflow-y-auto">
-              {commandItems.length ? (
-                commandItems.map((item) => (
-                  <Link key={item.href} className="flex items-center justify-between rounded-control px-3 py-2 text-sm text-zinc-700 hover:bg-muted" href={item.href}>
-                    <span>{item.label}</span>
-                    <span className="text-xs text-zinc-400">{item.group}</span>
-                  </Link>
-                ))
-              ) : (
-                <p className="px-3 py-6 text-center text-sm text-zinc-500">No matching pages.</p>
-              )}
-            </div>
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

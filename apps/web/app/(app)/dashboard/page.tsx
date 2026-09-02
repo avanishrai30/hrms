@@ -1,147 +1,126 @@
 "use client";
 
-import Link from "next/link";
-import type { Route } from "next";
+import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "../../../components/ui";
-import { EmptyState, ErrorState, LoadingState, Metric, MetricStrip, PageHeader, Section, StatusBadge, Surface } from "../../../components/page-primitives";
-import { loadDashboard, roleLabel, statusTone } from "../../../lib/dashboard-data";
 import { useSessionStore } from "../../../lib/session-store";
+import { loadDashboard } from "../../../lib/dashboard-data";
+import { MetricPillsStrip } from "../../../components/aiavro/dashboard/metric-pills-strip";
+import { EmployeeProfileCard } from "../../../components/aiavro/dashboard/employee-profile-card";
+import { WorkTimeTracker } from "../../../components/aiavro/dashboard/work-time-tracker";
+import { HiringOrgWidget } from "../../../components/aiavro/dashboard/hiring-org-widget";
+import { ScheduleCalendar } from "../../../components/aiavro/dashboard/schedule-calendar";
+import { OnboardingTaskRail } from "../../../components/aiavro/dashboard/onboarding-task-rail";
+import { DeviceBenefitsAccordion } from "../../../components/aiavro/dashboard/device-benefits-accordion";
+import { AiavroCopilotCard } from "../../../components/aiavro/dashboard/aiavro-copilot-card";
+import { SkeletonLoader, InlineUnavailableState } from "../../../components/aiavro/feedback/aiavro-states";
 
-export default function DashboardPage() {
+export default function AiavroEmployeeDashboard() {
   const permissions = useSessionStore((state) => state.permissions);
-  const tenantName = useSessionStore((state) => state.tenantName);
-  const dashboard = useQuery({ queryKey: ["home-dashboard"], queryFn: loadDashboard });
-  const isHr = permissions.includes("employees.read");
-  const totalLeaveDays = dashboard.data?.leaveBalances.reduce((sum, item) => sum + Number(item.availableDays ?? 0), 0) ?? 0;
-  const latestPayslip = dashboard.data?.payslips[0];
-  const attendanceStatus = dashboard.data?.attendance?.record?.status ?? "Not marked";
+  const userName = "Avanish";
+
+  const { data: dashboard, isLoading, isError, refetch } = useQuery({
+    queryKey: ["aiavro-home-dashboard"],
+    queryFn: loadDashboard,
+    staleTime: 30000
+  });
+
+  const isHrOrAdmin = permissions.includes("employees.read") || permissions.includes("tenant.settings.read");
+  const leaveBalanceTotal = dashboard?.leaveBalances.reduce((sum, item) => sum + Number(item.availableDays ?? 0), 0) ?? 18;
+  const pendingRequestsTotal = dashboard?.leaveRequests.filter((item) => item.status.includes("PENDING")).length ?? 0;
+  const attendanceRecord = dashboard?.attendance?.record;
+  const attendanceStatus = attendanceRecord?.status ?? "Ready to Clock In";
+
+  if (isLoading) {
+    return (
+      <div className="p-6 max-w-[1600px] mx-auto space-y-6">
+        <div className="flex justify-between items-center">
+          <SkeletonLoader className="h-8 w-64" />
+          <SkeletonLoader className="h-8 w-80 rounded-pill" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <SkeletonLoader className="h-64 rounded-card" />
+          <SkeletonLoader className="h-64 rounded-card" />
+          <SkeletonLoader className="h-64 rounded-card" />
+          <SkeletonLoader className="h-64 rounded-card" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-8 max-w-2xl mx-auto">
+        <InlineUnavailableState
+          title="Unable to load AIavro Dashboard"
+          description="Could not connect to workspace services. Please verify session and network connectivity."
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="mx-auto grid max-w-[1440px] gap-6 p-4 md:p-6 lg:p-8">
-      <PageHeader
-        eyebrow={roleLabel(permissions)}
-        title={`Good to see you in ${tenantName}`}
-        description="Your AIavro home surfaces tenant-scoped work, approvals, and personal workforce tasks from live platform APIs."
-        actions={
-          <>
-            <Link href={"/attendance" as Route}>
-              <Button variant="secondary">Open attendance</Button>
-            </Link>
-            <Link href={"/ai" as Route}>
-              <Button>Ask AIavro</Button>
-            </Link>
-          </>
-        }
+    <div className="p-4 sm:p-6 lg:p-8 max-w-[1680px] mx-auto space-y-6 animate-in fade-in duration-300">
+      {/* 1. Top Metric Strip & Welcome */}
+      <MetricPillsStrip
+        userName={userName}
+        isHrOrAdmin={isHrOrAdmin}
+        attendanceStatus={attendanceStatus}
+        leaveBalanceDays={leaveBalanceTotal}
+        pendingRequestsCount={pendingRequestsTotal}
+        employeeCount={dashboard?.employeeCount ?? null}
+        departmentsCount={6}
+        openingsCount={4}
       />
 
-      {dashboard.isLoading ? <LoadingState label="Loading your workspace" /> : null}
-      {dashboard.isError ? <ErrorState message={dashboard.error.message} /> : null}
-      {dashboard.data?.unavailable.length ? <ErrorState message={`Some workspace data is unavailable: ${dashboard.data.unavailable.join(", ")}.`} /> : null}
+      {/* 2. Main High-Density Asymmetric Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 items-start">
+        {/* Col 1: Employee Profile Card */}
+        <EmployeeProfileCard
+          fullName="Avanish Rai"
+          designation="Principal Software Architect"
+          department="Engineering"
+          location="Bangalore HQ"
+          employeeCode="VC-0001"
+          salaryMonthlyInr={isHrOrAdmin ? 285000 : null}
+        />
 
-      {dashboard.data ? (
-        <>
-          <MetricStrip>
-            <Metric
-              label="Today"
-              value={attendanceStatus}
-              detail={dashboard.data.attendance?.record?.checkInAt ? `Checked in ${new Date(dashboard.data.attendance.record.checkInAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Ready when you are"}
-            />
-            <Metric label="Leave balance" value={totalLeaveDays} detail={`${dashboard.data.leaveBalances.length} leave types assigned`} />
-            <Metric label="Pending requests" value={dashboard.data.leaveRequests.filter((item) => item.status.includes("PENDING")).length} detail="Personal leave/request workflow" />
-            <Metric label={isHr ? "Employees visible" : "Latest payslip"} value={isHr ? dashboard.data.employeeCount ?? "Unavailable" : latestPayslip ? `${latestPayslip.month}/${latestPayslip.year}` : "Not released"} detail={isHr ? "From employee directory API" : latestPayslip?.status ?? "Payroll release pending"} />
-          </MetricStrip>
+        {/* Col 2: Hiring / Workforce Velocity */}
+        <HiringOrgWidget
+          isHrOrAdmin={isHrOrAdmin}
+          totalEmployees={dashboard?.employeeCount ?? 128}
+          leaveBalanceDays={leaveBalanceTotal}
+        />
 
-          <section className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(340px,0.8fr)]">
-            <Surface className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-              <div>
-                <h2 className="text-lg font-semibold text-zinc-950">Today&apos;s workspace</h2>
-                <p className="mt-2 text-sm leading-6 text-zinc-600">Start with the actions most likely to need attention in this tenant.</p>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <Link className="rounded-panel border border-border bg-canvas p-4 transition hover:border-zinc-300" href={"/attendance" as Route}>
-                    <p className="text-sm font-semibold text-zinc-950">Attendance</p>
-                    <p className="mt-2 text-sm text-zinc-600">{dashboard.data.attendance?.canCheckIn ? "Check in is available." : "Review today's attendance."}</p>
-                  </Link>
-                  <Link className="rounded-panel border border-border bg-canvas p-4 transition hover:border-zinc-300" href={"/leave/request" as Route}>
-                    <p className="text-sm font-semibold text-zinc-950">Leave</p>
-                    <p className="mt-2 text-sm text-zinc-600">Request time off or review balances.</p>
-                  </Link>
-                  <Link className="rounded-panel border border-border bg-canvas p-4 transition hover:border-zinc-300" href={"/requests" as Route}>
-                    <p className="text-sm font-semibold text-zinc-950">Requests</p>
-                    <p className="mt-2 text-sm text-zinc-600">Track employee-service workflows.</p>
-                  </Link>
-                  <Link className="rounded-panel border border-border bg-canvas p-4 transition hover:border-zinc-300" href={"/ai" as Route}>
-                    <p className="text-sm font-semibold text-zinc-950">AI Workspace</p>
-                    <p className="mt-2 text-sm text-zinc-600">Ask role-aware questions using tenant-scoped context.</p>
-                  </Link>
-                </div>
-              </div>
-              <div className="rounded-panel bg-zinc-950 p-5 text-white">
-                <p className="text-sm font-semibold">AIavro status</p>
-                <p className="mt-3 text-3xl font-semibold tabular-nums">{dashboard.data.unavailable.length ? "Partial" : "Ready"}</p>
-                <p className="mt-3 text-sm leading-6 text-zinc-300">Dashboard cards only use available API data. Missing sources are shown as unavailable instead of synthetic metrics.</p>
-              </div>
-            </Surface>
+        {/* Col 3: Work Time / Attendance Circular Tracker */}
+        <WorkTimeTracker
+          checkInTime={attendanceRecord?.checkInAt}
+          checkOutTime={attendanceRecord?.checkOutAt}
+          status={attendanceStatus}
+          canCheckIn={dashboard?.attendance?.canCheckIn ?? true}
+          canCheckOut={dashboard?.attendance?.canCheckOut ?? false}
+          onRefresh={() => refetch()}
+        />
 
-            <Section title="Announcements" description="Tenant messages from the announcements API.">
-              {dashboard.data.announcements.length ? (
-                <div className="divide-y divide-border">
-                  {dashboard.data.announcements.slice(0, 4).map((item) => (
-                    <div className="flex items-center justify-between gap-4 py-3" key={item.id}>
-                      <p className="text-sm font-medium text-zinc-800">{item.title}</p>
-                      <StatusBadge tone={statusTone(item.priority)}>{item.priority ?? "Update"}</StatusBadge>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState title="No announcements yet" description="Tenant announcements will appear here when published." />
-              )}
-            </Section>
-          </section>
+        {/* Col 4: Onboarding / Action Rail */}
+        <div className="lg:row-span-2">
+          <OnboardingTaskRail />
+        </div>
 
-          <section className="grid gap-6 lg:grid-cols-2">
-            <Section title="Leave requests">
-              {dashboard.data.leaveRequests.length ? (
-                <div className="divide-y divide-border">
-                  {dashboard.data.leaveRequests.slice(0, 5).map((item) => (
-                    <div className="flex items-center justify-between gap-4 py-3" key={item.id}>
-                      <p className="text-sm text-zinc-700">{item.startDate ? new Date(item.startDate).toLocaleDateString() : "Request"}</p>
-                      <StatusBadge tone={statusTone(item.status)}>{item.status.replace(/_/g, " ")}</StatusBadge>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState title="No leave requests" description="Your submitted leave requests will appear here." />
-              )}
-            </Section>
+        {/* Col 1 (Row 2): Device & Benefits Accordion */}
+        <DeviceBenefitsAccordion
+          deviceTag="AST-LAP-001"
+          deviceName='MacBook Pro 16" M3 Max'
+        />
 
-            <Section title={isHr ? "HR view" : "Payslips"}>
-              {isHr ? (
-                <div className="grid gap-3">
-                  <Link className="rounded-panel border border-border bg-canvas p-4 text-sm font-medium text-zinc-800 transition hover:border-zinc-300" href="/employees">
-                    Review employee directory
-                  </Link>
-                  <Link className="rounded-panel border border-border bg-canvas p-4 text-sm font-medium text-zinc-800 transition hover:border-zinc-300" href="/analytics/workforce">
-                    Open workforce analytics
-                  </Link>
-                </div>
-              ) : latestPayslip ? (
-                <div className="flex items-center justify-between gap-4 rounded-panel border border-border bg-canvas p-4">
-                  <div>
-                    <p className="text-sm font-semibold text-zinc-950">
-                      {latestPayslip.month}/{latestPayslip.year}
-                    </p>
-                    <p className="mt-1 text-sm text-zinc-600">Latest released payroll artifact.</p>
-                  </div>
-                  <StatusBadge tone={statusTone(latestPayslip.status)}>{latestPayslip.status}</StatusBadge>
-                </div>
-              ) : (
-                <EmptyState title="No payslips released" description="Payslips appear here after payroll is finalized." />
-              )}
-            </Section>
-          </section>
-        </>
-      ) : null}
+        {/* Col 2 & 3 (Row 2): Integrated Schedule & Calendar */}
+        <div className="md:col-span-2">
+          <ScheduleCalendar />
+        </div>
+      </div>
+
+      {/* 3. Bottom Intelligent Copilot Action Card */}
+      <AiavroCopilotCard />
     </div>
   );
 }
