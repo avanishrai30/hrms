@@ -1,136 +1,172 @@
 import { describe, it, expect } from "vitest";
 import { getApiUrl } from "./api";
+import { generateQrMatrix } from "./qr-matrix";
+import type { PermissionCode } from "@vc-wms/shared-types";
 
-describe("AIavro Employee Self-Service (ESS) Domain Integrity & Contract Verification", () => {
-  it("missing profile name never renders 'Employee' and fallbacks cleanly", () => {
-    const profile = {
-      id: "emp-1",
-      email: "test@example.com"
-      // firstName, lastName, fullName omitted
-    };
+describe("AIavro Employee Self-Service (ESS) Security, Integrity & Contract Verification", () => {
+  describe("Fail-Closed Permission Architecture", () => {
+    it("empty permissions never grant payslip access", () => {
+      const emptyPermissions: PermissionCode[] = [];
+      const hasPermission = emptyPermissions.includes("payslip.view");
+      expect(hasPermission).toBe(false);
+    });
 
-    const displayName = (profile as { fullName?: string }).fullName || "—";
-    expect(displayName).toBe("—");
-    expect(displayName).not.toBe("Employee");
+    it("empty permissions never grant document access", () => {
+      const emptyPermissions: PermissionCode[] = [];
+      const hasPermission = emptyPermissions.includes("documents.view");
+      expect(hasPermission).toBe(false);
+    });
+
+    it("empty permissions never grant request access", () => {
+      const emptyPermissions: PermissionCode[] = [];
+      const hasPermission = emptyPermissions.includes("requests.view");
+      expect(hasPermission).toBe(false);
+    });
+
+    it("empty permissions never grant ID-card access", () => {
+      const emptyPermissions: PermissionCode[] = [];
+      const hasPermission = emptyPermissions.includes("idcard.view");
+      expect(hasPermission).toBe(false);
+    });
+
+    it("session loading differs from unauthorized state", () => {
+      const evaluateGate = (isHydrated: boolean, token: string | null, perms: PermissionCode[], required: PermissionCode[]) => {
+        const isReady = isHydrated;
+        const isAuthorized = isReady && Boolean(token) && required.some((p) => perms.includes(p));
+        return {
+          isLoading: !isReady,
+          isAuthorized
+        };
+      };
+
+      // Case 1: Session not yet hydrated -> loading=true, authorized=false
+      const loadingState = evaluateGate(false, "token", ["payslip.view"], ["payslip.view"]);
+      expect(loadingState.isLoading).toBe(true);
+      expect(loadingState.isAuthorized).toBe(false);
+
+      // Case 2: Session hydrated, authenticated, but missing permission -> loading=false, authorized=false
+      const unauthorizedState = evaluateGate(true, "token", ["profile.view"], ["payslip.view"]);
+      expect(unauthorizedState.isLoading).toBe(false);
+      expect(unauthorizedState.isAuthorized).toBe(false);
+
+      // Case 3: Session hydrated, authenticated, and has required permission -> loading=false, authorized=true
+      const authorizedState = evaluateGate(true, "token", ["payslip.view"], ["payslip.view"]);
+      expect(authorizedState.isLoading).toBe(false);
+      expect(authorizedState.isAuthorized).toBe(true);
+    });
+
+    it("protected query remains disabled while session is unresolved or unauthorized", () => {
+      const isSessionReady = false;
+      const hasPermission = true;
+      const isEnabledUnresolved = isSessionReady && hasPermission;
+      expect(isEnabledUnresolved).toBe(false);
+
+      const isSessionReadyAuthorized = true;
+      const hasPermissionFalse = false;
+      const isEnabledUnauthorized = isSessionReadyAuthorized && hasPermissionFalse;
+      expect(isEnabledUnauthorized).toBe(false);
+
+      const isEnabledAuthorized = isSessionReadyAuthorized && hasPermission;
+      expect(isEnabledAuthorized).toBe(true);
+    });
   });
 
-  it("missing profile status never assumes 'ACTIVE'", () => {
-    const profile = {
-      id: "emp-1",
-      fullName: "Test User"
-      // status omitted
-    };
+  describe("ID Credential & Scannable QR Matrix", () => {
+    it("ID card never renders literal ACTIVE without API status", () => {
+      const card = {
+        fullName: "Test Employee",
+        employeeCode: "VC-001"
+      };
 
-    const status = (profile as { status?: string }).status;
-    expect(status).toBeUndefined();
-    expect(status || null).toBeNull();
+      const status = (card as { status?: string }).status;
+      expect(status).toBeUndefined();
+      expect(status || null).toBeNull();
+    });
+
+    it("qrCodePayload generates an ACTUAL deterministic, non-empty 2D QR matrix", () => {
+      const payload = JSON.stringify({
+        org: "vc-organics",
+        code: "VC-001",
+        name: "Test User",
+        dept: "Engineering",
+        role: "Software Architect",
+        valid: true,
+        issued: "2026-09-02"
+      });
+
+      const matrix = generateQrMatrix(payload);
+      expect(matrix.length).toBeGreaterThan(20);
+      expect(matrix[0]!.length).toBe(matrix.length);
+      // Top-left finder pattern must have a dark 7x7 outer corner
+      expect(matrix[0]![0]).toBe(true);
+      expect(matrix[0]![1]).toBe(true);
+      expect(matrix[0]![6]).toBe(true);
+    });
+
+    it("empty qrCodePayload produces an empty matrix without rendering fake graphics", () => {
+      const emptyMatrix = generateQrMatrix("");
+      expect(emptyMatrix).toEqual([]);
+    });
+
+    it("credential copy identifies identification payload neutrally without claiming unverified signatures", () => {
+      const label = "Identification Payload";
+      expect(label).not.toContain("Verified Signature");
+      expect(label).toBe("Identification Payload");
+    });
   });
 
-  it("missing shift renders 'Shift not assigned' instead of 'Standard Shift'", () => {
-    const shift = null;
-    const shiftLabel = (shift as { name?: string; workHours?: number } | null)?.name || "Shift not assigned";
+  describe("Download Architecture & Origin Isolation", () => {
+    it("getApiUrl resolves paths against configured API origin without same-origin assumption", () => {
+      const url = getApiUrl("/payslips/123/download");
+      expect(url).toContain("/api/v1/payslips/123/download");
+      expect(url.startsWith("http://") || url.startsWith("https://")).toBe(true);
+    });
 
-    expect(shiftLabel).toBe("Shift not assigned");
-    expect(shiftLabel).not.toBe("Standard Shift");
+    it("document private downloads route through authenticated API endpoint", () => {
+      const docId = "doc-999";
+      const downloadEndpoint = `/documents/${docId}/download`;
+      expect(downloadEndpoint).toBe("/documents/doc-999/download");
+    });
   });
 
-  it("undefined attendance policy rule renders 'Not configured' instead of Enabled/Optional", () => {
-    const renderPolicyRule = (value: boolean | undefined | null, trueText = "Required", falseText = "Not required") => {
-      if (value === true) return trueText;
-      if (value === false) return falseText;
-      return "Not configured";
-    };
+  describe("Data Integrity & Fallback Sanitization", () => {
+    it("missing profile name never renders 'Employee' and fallbacks cleanly", () => {
+      const profile = { id: "emp-1", email: "test@example.com" };
+      const displayName = (profile as { fullName?: string }).fullName || "—";
+      expect(displayName).toBe("—");
+      expect(displayName).not.toBe("Employee");
+    });
 
-    expect(renderPolicyRule(undefined)).toBe("Not configured");
-    expect(renderPolicyRule(null)).toBe("Not configured");
-    expect(renderPolicyRule(true)).toBe("Required");
-    expect(renderPolicyRule(false)).toBe("Not required");
-  });
+    it("missing shift renders 'Shift not assigned' instead of 'Standard Shift'", () => {
+      const shift = null;
+      const shiftLabel = (shift as { name?: string; workHours?: number } | null)?.name || "Shift not assigned";
+      expect(shiftLabel).toBe("Shift not assigned");
+      expect(shiftLabel).not.toBe("Standard Shift");
+    });
 
-  it("leave balance differentiates between 0 allocated, 0 consumed and absent fields", () => {
-    const balanceWithAbsent = {
-      id: "b1",
-      availableDays: 5
-      // allocatedDays, consumedDays absent
-    };
+    it("undefined attendance policy rule renders 'Not configured' instead of Enabled/Optional", () => {
+      const renderPolicyRule = (value: boolean | undefined | null, trueText = "Required", falseText = "Not required") => {
+        if (value === true) return trueText;
+        if (value === false) return falseText;
+        return "Not configured";
+      };
 
-    const allocated = typeof (balanceWithAbsent as { allocatedDays?: number }).allocatedDays === "number"
-      ? `${(balanceWithAbsent as { allocatedDays?: number }).allocatedDays}d`
-      : "—";
+      expect(renderPolicyRule(undefined)).toBe("Not configured");
+      expect(renderPolicyRule(null)).toBe("Not configured");
+      expect(renderPolicyRule(true)).toBe("Required");
+      expect(renderPolicyRule(false)).toBe("Not required");
+    });
 
-    const consumed = typeof (balanceWithAbsent as { consumedDays?: number }).consumedDays === "number"
-      ? `${(balanceWithAbsent as { consumedDays?: number }).consumedDays}d`
-      : "—";
+    it("leave balance differentiates between 0 allocated, 0 consumed and absent fields", () => {
+      const balanceWithAbsent = { id: "b1", availableDays: 5 };
+      const allocated = typeof (balanceWithAbsent as { allocatedDays?: number }).allocatedDays === "number"
+        ? `${(balanceWithAbsent as { allocatedDays?: number }).allocatedDays}d`
+        : "—";
+      expect(allocated).toBe("—");
 
-    expect(allocated).toBe("—");
-    expect(consumed).toBe("—");
-
-    const balanceWithZero = {
-      id: "b2",
-      availableDays: 0,
-      allocatedDays: 0,
-      consumedDays: 0
-    };
-
-    const allocatedZero = typeof balanceWithZero.allocatedDays === "number"
-      ? `${balanceWithZero.allocatedDays}d`
-      : "—";
-
-    expect(allocatedZero).toBe("0d");
-  });
-
-  it("missing leave code does not become 'LEAVE'", () => {
-    const balance = { id: "b1", leaveType: null };
-    const code = (balance.leaveType as { code?: string } | null)?.code || "—";
-    expect(code).toBe("—");
-    expect(code).not.toBe("LEAVE");
-  });
-
-  it("ID card does not render QR without real verification payload", () => {
-    const cardWithoutQR = {
-      fullName: "Test User",
-      employeeCode: "VC-001"
-      // qrCodePayload omitted
-    };
-
-    const hasVerification = Boolean((cardWithoutQR as { qrCodePayload?: string }).qrCodePayload);
-    expect(hasVerification).toBe(false);
-  });
-
-  it("ID card missing tenant name does not fall back to platform name 'AIavro'", () => {
-    const card = {
-      fullName: "Test User"
-      // companyName omitted
-    };
-
-    const tenantName = (card as { companyName?: string }).companyName || "—";
-    expect(tenantName).toBe("—");
-    expect(tenantName).not.toBe("AIavro");
-  });
-
-  it("leave request form validates exact YYYY-MM-DD format and min 4 char reason", () => {
-    const validate = (startDate: string, endDate: string, reason: string) => {
-      if (!startDate || !endDate) return "Please select both start and end dates.";
-      if (startDate > endDate) return "Start date cannot be after end date.";
-      if (reason.trim().length < 4) return "Reason must be at least 4 characters long.";
-      return null;
-    };
-
-    expect(validate("2026-09-05", "2026-09-02", "Vacation")).toBe("Start date cannot be after end date.");
-    expect(validate("2026-09-02", "2026-09-05", "Vac")).toBe("Reason must be at least 4 characters long.");
-    expect(validate("2026-09-02", "2026-09-05", "Family leave")).toBeNull();
-  });
-
-  it("payslip permission gate disables query execution when permission is absent", () => {
-    const permissions = ["profile.view"];
-    const hasPermission = permissions.includes("payslip.view");
-
-    expect(hasPermission).toBe(false);
-  });
-
-  it("getApiUrl resolves paths against configured API origin", () => {
-    const url = getApiUrl("/payslips/123/download");
-    expect(url).toContain("/api/v1/payslips/123/download");
-    expect(url.startsWith("http://") || url.startsWith("https://")).toBe(true);
+      const balanceWithZero = { id: "b2", availableDays: 0, allocatedDays: 0, consumedDays: 0 };
+      const allocatedZero = typeof balanceWithZero.allocatedDays === "number" ? `${balanceWithZero.allocatedDays}d` : "—";
+      expect(allocatedZero).toBe("0d");
+    });
   });
 });

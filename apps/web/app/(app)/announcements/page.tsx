@@ -5,20 +5,20 @@ import {
   Pin,
   CheckCircle2,
   Inbox,
-  AlertCircle
+  AlertCircle,
+  ShieldCheck
 } from "lucide-react";
 import {
   useAnnouncements,
   useAcknowledgeAnnouncementMutation
 } from "../../../lib/queries/use-ess-queries";
-import { useSessionStore } from "../../../lib/session-store";
+import { usePermissionGate } from "../../../lib/session-store";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
 export default function TenantAnnouncementsPage() {
-  const permissions = useSessionStore((state) => state.permissions) || [];
-  const hasPermission = permissions.length === 0 || permissions.includes("announcements.view") || permissions.includes("ess.read");
+  const gate = usePermissionGate(["announcements.view", "ess.read"]);
 
-  const { data: announcements = [], isLoading, isError, refetch } = useAnnouncements(hasPermission);
+  const { data: announcements = [], isLoading, isError, refetch } = useAnnouncements(gate.isAuthorized);
   const ackMutation = useAcknowledgeAnnouncementMutation();
 
   const handleAcknowledge = async (id: string) => {
@@ -28,6 +28,32 @@ export default function TenantAnnouncementsPage() {
       alert(err instanceof Error ? err.message : "Failed to acknowledge announcement");
     }
   };
+
+  if (gate.isLoading || (gate.isAuthorized && isLoading)) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6 animate-pulse">
+        <div className="h-8 w-64 rounded-control bg-surface-muted/60" />
+        <div className="space-y-4">
+          <SkeletonLoader className="h-32 rounded-card" />
+          <SkeletonLoader className="h-28 rounded-card" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!gate.isAuthorized) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Announcements Access Restricted</h2>
+          <p className="text-xs text-foreground-muted">
+            You do not have permission (`announcements.view`) to access organization announcements.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const pinnedAnnouncements = announcements.filter((a) => a.isPinned);
   const regularAnnouncements = announcements.filter((a) => !a.isPinned);
@@ -43,12 +69,7 @@ export default function TenantAnnouncementsPage() {
       </div>
 
       {/* 2. Announcements Stream */}
-      {isLoading ? (
-        <div className="space-y-4">
-          <SkeletonLoader className="h-32 rounded-card" />
-          <SkeletonLoader className="h-28 rounded-card" />
-        </div>
-      ) : isError ? (
+      {isError ? (
         <div className="p-8 rounded-card bg-surface-raised border border-border-subtle text-center space-y-3">
           <AlertCircle className="w-6 h-6 text-danger mx-auto" />
           <p className="text-xs font-semibold text-foreground">Announcements unavailable</p>

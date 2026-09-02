@@ -11,21 +11,38 @@ import {
   HeartHandshake,
   AlertCircle,
   QrCode,
-  FileText
+  FileText,
+  ShieldCheck
 } from "lucide-react";
 import { useProfile } from "../../../lib/queries/use-ess-queries";
+import { usePermissionGate } from "../../../lib/session-store";
 
 export default function EmployeeProfilePage() {
+  const gate = usePermissionGate(["profile.view", "ess.read"]);
   const [activeTab, setActiveTab] = useState<"work" | "personal" | "emergency">("work");
-  const { data: profile, isLoading, isError, refetch } = useProfile();
+  const { data: profile, isLoading, isError, refetch } = useProfile(gate.isAuthorized);
 
-  if (isLoading) {
+  if (gate.isLoading || (gate.isAuthorized && isLoading)) {
     return (
       <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-pulse">
         <div className="h-44 rounded-card bg-surface-muted/60 border border-border-subtle" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="h-72 rounded-card bg-surface-muted/60 border border-border-subtle" />
           <div className="md:col-span-2 h-72 rounded-card bg-surface-muted/60 border border-border-subtle" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!gate.isAuthorized) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Profile Access Restricted</h2>
+          <p className="text-xs text-foreground-muted">
+            You do not have permission (`profile.view`) to access your employee profile.
+          </p>
         </div>
       </div>
     );

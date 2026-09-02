@@ -5,23 +5,22 @@ import {
   Download,
   RotateCw,
   ShieldCheck,
-  QrCode,
   AlertCircle
 } from "lucide-react";
 import { useIdCard } from "../../../lib/queries/use-ess-queries";
-import { useSessionStore } from "../../../lib/session-store";
+import { usePermissionGate } from "../../../lib/session-store";
 import { downloadAuthenticatedFile } from "../../../lib/api";
+import { QrMatrixView } from "../../../components/aiavro/id-card/qr-matrix-view";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
 export default function DigitalIdCardPage() {
-  const permissions = useSessionStore((state) => state.permissions) || [];
-  const hasPermission = permissions.length === 0 || permissions.includes("idcard.view") || permissions.includes("ess.read");
+  const gate = usePermissionGate(["idcard.view", "ess.read"]);
 
   const [flipped, setFlipped] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
-  const { data: card, isLoading, isError, refetch } = useIdCard(hasPermission);
+  const { data: card, isLoading, isError, refetch } = useIdCard(gate.isAuthorized);
 
   const handleDownload = async () => {
     try {
@@ -35,11 +34,25 @@ export default function DigitalIdCardPage() {
     }
   };
 
-  if (isLoading) {
+  if (gate.isLoading || (gate.isAuthorized && isLoading)) {
     return (
       <div className="p-8 max-w-md mx-auto flex flex-col items-center space-y-4 animate-pulse">
         <SkeletonLoader className="h-6 w-48" />
         <SkeletonLoader className="w-80 h-[460px] rounded-panel" />
+      </div>
+    );
+  }
+
+  if (!gate.isAuthorized) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Digital Credential Access Restricted</h2>
+          <p className="text-xs text-foreground-muted">
+            You do not have permission (`idcard.view`) to access digital ID credentials.
+          </p>
+        </div>
       </div>
     );
   }
@@ -67,7 +80,7 @@ export default function DigitalIdCardPage() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6 flex flex-col items-center animate-in fade-in duration-300">
       <div className="text-center space-y-1">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Digital Identity Credential</h1>
-        <p className="text-xs text-foreground-muted">Official verified workplace badge with dynamic credential verification</p>
+        <p className="text-xs text-foreground-muted">Digital employee workplace badge and identification record</p>
       </div>
 
       {downloadError && (
@@ -120,15 +133,11 @@ export default function DigitalIdCardPage() {
               </div>
             </div>
 
-            {/* Bottom ID Code & Chip */}
+            {/* Bottom ID Code */}
             <div className="pt-3 border-t border-white/10 flex items-center justify-between">
               <div>
                 <span className="text-[9px] text-purple-300/70 uppercase block">Employee Code</span>
                 <span className="text-xs font-mono font-bold text-white">{card.employeeCode || "—"}</span>
-              </div>
-
-              <div className="px-2 py-1 rounded bg-white/10 text-[9px] font-mono font-bold text-purple-200">
-                ACTIVE
               </div>
             </div>
           </div>
@@ -138,7 +147,7 @@ export default function DigitalIdCardPage() {
             <div>
               <div className="w-14 h-2 rounded-pill bg-white/20 mx-auto mb-4" />
               <h3 className="text-xs font-bold text-white uppercase tracking-wider text-center pb-2 border-b border-white/10">
-                Credential Verification
+                Identification Details
               </h3>
             </div>
 
@@ -160,18 +169,12 @@ export default function DigitalIdCardPage() {
               </div>
             </div>
 
-            {/* Verification Block */}
-            <div className="text-center pt-3 border-t border-white/10">
+            {/* Actual Scannable QR Matrix Block */}
+            <div className="text-center pt-3 border-t border-white/10 flex flex-col items-center">
+              <QrMatrixView payload={card.qrCodePayload} size={100} />
               {card.qrCodePayload ? (
-                <div>
-                  <div className="w-16 h-16 rounded bg-white text-zinc-950 mx-auto flex items-center justify-center p-1 mb-2">
-                    <QrCode className="w-12 h-12" />
-                  </div>
-                  <p className="text-[10px] text-purple-300/70 font-mono">Verified Credential Payload</p>
-                </div>
-              ) : (
-                <p className="text-[10px] text-purple-300/70 font-mono py-4">Digital verification not available</p>
-              )}
+                <p className="text-[10px] text-purple-300/70 font-mono mt-1">Identification Payload</p>
+              ) : null}
             </div>
           </div>
         </div>

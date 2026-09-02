@@ -12,14 +12,17 @@ import {
   useAttendanceHistory,
   usePunchMutation
 } from "../../../lib/queries/use-ess-queries";
+import { usePermissionGate } from "../../../lib/session-store";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
 export default function EmployeeAttendancePage() {
+  const gate = usePermissionGate(["attendance.view", "ess.read"]);
+
   const [punchNote, setPunchNote] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const todayQuery = useAttendanceToday();
-  const historyQuery = useAttendanceHistory();
+  const todayQuery = useAttendanceToday(gate.isAuthorized);
+  const historyQuery = useAttendanceHistory(undefined, undefined, gate.isAuthorized);
   const punchMutation = usePunchMutation();
 
   const todayData = todayQuery.data;
@@ -71,6 +74,32 @@ export default function EmployeeAttendancePage() {
     if (value === false) return falseText;
     return "Not configured";
   };
+
+  if (gate.isLoading || (gate.isAuthorized && todayQuery.isLoading)) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-pulse">
+        <div className="h-8 w-64 rounded-control bg-surface-muted/60" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="md:col-span-2 h-72 rounded-card bg-surface-muted/60" />
+          <div className="h-72 rounded-card bg-surface-muted/60" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!gate.isAuthorized) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Attendance Tracking Restricted</h2>
+          <p className="text-xs text-foreground-muted">
+            You do not have permission (`attendance.view`) to access time & attendance tracking.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const shiftLabel = shift?.name || (shift?.workHours ? `${shift.workHours}h Shift` : "Shift not assigned");
 

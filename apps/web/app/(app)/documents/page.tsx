@@ -9,14 +9,16 @@ import {
   AlertCircle,
   X,
   Send,
-  ExternalLink
+  Download,
+  ShieldCheck
 } from "lucide-react";
 import {
   useEmployeeDocuments,
   useUploadDocumentMutation,
   useDeleteDocumentMutation
 } from "../../../lib/queries/use-ess-queries";
-import { useSessionStore } from "../../../lib/session-store";
+import { usePermissionGate } from "../../../lib/session-store";
+import { apiRequest } from "../../../lib/api";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
 const DOCUMENT_TYPES = [
@@ -34,17 +36,18 @@ const DOCUMENT_TYPES = [
 ];
 
 export default function EmployeeDocumentsPage() {
-  const permissions = useSessionStore((state) => state.permissions) || [];
-  const hasPermission = permissions.length === 0 || permissions.includes("documents.view") || permissions.includes("ess.read");
+  const gate = usePermissionGate(["documents.view", "ess.read"]);
 
   const [selectedType, setSelectedType] = useState("ALL");
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [documentType, setDocumentType] = useState("PAN");
   const [title, setTitle] = useState("");
   const [fileName, setFileName] = useState("");
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const { data: documents = [], isLoading, isError, refetch } = useEmployeeDocuments(hasPermission);
+  const { data: documents = [], isLoading, isError, refetch } = useEmployeeDocuments(gate.isAuthorized);
   const uploadMutation = useUploadDocumentMutation();
   const deleteMutation = useDeleteDocumentMutation();
 
@@ -71,6 +74,29 @@ export default function EmployeeDocumentsPage() {
     }
   };
 
+  const handleDownload = async (docId: string, docName: string) => {
+    try {
+      setActionError(null);
+      setDownloadingId(docId);
+      const res = await apiRequest<{ downloadUrl: string; fileName?: string }>(`/documents/${docId}/download`);
+      if (!res?.downloadUrl) {
+        throw new Error("No download URL returned from secure storage.");
+      }
+      const a = document.createElement("a");
+      a.href = res.downloadUrl;
+      a.download = res.fileName || docName || "document.pdf";
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : "Failed to retrieve secure document download URL.");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!window.confirm("Are you sure you want to remove this document record?")) return;
     try {
@@ -79,6 +105,33 @@ export default function EmployeeDocumentsPage() {
       alert(err instanceof Error ? err.message : "Failed to delete document");
     }
   };
+
+  if (gate.isLoading || (gate.isAuthorized && isLoading)) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-pulse">
+        <div className="h-8 w-64 rounded-control bg-surface-muted/60" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <SkeletonLoader className="h-32 rounded-card" />
+          <SkeletonLoader className="h-32 rounded-card" />
+          <SkeletonLoader className="h-32 rounded-card" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!gate.isAuthorized) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Document Vault Access Restricted</h2>
+          <p className="text-xs text-foreground-muted">
+            You do not have permission (`documents.view`) to access the document vault.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const filteredDocs =
     selectedType === "ALL" ? documents : documents.filter((d) => d.documentType === selectedType);
@@ -103,6 +156,13 @@ export default function EmployeeDocumentsPage() {
         </button>
       </div>
 
+      {actionError && (
+        <div className="p-3 rounded-control bg-danger/10 border border-danger/20 text-danger text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{actionError}</span>
+        </div>
+      )}
+
       {/* 2. Type Filter Pills */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         {DOCUMENT_TYPES.map((t) => (
@@ -121,13 +181,7 @@ export default function EmployeeDocumentsPage() {
       </div>
 
       {/* 3. Document Cards Grid */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <SkeletonLoader className="h-32 rounded-card" />
-          <SkeletonLoader className="h-32 rounded-card" />
-          <SkeletonLoader className="h-32 rounded-card" />
-        </div>
-      ) : isError ? (
+      {isError ? (
         <div className="p-8 rounded-card bg-surface-raised border border-border-subtle text-center space-y-3">
           <AlertCircle className="w-6 h-6 text-danger mx-auto" />
           <p className="text-xs font-semibold text-foreground">Documents vault unavailable</p>
@@ -164,17 +218,14 @@ export default function EmployeeDocumentsPage() {
                 </span>
 
                 <div className="flex items-center gap-2">
-                  {doc.downloadUrl && (
-                    <a
-                      href={doc.downloadUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1.5 rounded-control hover:bg-surface-muted text-foreground-secondary transition"
-                      title="Open Document Link"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  )}
+                  <button
+                    onClick={() => handleDownload(doc.id, doc.fileName)}
+                    disabled={downloadingId === doc.id}
+                    className="p-1.5 rounded-control hover:bg-surface-muted text-foreground-secondary transition disabled:opacity-50"
+                    title="Download Secure Document"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
                   <button
                     onClick={() => handleDelete(doc.id)}
                     disabled={deleteMutation.isPending}

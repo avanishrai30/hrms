@@ -14,14 +14,15 @@ import {
   MapPin,
   CreditCard,
   UserCheck,
-  Calendar
+  Calendar,
+  ShieldCheck
 } from "lucide-react";
 import {
   useEmployeeRequests,
   useSubmitEmployeeRequest,
   useCancelEmployeeRequest
 } from "../../../lib/queries/use-ess-queries";
-import { useSessionStore } from "../../../lib/session-store";
+import { usePermissionGate } from "../../../lib/session-store";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
 const REQUEST_TYPES = [
@@ -36,8 +37,7 @@ const REQUEST_TYPES = [
 ];
 
 export default function EmployeeRequestsPage() {
-  const permissions = useSessionStore((state) => state.permissions) || [];
-  const hasPermission = permissions.length === 0 || permissions.includes("requests.view") || permissions.includes("ess.read");
+  const gate = usePermissionGate(["requests.view", "ess.read"]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [requestType, setRequestType] = useState(REQUEST_TYPES[0]!.value);
@@ -45,7 +45,7 @@ export default function EmployeeRequestsPage() {
   const [comments, setComments] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
-  const { data: requests = [], isSuccess, isLoading, isError, refetch } = useEmployeeRequests(hasPermission);
+  const { data: requests = [], isSuccess, isLoading, isError, refetch } = useEmployeeRequests(gate.isAuthorized);
   const submitMutation = useSubmitEmployeeRequest();
   const cancelMutation = useCancelEmployeeRequest();
 
@@ -80,6 +80,33 @@ export default function EmployeeRequestsPage() {
       alert(err instanceof Error ? err.message : "Failed to cancel request");
     }
   };
+
+  if (gate.isLoading || (gate.isAuthorized && isLoading)) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-pulse">
+        <div className="h-8 w-64 rounded-control bg-surface-muted/60" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <SkeletonLoader className="h-20 rounded-card" />
+          <SkeletonLoader className="h-20 rounded-card" />
+          <SkeletonLoader className="h-20 rounded-card" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!gate.isAuthorized) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Service Desk Access Restricted</h2>
+          <p className="text-xs text-foreground-muted">
+            You do not have permission (`requests.view`) to access employee service requests.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const totalCount = isSuccess ? requests.length : null;
   const pendingCount = isSuccess ? requests.filter((r) => r.status.includes("PENDING")).length : null;
@@ -148,13 +175,7 @@ export default function EmployeeRequestsPage() {
       <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4">
         <h3 className="text-sm font-bold text-foreground">Service Request History</h3>
 
-        {isLoading ? (
-          <div className="space-y-2">
-            <SkeletonLoader className="h-12 w-full rounded-control" />
-            <SkeletonLoader className="h-12 w-full rounded-control" />
-            <SkeletonLoader className="h-12 w-full rounded-control" />
-          </div>
-        ) : isError ? (
+        {isError ? (
           <div className="py-8 text-center text-xs text-foreground-muted">
             <p>Unable to load service requests.</p>
             <button onClick={() => refetch()} className="mt-2 text-primary font-bold hover:underline">

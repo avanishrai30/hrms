@@ -101,8 +101,15 @@ export function getApiUrl(path: string): string {
   return `${API_BASE_URL}${normalizedPath}`;
 }
 
+function sanitizeFilename(name: string, fallback: string): string {
+  if (!name || typeof name !== "string") return fallback;
+  // Strip paths and control characters
+  const clean = name.replace(/^.*[\\/]/, "").replace(/[^a-zA-Z0-9._-]/g, "_").trim();
+  return clean || fallback;
+}
+
 export async function downloadAuthenticatedFile(path: string, defaultFilename: string = "download.pdf"): Promise<void> {
-  const token = getAccessToken();
+  let token = getAccessToken();
   let response = await fetch(getApiUrl(path), {
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -113,17 +120,27 @@ export async function downloadAuthenticatedFile(path: string, defaultFilename: s
   if (response.status === 401) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
+      token = refreshed;
       response = await fetch(getApiUrl(path), {
         headers: {
-          Authorization: `Bearer ${refreshed}`
+          Authorization: `Bearer ${token}`
         },
         credentials: "include"
       });
+    } else {
+      setAccessToken(null);
+      notifySessionExpired(path);
+      throw new ApiClientError("Your session has expired. Sign in again to download.", 401);
     }
   }
 
   if (!response.ok) {
-    throw new ApiClientError("Failed to download file.", response.status);
+    const body = await response.text();
+    if (response.status === 401) {
+      setAccessToken(null);
+      notifySessionExpired(path);
+    }
+    throw new ApiClientError(normalizeApiError(response.status, body), response.status);
   }
 
   const contentDisposition = response.headers.get("Content-Disposition");
@@ -131,17 +148,22 @@ export async function downloadAuthenticatedFile(path: string, defaultFilename: s
   if (contentDisposition) {
     const match = contentDisposition.match(/filename=["']?([^"';]+)["']?/);
     if (match && match[1]) {
-      filename = match[1];
+      filename = sanitizeFilename(match[1], defaultFilename);
     }
   }
 
   const blob = await response.blob();
   const url = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.URL.revokeObjectURL(url);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    window.setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+    }, 1000);
+  }
 }

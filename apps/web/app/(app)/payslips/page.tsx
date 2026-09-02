@@ -9,7 +9,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { useMyPayslips } from "../../../lib/queries/use-ess-queries";
-import { useSessionStore } from "../../../lib/session-store";
+import { usePermissionGate } from "../../../lib/session-store";
 import { downloadAuthenticatedFile } from "../../../lib/api";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
@@ -19,10 +19,9 @@ const MONTH_NAMES = [
 ];
 
 export default function EmployeePayslipsPage() {
-  const permissions = useSessionStore((state) => state.permissions) || [];
-  const hasPermission = permissions.length === 0 || permissions.includes("payslip.view") || permissions.includes("payroll.view");
+  const gate = usePermissionGate(["payslip.view", "payroll.view"]);
 
-  const { data: payslips = [], isLoading, isError, refetch } = useMyPayslips(hasPermission);
+  const { data: payslips = [], isLoading, isError, refetch } = useMyPayslips(gate.isAuthorized);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -38,7 +37,19 @@ export default function EmployeePayslipsPage() {
     }
   };
 
-  if (!hasPermission) {
+  if (gate.isLoading || (gate.isAuthorized && isLoading)) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 animate-pulse">
+        <div className="h-8 w-64 rounded-control bg-surface-muted/60" />
+        <div className="space-y-3">
+          <SkeletonLoader className="h-24 w-full rounded-card" />
+          <SkeletonLoader className="h-24 w-full rounded-card" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!gate.isAuthorized) {
     return (
       <div className="p-8 max-w-lg mx-auto text-center mt-12">
         <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
@@ -71,12 +82,7 @@ export default function EmployeePayslipsPage() {
 
       {/* 2. Payslip Cards List */}
       <div className="space-y-4">
-        {isLoading ? (
-          <div className="space-y-3">
-            <SkeletonLoader className="h-24 w-full rounded-card" />
-            <SkeletonLoader className="h-24 w-full rounded-card" />
-          </div>
-        ) : isError ? (
+        {isError ? (
           <div className="p-8 rounded-card bg-surface-raised border border-border-subtle text-center space-y-3">
             <AlertCircle className="w-6 h-6 text-danger mx-auto" />
             <p className="text-xs font-semibold text-foreground">Payslips service unavailable</p>

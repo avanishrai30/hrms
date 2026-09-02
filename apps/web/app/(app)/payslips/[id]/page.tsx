@@ -3,7 +3,7 @@
 import { useEffect, useState, use } from "react";
 import type { Route } from "next";
 import Link from "next/link";
-import { apiRequest } from "../../../../lib/api";
+import { apiRequest, downloadAuthenticatedFile } from "../../../../lib/api";
 import type { PayslipView } from "@vc-wms/shared-types";
 
 export default function PayslipDetailPage({
@@ -32,8 +32,12 @@ export default function PayslipDetailPage({
     void loadData();
   }, [id]);
 
-  const handleDownload = () => {
-    window.open(`/api/v1/payslips/${id}/download`, "_blank");
+  const handleDownload = async () => {
+    try {
+      await downloadAuthenticatedFile(`/payslips/${id}/download`, `payslip_${id}.pdf`);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to download payslip");
+    }
   };
 
   const monthNames = [
