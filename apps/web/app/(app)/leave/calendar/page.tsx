@@ -1,48 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { Route } from "next";
+import React, { useState } from "react";
 import Link from "next/link";
-import { apiRequest } from "../../../../lib/api";
-import type { LeaveCalendarEventView } from "@vc-wms/shared-types";
+import type { Route } from "next";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { useHolidays, useLeaveRequests } from "../../../../lib/queries/use-ess-queries";
 
 export default function LeaveCalendarPage() {
-  const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  const [events, setEvents] = useState<LeaveCalendarEventView[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   const year = currentDate.getFullYear();
-  const month = currentDate.getMonth(); // 0-indexed
+  const month = currentDate.getMonth();
 
-  const firstDayOfMonth = new Date(Date.UTC(year, month, 1));
-  const lastDayOfMonth = new Date(Date.UTC(year, month + 1, 0));
-
-  const startDateStr = firstDayOfMonth.toISOString().split("T")[0] ?? "";
-  const endDateStr = lastDayOfMonth.toISOString().split("T")[0] ?? "";
-
-  const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
-
-  useEffect(() => {
-    async function load() {
-      try {
-        setIsLoading(true);
-        setError(null);
-        const data = await apiRequest<LeaveCalendarEventView[]>(
-          `/leaves/calendar?startDate=${startDateStr}&endDate=${endDateStr}`
-        );
-        setEvents(data);
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "Failed to load leave calendar.");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    void load();
-  }, [startDateStr, endDateStr]);
+  const { data: holidays = [] } = useHolidays(year);
+  const { data: leaveRequests = [] } = useLeaveRequests();
 
   const prevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1));
@@ -52,181 +23,122 @@ export default function LeaveCalendarPage() {
     setCurrentDate(new Date(year, month + 1, 1));
   };
 
-  const goToToday = () => {
-    setCurrentDate(new Date());
-  };
+  const monthName = currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
-  // Build grid of days
-  const startingDayOfWeek = firstDayOfMonth.getUTCDay(); // 0 = Sunday
-  const daysInMonth = lastDayOfMonth.getUTCDate();
+  // Compute calendar days for current month view
+  const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0 is Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  const calendarDays: Array<{ dayNumber: number | null; dateStr: string | null }> = [];
-
-  for (let i = 0; i < startingDayOfWeek; i++) {
-    calendarDays.push({ dayNumber: null, dateStr: null });
-  }
-
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dayDate = new Date(Date.UTC(year, month, d));
-    calendarDays.push({ dayNumber: d, dateStr: dayDate.toISOString().split("T")[0] ?? "" });
-  }
-
-  const holidays = events.filter((e) => e.type === "HOLIDAY");
+  // Create grid cells
+  const blanks = Array.from({ length: firstDayOfMonth }, (_, i) => i);
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Team & Holiday Calendar
-          </h1>
-          <p className="text-sm text-slate-500">
-            Track public holidays, team leaves, and workforce availability across the organization.
-          </p>
-        </div>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <button
-            onClick={goToToday}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition"
-          >
-            Today
-          </button>
-          <div className="flex items-center rounded-lg border border-slate-300 bg-white shadow-sm overflow-hidden">
-            <button
-              onClick={prevMonth}
-              className="px-3 py-1.5 text-slate-600 hover:bg-slate-50 text-sm font-semibold transition"
-            >
-              &larr;
-            </button>
-            <span className="px-4 py-1.5 text-xs font-semibold text-slate-900 border-x border-slate-200">
-              {monthNames[month]} {year}
-            </span>
-            <button
-              onClick={nextMonth}
-              className="px-3 py-1.5 text-slate-600 hover:bg-slate-50 text-sm font-semibold transition"
-            >
-              &rarr;
-            </button>
-          </div>
           <Link
             href={"/leave" as Route}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition"
+            className="w-8 h-8 rounded-pill bg-surface-muted hover:bg-muted flex items-center justify-center text-foreground-secondary transition"
           >
-            My Leaves
+            <ArrowLeft className="w-4 h-4" />
           </Link>
-        </div>
-      </div>
-
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {/* Main Calendar Grid */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="grid grid-cols-7 bg-slate-50 border-b border-slate-200 text-center text-xs font-semibold text-slate-500 py-2.5">
-          <div>Sun</div>
-          <div>Mon</div>
-          <div>Tue</div>
-          <div>Wed</div>
-          <div>Thu</div>
-          <div>Fri</div>
-          <div>Sat</div>
-        </div>
-
-        {isLoading ? (
-          <div className="p-16 text-center text-sm text-slate-500">Loading calendar events...</div>
-        ) : (
-          <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-slate-100 min-h-[520px]">
-            {calendarDays.map((cell, idx) => {
-              if (!cell.dayNumber || !cell.dateStr) {
-                return <div key={`empty-${idx}`} className="bg-slate-50/40 p-2 min-h-[90px]" />;
-              }
-
-              const dayEvents = events.filter((e) => {
-                if (e.endDate) {
-                  return cell.dateStr! >= e.date && cell.dateStr! <= e.endDate;
-                }
-                return e.date === cell.dateStr;
-              });
-
-              const isToday =
-                new Date().toISOString().split("T")[0] === cell.dateStr;
-
-              return (
-                <div
-                  key={cell.dateStr}
-                  className={`p-2 min-h-[90px] flex flex-col justify-between transition ${
-                    isToday ? "bg-emerald-50/30" : "hover:bg-slate-50/50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center ${
-                        isToday
-                          ? "bg-emerald-600 text-white"
-                          : "text-slate-700"
-                      }`}
-                    >
-                      {cell.dayNumber}
-                    </span>
-                  </div>
-
-                  <div className="mt-1 space-y-1 overflow-y-auto max-h-[80px]">
-                    {dayEvents.map((evt) => (
-                      <div
-                        key={evt.id + cell.dateStr}
-                        className="text-[10px] font-medium px-1.5 py-0.5 rounded truncate"
-                        style={{
-                          backgroundColor: `${evt.color}20`,
-                          color: evt.color,
-                          borderLeft: `2px solid ${evt.color}`
-                        }}
-                        title={evt.title}
-                      >
-                        {evt.title}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Time Off Schedule</h1>
+            <p className="text-xs text-foreground-muted">Monthly calendar of organization holidays and approved leave</p>
           </div>
-        )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={prevMonth}
+            className="p-2 rounded-control bg-surface-raised border border-border-subtle hover:bg-surface-muted text-foreground transition"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-xs font-bold text-foreground font-mono min-w-[120px] text-center">
+            {monthName}
+          </span>
+          <button
+            onClick={nextMonth}
+            className="p-2 rounded-control bg-surface-raised border border-border-subtle hover:bg-surface-muted text-foreground transition"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      {/* Holidays List */}
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-slate-900 mb-3">
-          Public Holidays in {monthNames[month]} {year}
-        </h2>
-        {holidays.length === 0 ? (
-          <p className="text-xs text-slate-500">No declared holidays for this month.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {holidays.map((h) => (
+      {/* Calendar Grid */}
+      <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card overflow-hidden">
+        {/* Day Header Row */}
+        <div className="grid grid-cols-7 gap-2 pb-3 mb-3 border-b border-border-subtle text-center text-xs font-bold text-foreground-muted">
+          <span>Sun</span>
+          <span>Mon</span>
+          <span>Tue</span>
+          <span>Wed</span>
+          <span>Thu</span>
+          <span>Fri</span>
+          <span>Sat</span>
+        </div>
+
+        {/* Day Cells */}
+        <div className="grid grid-cols-7 gap-2">
+          {blanks.map((b) => (
+            <div key={`blank-${b}`} className="min-h-[80px] p-2 rounded-card bg-surface-muted/20 border border-transparent" />
+          ))}
+
+          {days.map((d) => {
+            const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+            const isToday = new Date().toDateString() === new Date(year, month, d).toDateString();
+
+            const dayHolidays = holidays.filter((h) => h.date.startsWith(dateStr));
+            const dayLeaves = leaveRequests.filter((l) => {
+              if (!l.startDate || !l.endDate) return false;
+              return dateStr >= l.startDate.split("T")[0]! && dateStr <= l.endDate.split("T")[0]!;
+            });
+
+            return (
               <div
-                key={h.id}
-                className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 flex items-center justify-between text-xs"
+                key={d}
+                className={`min-h-[85px] p-2 rounded-card border transition flex flex-col justify-between ${
+                  isToday
+                    ? "bg-primary-soft/40 border-primary/40 shadow-sm"
+                    : "bg-surface-muted/40 hover:bg-surface-muted/70 border-border-subtle"
+                }`}
               >
-                <div>
-                  <div className="font-semibold text-amber-900">{h.title}</div>
-                  <div className="text-amber-700 mt-0.5">
-                    {new Date(h.date).toLocaleDateString(undefined, {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric"
-                    })}
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-mono font-bold ${isToday ? "text-primary font-black" : "text-foreground"}`}>
+                    {d}
+                  </span>
+                  {isToday && (
+                    <span className="w-1.5 h-1.5 rounded-pill bg-primary" />
+                  )}
                 </div>
-                <span className="text-[10px] font-bold uppercase bg-amber-200/80 text-amber-800 px-1.5 py-0.5 rounded">
-                  Holiday
-                </span>
+
+                <div className="space-y-1 mt-1">
+                  {dayHolidays.map((h) => (
+                    <div
+                      key={h.id}
+                      className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-950 text-[9px] font-bold truncate"
+                      title={h.name}
+                    >
+                      {h.name}
+                    </div>
+                  ))}
+                  {dayLeaves.map((l) => (
+                    <div
+                      key={l.id}
+                      className="px-1.5 py-0.5 rounded bg-primary-soft text-primary text-[9px] font-bold truncate"
+                      title={l.leaveType?.name || "Leave"}
+                    >
+                      {l.leaveType?.name || "Leave"} ({l.status})
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
-        )}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

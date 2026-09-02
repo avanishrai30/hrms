@@ -1,249 +1,147 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { Route } from "next";
-import Link from "next/link";
-import { Badge, Button, Input, Panel } from "../../../components/ui";
-import { apiRequest } from "../../../lib/api";
-import { getOfflineData, saveOfflineData } from "../../../lib/offline-storage";
-import type { AnnouncementPriority, AnnouncementView } from "@vc-wms/shared-types";
+import React from "react";
+import {
+  Pin,
+  CheckCircle2,
+  Inbox,
+  AlertCircle
+} from "lucide-react";
+import {
+  useAnnouncements,
+  useAcknowledgeAnnouncementMutation
+} from "../../../lib/queries/use-ess-queries";
+import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
-export default function AnnouncementsFeedPage() {
-  const [announcements, setAnnouncements] = useState<AnnouncementView[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+export default function TenantAnnouncementsPage() {
+  const { data: announcements = [], isLoading, isError, refetch } = useAnnouncements();
+  const ackMutation = useAcknowledgeAnnouncementMutation();
 
-  // New announcement form
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [priority, setPriority] = useState<AnnouncementPriority>("MEDIUM");
-  const [isPinned, setIsPinned] = useState(false);
-  const [creating, setCreating] = useState(false);
-
-  useEffect(() => {
-    loadAnnouncements();
-  }, []);
-
-  async function loadAnnouncements() {
+  const handleAcknowledge = async (id: string) => {
     try {
-      setLoading(true);
-      const res = await apiRequest<AnnouncementView[]>("/announcements");
-      setAnnouncements(res);
-      saveOfflineData("announcements_list", res);
+      await ackMutation.mutateAsync(id);
     } catch (err: unknown) {
-      const cached = getOfflineData<AnnouncementView[]>("announcements_list");
-      if (cached) {
-        setAnnouncements(cached);
-      } else {
-        setStatusMsg({
-          type: "error",
-          text: err instanceof Error ? err.message : "Failed to load announcements"
-        });
-      }
-    } finally {
-      setLoading(false);
+      alert(err instanceof Error ? err.message : "Failed to acknowledge announcement");
     }
-  }
+  };
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setCreating(true);
-    setStatusMsg(null);
-
-    try {
-      await apiRequest<AnnouncementView>("/announcements", {
-        method: "POST",
-        body: JSON.stringify({
-          title,
-          content,
-          priority,
-          isPinned,
-          notifyChannels: ["IN_APP", "PUSH"]
-        })
-      });
-      setStatusMsg({ type: "success", text: "Announcement published and broadcasted!" });
-      setShowCreateModal(false);
-      setTitle("");
-      setContent("");
-      setIsPinned(false);
-      loadAnnouncements();
-    } catch (err: unknown) {
-      setStatusMsg({
-        type: "error",
-        text: err instanceof Error ? err.message : "Failed to publish announcement"
-      });
-    } finally {
-      setCreating(false);
-    }
-  }
+  const pinnedAnnouncements = announcements.filter((a) => a.isPinned);
+  const regularAnnouncements = announcements.filter((a) => !a.isPinned);
 
   return (
-    <div className="p-4 sm:p-8 space-y-6 max-w-5xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-950">Company Announcements & Communications</h1>
-          <p className="text-sm text-zinc-500">
-            Official broadcasts, townhall notes, HR policy updates, and team alerts
-          </p>
-        </div>
-        <Button variant="primary" onClick={() => setShowCreateModal(true)}>
-          📢 Post Announcement
-        </Button>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300">
+      {/* 1. Header */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Announcements & Notices</h1>
+        <p className="text-xs text-foreground-muted mt-0.5">
+          Official company broadcasts, policy revisions, and workplace communications.
+        </p>
       </div>
 
-      {statusMsg && (
-        <div
-          className={`p-4 rounded-control text-sm ${
-            statusMsg.type === "success"
-              ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-700"
-              : "bg-rose-500/10 border border-rose-500/30 text-rose-700"
-          }`}
-        >
-          {statusMsg.text}
-        </div>
-      )}
-
-      {/* Announcements Feed */}
-      {loading ? (
+      {/* 2. Announcements Stream */}
+      {isLoading ? (
         <div className="space-y-4">
-          <div className="h-32 bg-muted animate-pulse rounded-panel" />
-          <div className="h-32 bg-muted animate-pulse rounded-panel" />
+          <SkeletonLoader className="h-32 rounded-card" />
+          <SkeletonLoader className="h-28 rounded-card" />
+        </div>
+      ) : isError ? (
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle text-center space-y-3">
+          <AlertCircle className="w-6 h-6 text-danger mx-auto" />
+          <p className="text-xs font-semibold text-foreground">Announcements unavailable</p>
+          <button onClick={() => refetch()} className="px-3 py-1.5 rounded-control bg-primary-soft text-primary text-xs font-semibold">
+            Retry
+          </button>
         </div>
       ) : announcements.length > 0 ? (
         <div className="space-y-4">
-          {announcements.map((ann) => (
-            <Panel
-              key={ann.id}
-              className={`p-6 space-y-4 hover:border-primary/50 transition ${
-                ann.isPinned ? "border-amber-500/40 bg-amber-500/5" : ""
-              }`}
+          {/* Pinned Section */}
+          {pinnedAnnouncements.map((a) => (
+            <div
+              key={a.id}
+              className="rounded-card bg-gradient-to-br from-[#E2E0FC]/70 via-[#D3D0F8]/50 to-[#C4C0F4]/40 border-2 border-primary/30 p-6 shadow-card space-y-3"
             >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  {ann.isPinned && <span className="text-xs font-bold text-amber-600">📌 PINNED</span>}
-                  <Badge
-                    tone={
-                      ann.priority === "URGENT" || ann.priority === "HIGH"
-                        ? "danger"
-                        : ann.priority === "MEDIUM"
-                        ? "warning"
-                        : "neutral"
-                    }
-                  >
-                    {ann.priority} PRIORITY
-                  </Badge>
-                  {ann.isAcknowledged && <Badge tone="success">✓ Acknowledged</Badge>}
+                  <span className="p-1 rounded bg-primary text-white">
+                    <Pin className="w-3.5 h-3.5" />
+                  </span>
+                  <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Pinned Broadcast</span>
+                  <span className="px-2 py-0.5 rounded-pill bg-primary/20 text-primary text-[10px] font-bold">
+                    {a.priority || "NORMAL"}
+                  </span>
                 </div>
-                <span className="text-xs text-zinc-500">
-                  Published {new Date(ann.publishedAt).toLocaleDateString()} by {ann.authorName}
-                </span>
+
+                {a.publishedAt && (
+                  <span className="text-[11px] text-zinc-600 font-mono">
+                    {new Date(a.publishedAt).toLocaleDateString()}
+                  </span>
+                )}
               </div>
 
-              <div>
-                <h3 className="font-bold text-zinc-950 text-lg">{ann.title}</h3>
-                <p className="text-sm text-zinc-700 mt-2 whitespace-pre-wrap leading-relaxed">
-                  {ann.content}
-                </p>
+              <h2 className="text-base font-bold text-zinc-950">{a.title}</h2>
+              <p className="text-xs text-zinc-800 leading-relaxed whitespace-pre-wrap">{a.content}</p>
+
+              <div className="pt-3 border-t border-primary/20 flex items-center justify-between">
+                <span className="text-[11px] text-zinc-600">
+                  Author: {a.author?.email || "Organization Admin"}
+                </span>
+
+                <button
+                  onClick={() => handleAcknowledge(a.id)}
+                  disabled={ackMutation.isPending}
+                  className="px-3 py-1.5 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Acknowledge</span>
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* Regular Announcements */}
+          {regularAnnouncements.map((a) => (
+            <div
+              key={a.id}
+              className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-pill bg-primary-soft text-primary text-[10px] font-bold">
+                    {a.priority || "NOTICE"}
+                  </span>
+                  <span className="text-[11px] text-foreground-muted font-mono">
+                    {a.publishedAt ? new Date(a.publishedAt).toLocaleDateString() : ""}
+                  </span>
+                </div>
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t border-border/40 text-xs">
-                <span className="text-zinc-500">
-                  {ann.acknowledgementCount ?? 0} colleagues acknowledged
+              <h3 className="text-sm font-bold text-foreground">{a.title}</h3>
+              <p className="text-xs text-foreground-secondary leading-relaxed whitespace-pre-wrap">{a.content}</p>
+
+              <div className="pt-3 border-t border-border-subtle flex items-center justify-between">
+                <span className="text-[11px] text-foreground-muted">
+                  Author: {a.author?.email || "Administration"}
                 </span>
-                <Link href={`/announcements/${ann.id}` as Route}>
-                  <Button variant="secondary" className="text-xs">
-                    Read & Acknowledge →
-                  </Button>
-                </Link>
+
+                <button
+                  onClick={() => handleAcknowledge(a.id)}
+                  disabled={ackMutation.isPending}
+                  className="px-3 py-1 rounded-control bg-surface-muted hover:bg-muted text-foreground text-xs font-semibold transition inline-flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                  <span>Acknowledge</span>
+                </button>
               </div>
-            </Panel>
+            </div>
           ))}
         </div>
       ) : (
-        <Panel className="p-12 text-center space-y-3">
-          <span className="text-4xl">📢</span>
-          <h3 className="text-base font-semibold text-zinc-900">No Announcements</h3>
-          <p className="text-sm text-zinc-500">Stay tuned for upcoming news and company updates.</p>
-        </Panel>
-      )}
-
-      {/* Create Announcement Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <Panel className="max-w-lg w-full p-6 space-y-6 bg-surface shadow-2xl">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h2 className="text-base font-semibold text-zinc-900">Post Company Announcement</h2>
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(false)}
-                className="text-zinc-400 hover:text-zinc-700 text-xl font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 mb-1">Headline Title</label>
-                <Input
-                  value={title}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}
-                  placeholder="e.g. Q4 Town Hall and Bonus Announcement"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-700 mb-1">Priority</label>
-                  <select
-                    value={priority}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPriority(e.target.value as AnnouncementPriority)}
-                    className="w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                    <option value="URGENT">Urgent (Red Alert)</option>
-                  </select>
-                </div>
-                <div className="flex items-center gap-2 pt-6">
-                  <input
-                    type="checkbox"
-                    id="pinCheckbox"
-                    checked={isPinned}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setIsPinned(e.target.checked)}
-                    className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                  />
-                  <label htmlFor="pinCheckbox" className="text-xs font-semibold text-zinc-800">
-                    Pin to top of feed
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 mb-1">Content</label>
-                <textarea
-                  value={content}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setContent(e.target.value)}
-                  rows={5}
-                  className="w-full rounded-control border border-border bg-surface p-3 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="Draft full message for company broadcast..."
-                  required
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-border">
-                <Button variant="secondary" type="button" onClick={() => setShowCreateModal(false)}>
-                  Cancel
-                </Button>
-                <Button variant="primary" type="submit" disabled={creating}>
-                  {creating ? "Publishing..." : "Broadcast Announcement"}
-                </Button>
-              </div>
-            </form>
-          </Panel>
+        <div className="py-16 text-center rounded-card bg-surface-raised border border-border-subtle flex flex-col items-center justify-center text-foreground-muted">
+          <Inbox className="w-8 h-8 mb-2 opacity-50" />
+          <p className="text-xs font-bold text-foreground">No active announcements</p>
+          <p className="text-[11px] text-foreground-muted mt-0.5">
+            Organization broadcasts will be delivered to this feed when published.
+          </p>
         </div>
       )}
     </div>

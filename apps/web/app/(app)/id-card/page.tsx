@@ -1,159 +1,170 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Button } from "../../../components/ui";
-import { apiRequest } from "../../../lib/api";
-import { getOfflineData, saveOfflineData } from "../../../lib/offline-storage";
-import type { IdCardDataView } from "@vc-wms/shared-types";
+import React, { useState } from "react";
+import {
+  Download,
+  RotateCw,
+  ShieldCheck,
+  QrCode,
+  AlertCircle
+} from "lucide-react";
+import { useIdCard } from "../../../lib/queries/use-ess-queries";
+import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
 export default function DigitalIdCardPage() {
-  const [card, setCard] = useState<IdCardDataView | null>(null);
-  const [loading, setLoading] = useState(true);
   const [flipped, setFlipped] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { data: card, isLoading, isError, refetch } = useIdCard();
 
-  useEffect(() => {
-    async function loadCard() {
-      try {
-        setLoading(true);
-        const res = await apiRequest<IdCardDataView>("/id-card");
-        setCard(res);
-        saveOfflineData("id_card_data", res);
-      } catch (err: unknown) {
-        const cached = getOfflineData<IdCardDataView>("id_card_data");
-        if (cached) {
-          setCard(cached);
-        } else {
-          setError(err instanceof Error ? err.message : "Failed to load ID card");
-        }
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadCard();
-  }, []);
+  const handleDownload = () => {
+    window.open("/api/v1/id-card/download", "_blank");
+  };
 
-  if (loading && !card) {
+  if (isLoading) {
     return (
-      <div className="p-8 flex justify-center">
-        <div className="h-96 w-64 bg-muted animate-pulse rounded-2xl" />
+      <div className="p-8 max-w-md mx-auto flex flex-col items-center space-y-4 animate-pulse">
+        <SkeletonLoader className="h-6 w-48" />
+        <SkeletonLoader className="w-80 h-[460px] rounded-panel" />
       </div>
     );
   }
 
-  if (error && !card) {
+  if (isError || !card) {
     return (
-      <div className="p-8 text-center">
-        <p className="text-danger">{error}</p>
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <AlertCircle className="w-8 h-8 text-danger mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Digital Credential Unavailable</h2>
+          <p className="text-xs text-foreground-muted">
+            Unable to render employee ID badge for current profile session.
+          </p>
+          <button onClick={() => refetch()} className="px-4 py-2 rounded-control bg-primary text-white text-xs font-semibold">
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
+
+  const initial = card.fullName.charAt(0).toUpperCase();
 
   return (
-    <div className="p-4 sm:p-8 space-y-8 max-w-4xl mx-auto flex flex-col items-center">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6 flex flex-col items-center animate-in fade-in duration-300">
       <div className="text-center space-y-1">
-        <h1 className="text-2xl font-bold text-zinc-950">Digital Identity Card</h1>
-        <p className="text-sm text-zinc-500">Official verified digital workplace badge with NFC / QR verification</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Digital Identity Credential</h1>
+        <p className="text-xs text-foreground-muted">Official verified workplace badge with dynamic credential verification</p>
       </div>
 
-      {/* ID Badge Presentation Container */}
-      <div className="relative cursor-pointer select-none" onClick={() => setFlipped(!flipped)}>
+      {/* ID Badge Card with Flip Effect */}
+      <div
+        onClick={() => setFlipped(!flipped)}
+        className="w-80 h-[480px] cursor-pointer perspective-1000 select-none group"
+      >
         <div
-          className={`w-80 h-[480px] rounded-3xl p-6 text-white shadow-2xl transition-all duration-500 relative flex flex-col justify-between overflow-hidden border border-white/10 ${
-            flipped
-              ? "bg-gradient-to-br from-zinc-900 via-zinc-800 to-black"
-              : "bg-gradient-to-br from-emerald-700 via-emerald-800 to-teal-950"
+          className={`relative w-full h-full rounded-panel shadow-2xl transition-all duration-500 transform-style-3d border border-white/60 ${
+            flipped ? "rotate-y-180" : ""
           }`}
         >
-          {/* Card Top Accent */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <p className="font-bold text-sm tracking-wider uppercase">{card?.companyName}</p>
-              <p className="text-[10px] text-emerald-200 tracking-widest uppercase">Digital Workplace Badge</p>
+          {/* FRONT SIDE */}
+          <div className="absolute inset-0 backface-hidden rounded-panel bg-gradient-to-b from-[#18153B] via-[#261A4E] to-[#120E2E] text-white p-6 flex flex-col justify-between overflow-hidden">
+            {/* Top Lanyard Notch & Tenant Brand */}
+            <div>
+              <div className="w-14 h-2 rounded-pill bg-white/20 mx-auto mb-4" />
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div>
+                  <h2 className="text-xs font-black tracking-widest text-white uppercase">
+                    {card.tenantName || "AIavro"}
+                  </h2>
+                  <p className="text-[9px] text-purple-300/70 font-mono">Workforce OS</p>
+                </div>
+                <ShieldCheck className="w-5 h-5 text-purple-300" />
+              </div>
             </div>
-            <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs">
-              VC
+
+            {/* Photo & Profile Identity */}
+            <div className="flex flex-col items-center text-center space-y-3">
+              <div className="w-24 h-24 rounded-panel overflow-hidden border-2 border-purple-300/40 bg-white/10 flex items-center justify-center text-3xl font-black text-white shadow-lg">
+                {card.avatarUrl ? (
+                  <img src={card.avatarUrl} alt={card.fullName} className="w-full h-full object-cover" />
+                ) : (
+                  initial
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-lg font-bold text-white leading-tight">{card.fullName}</h3>
+                <p className="text-xs font-semibold text-purple-200 mt-0.5">{card.designation || "Staff Member"}</p>
+                <p className="text-[11px] text-purple-300/70">{card.department || "Organization"}</p>
+              </div>
+            </div>
+
+            {/* Bottom ID Code & Chip */}
+            <div className="pt-3 border-t border-white/10 flex items-center justify-between">
+              <div>
+                <span className="text-[9px] text-purple-300/70 uppercase block">Employee Code</span>
+                <span className="text-xs font-mono font-bold text-white">{card.employeeCode || "—"}</span>
+              </div>
+
+              <div className="px-2 py-1 rounded bg-white/10 text-[9px] font-mono font-bold text-purple-200">
+                ACTIVE
+              </div>
             </div>
           </div>
 
-          {!flipped ? (
-            /* Front Face */
-            <>
-              <div className="flex flex-col items-center text-center space-y-3 my-auto">
-                <div className="h-28 w-28 rounded-2xl bg-white/10 border-2 border-white/30 overflow-hidden flex items-center justify-center text-4xl font-bold shadow-inner">
-                  {card?.fullName.charAt(0)}
-                </div>
-                <div>
-                  <h3 className="font-bold text-xl text-white">{card?.fullName}</h3>
-                  <p className="text-xs text-emerald-200 font-medium">{card?.designation}</p>
-                  <p className="text-[11px] text-white/70">{card?.department}</p>
-                </div>
-              </div>
+          {/* BACK SIDE */}
+          <div className="absolute inset-0 backface-hidden rotate-y-180 rounded-panel bg-gradient-to-b from-[#18153B] via-[#261A4E] to-[#120E2E] text-white p-6 flex flex-col justify-between">
+            <div>
+              <div className="w-14 h-2 rounded-pill bg-white/20 mx-auto mb-4" />
+              <h3 className="text-xs font-bold text-white uppercase tracking-wider text-center pb-2 border-b border-white/10">
+                Credential Verification
+              </h3>
+            </div>
 
-              <div className="space-y-2 text-xs border-t border-white/20 pt-3">
-                <div className="flex justify-between">
-                  <span className="text-white/60">Employee ID</span>
-                  <span className="font-mono font-bold tracking-wider">{card?.employeeCode}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/60">Blood Group</span>
-                  <span className="font-bold">{card?.bloodGroup || "N/A"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/60">Joining Date</span>
-                  <span>{card?.joiningDate ? new Date(card.joiningDate).toLocaleDateString() : ""}</span>
-                </div>
+            {/* Back Details */}
+            <div className="space-y-3 text-xs">
+              <div className="flex justify-between py-1 border-b border-white/10">
+                <span className="text-purple-300/70">Joined Date</span>
+                <span className="font-semibold text-white">
+                  {card.joiningDate ? new Date(card.joiningDate).toLocaleDateString() : "—"}
+                </span>
               </div>
-            </>
-          ) : (
-            /* Back Face with QR Code Verification */
-            <>
-              <div className="flex flex-col items-center justify-center space-y-4 my-auto text-center">
-                <div className="p-3 bg-white rounded-2xl shadow-lg">
-                  {/* Visual QR Code Representation */}
-                  <div className="h-32 w-32 bg-zinc-950 rounded-lg p-2 flex flex-col justify-between">
-                    <div className="flex justify-between">
-                      <div className="h-8 w-8 bg-white rounded-sm" />
-                      <div className="h-8 w-8 bg-white rounded-sm" />
-                    </div>
-                    <div className="text-[9px] text-emerald-400 font-mono font-bold">{card?.employeeCode}</div>
-                    <div className="flex justify-between">
-                      <div className="h-8 w-8 bg-white rounded-sm" />
-                      <div className="h-4 w-4 bg-white rounded-full self-end" />
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-zinc-300 font-medium max-w-[200px]">
-                  Scan to verify authentic identity on AIavro Gateway
-                </p>
+              <div className="flex justify-between py-1 border-b border-white/10">
+                <span className="text-purple-300/70">Blood Group</span>
+                <span className="font-semibold text-white">{card.bloodGroup || "—"}</span>
               </div>
+              <div className="flex justify-between py-1 border-b border-white/10">
+                <span className="text-purple-300/70">Emergency Contact</span>
+                <span className="font-semibold text-white font-mono">{card.emergencyContact || "—"}</span>
+              </div>
+            </div>
 
-              <div className="space-y-1.5 text-[11px] text-zinc-400 border-t border-white/10 pt-3">
-                <p>
-                  <span className="text-white/70">Emergency Contact:</span> {card?.emergencyContactPhone || "N/A"}
-                </p>
-                <p className="text-[9px] text-zinc-500">Property of {card?.companyName}. If found, return to HR.</p>
+            {/* QR Placeholder & Flip hint */}
+            <div className="text-center pt-3 border-t border-white/10">
+              <div className="w-16 h-16 rounded bg-white text-zinc-950 mx-auto flex items-center justify-center p-1 mb-2">
+                <QrCode className="w-12 h-12" />
               </div>
-            </>
-          )}
-
-          {/* Badge Click Hint */}
-          <div className="text-center pt-2">
-            <span className="text-[10px] text-white/50 hover:text-white transition">
-              🔄 Tap badge to flip ({flipped ? "Show Front" : "Show QR Code"})
-            </span>
+              <p className="text-[10px] text-purple-300/70 font-mono">Tap anywhere to flip card</p>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Action Controls */}
-      <div className="flex items-center gap-4">
-        <Button variant="secondary" onClick={() => setFlipped(!flipped)}>
-          🔄 Flip Badge
-        </Button>
-        <a href="/api/v1/id-card/download" target="_blank" rel="noopener noreferrer">
-          <Button variant="primary">⬇️ Download PDF Badge</Button>
-        </a>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setFlipped(!flipped)}
+          className="px-4 py-2 rounded-control bg-surface-raised border border-border-subtle hover:bg-surface-muted text-xs font-semibold text-foreground transition inline-flex items-center gap-1.5 shadow-sm"
+        >
+          <RotateCw className="w-3.5 h-3.5" />
+          <span>Flip Credential</span>
+        </button>
+
+        <button
+          onClick={handleDownload}
+          className="px-4 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-bold transition inline-flex items-center gap-1.5 shadow-sm"
+        >
+          <Download className="w-3.5 h-3.5" />
+          <span>Download PDF Badge</span>
+        </button>
       </div>
     </div>
   );

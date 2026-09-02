@@ -1,342 +1,278 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { Route } from "next";
-import Link from "next/link";
-import { Badge, Button, Input, Panel } from "../../../components/ui";
-import { apiRequest } from "../../../lib/api";
-import { getOfflineData, saveOfflineData } from "../../../lib/offline-storage";
-import type { EmployeeDocumentView, EssDocumentType } from "@vc-wms/shared-types";
+import React, { useState } from "react";
+import {
+  FileText,
+  Upload,
+  Download,
+  Trash2,
+  FolderOpen,
+  AlertCircle,
+  X,
+  Send
+} from "lucide-react";
+import {
+  useEmployeeDocuments,
+  useUploadDocumentMutation,
+  useDeleteDocumentMutation
+} from "../../../lib/queries/use-ess-queries";
+import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
-export default function DocumentVaultPage() {
-  const [documents, setDocuments] = useState<EmployeeDocumentView[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+const DOCUMENT_CATEGORIES = [
+  { value: "ALL", label: "All Documents" },
+  { value: "IDENTITY", label: "Identity & KYC" },
+  { value: "ACADEMIC", label: "Academic & Degrees" },
+  { value: "EXPERIENCE", label: "Experience & Relieving" },
+  { value: "TAX", label: "Tax & Compliance" },
+  { value: "COMPANY_POLICY", label: "Company Policies" },
+  { value: "PAYROLL", label: "Payroll & Compensation" }
+];
 
-  // Upload modal state
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadTitle, setUploadTitle] = useState("");
-  const [uploadType, setUploadType] = useState<EssDocumentType>("PAN");
-  const [uploadFileName, setUploadFileName] = useState("");
-  const [uploadFileBase64, setUploadFileBase64] = useState("");
-  const [uploadExpiry, setUploadExpiry] = useState("");
+export default function EmployeeDocumentsPage() {
+  const [selectedCategory, setSelectedCategory] = useState("ALL");
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [category, setCategory] = useState("IDENTITY");
+  const [documentType] = useState("GENERAL_DOCUMENT");
+  const [fileName, setFileName] = useState("");
+  const [fileUrl, setFileUrl] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const [filterType, setFilterType] = useState<string>("ALL");
-  const [search, setSearch] = useState("");
+  const { data: documents = [], isLoading, isError, refetch } = useEmployeeDocuments();
+  const uploadMutation = useUploadDocumentMutation();
+  const deleteMutation = useDeleteDocumentMutation();
 
-  useEffect(() => {
-    loadDocuments();
-  }, []);
-
-  async function loadDocuments() {
-    try {
-      setLoading(true);
-      const res = await apiRequest<EmployeeDocumentView[]>("/documents");
-      setDocuments(res);
-      saveOfflineData("documents_list", res);
-    } catch (err: unknown) {
-      const cached = getOfflineData<EmployeeDocumentView[]>("documents_list");
-      if (cached) {
-        setDocuments(cached);
-      } else {
-        setStatusMsg({
-          type: "error",
-          text: err instanceof Error ? err.message : "Failed to load documents"
-        });
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadFileName(file.name);
-    if (!uploadTitle) {
-      setUploadTitle(file.name.replace(/\.[^/.]+$/, ""));
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64String = (reader.result as string).split(",")[1] || "";
-      setUploadFileBase64(base64String);
-    };
-    reader.readAsDataURL(file);
-  }
-
-  async function handleUploadSubmit(e: React.FormEvent) {
+  const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadFileName) {
-      setStatusMsg({ type: "error", text: "Please select a file to upload" });
+    if (!fileName.trim() || !fileUrl.trim()) {
+      setFormError("Please provide both a document name and file URL / cloud path.");
       return;
     }
 
-    setUploading(true);
-    setStatusMsg(null);
-
     try {
-      await apiRequest<EmployeeDocumentView>("/documents", {
-        method: "POST",
-        body: JSON.stringify({
-          documentType: uploadType,
-          title: uploadTitle || uploadFileName,
-          fileName: uploadFileName,
-          fileBase64: uploadFileBase64,
-          mimeType: "application/pdf",
-          expiryDate: uploadExpiry || undefined
-        })
+      setFormError(null);
+      await uploadMutation.mutateAsync({
+        category,
+        documentType,
+        fileName: fileName.trim(),
+        fileUrl: fileUrl.trim()
       });
-
-      setStatusMsg({ type: "success", text: "Document uploaded to vault successfully!" });
-      setShowUploadModal(false);
-      setUploadTitle("");
-      setUploadFileName("");
-      setUploadFileBase64("");
-      setUploadExpiry("");
-      loadDocuments();
+      setIsUploadOpen(false);
+      setFileName("");
+      setFileUrl("");
     } catch (err: unknown) {
-      setStatusMsg({
-        type: "error",
-        text: err instanceof Error ? err.message : "Failed to upload document"
-      });
-    } finally {
-      setUploading(false);
+      setFormError(err instanceof Error ? err.message : "Failed to upload document.");
     }
-  }
+  };
 
-  const filteredDocs = documents.filter((doc) => {
-    const matchesType = filterType === "ALL" || doc.documentType === filterType;
-    const matchesSearch =
-      !search ||
-      doc.title.toLowerCase().includes(search.toLowerCase()) ||
-      doc.fileName.toLowerCase().includes(search.toLowerCase());
-    return matchesType && matchesSearch;
-  });
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Are you sure you want to remove this document?")) return;
+    try {
+      await deleteMutation.mutateAsync(id);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete document");
+    }
+  };
+
+  const filteredDocs =
+    selectedCategory === "ALL" ? documents : documents.filter((d) => d.category === selectedCategory);
 
   return (
-    <div className="p-4 sm:p-8 space-y-6 max-w-7xl mx-auto">
-      {/* Header */}
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
+      {/* 1. Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-950">Document Vault</h1>
-          <p className="text-sm text-zinc-500">
-            Secure vault for statutory KYC IDs, joining letters, tax forms, and certificates
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Document Vault</h1>
+          <p className="text-xs text-foreground-muted mt-0.5">
+            Store, view, and manage verified employee credentials, identity proofs, and tax forms.
           </p>
         </div>
-        <Button variant="primary" onClick={() => setShowUploadModal(true)}>
-          ➕ Upload Document
-        </Button>
+
+        <button
+          onClick={() => setIsUploadOpen(true)}
+          className="px-4 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition shadow-sm inline-flex items-center gap-1.5 self-start sm:self-auto"
+        >
+          <Upload className="w-4 h-4" />
+          <span>Upload Document</span>
+        </button>
       </div>
 
-      {statusMsg && (
-        <div
-          className={`p-4 rounded-control text-sm ${
-            statusMsg.type === "success"
-              ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-700"
-              : "bg-rose-500/10 border border-rose-500/30 text-rose-700"
-          }`}
-        >
-          {statusMsg.text}
-        </div>
-      )}
+      {/* 2. Category Filter Pills */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {DOCUMENT_CATEGORIES.map((cat) => (
+          <button
+            key={cat.value}
+            onClick={() => setSelectedCategory(cat.value)}
+            className={`px-3 py-1.5 rounded-pill text-xs font-semibold whitespace-nowrap transition ${
+              selectedCategory === cat.value
+                ? "bg-primary text-white shadow-sm"
+                : "bg-surface-raised border border-border-subtle text-foreground-secondary hover:bg-surface-muted"
+            }`}
+          >
+            {cat.label}
+          </button>
+        ))}
+      </div>
 
-      {/* Filters Bar */}
-      <Panel className="p-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
-        <div className="w-full sm:w-72">
-          <Input
-            value={search}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
-            placeholder="Search by title or filename..."
-          />
+      {/* 3. Document Cards Grid */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <SkeletonLoader className="h-32 rounded-card" />
+          <SkeletonLoader className="h-32 rounded-card" />
+          <SkeletonLoader className="h-32 rounded-card" />
         </div>
-        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-2 sm:pb-0">
-          {[
-            "ALL",
-            "PAN",
-            "AADHAAR",
-            "PASSPORT",
-            "OFFER_LETTER",
-            "PAYSLIP",
-            "TAX_DOCUMENT",
-            "CERTIFICATE"
-          ].map((type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setFilterType(type)}
-              className={`px-3 py-1.5 rounded-control text-xs font-semibold whitespace-nowrap transition ${
-                filterType === type
-                  ? "bg-primary text-white"
-                  : "bg-surface border border-border text-zinc-700 hover:bg-muted"
-              }`}
-            >
-              {type.replace("_", " ")}
-            </button>
-          ))}
-        </div>
-      </Panel>
-
-      {/* Documents Grid */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="h-40 bg-muted animate-pulse rounded-panel" />
-          <div className="h-40 bg-muted animate-pulse rounded-panel" />
-          <div className="h-40 bg-muted animate-pulse rounded-panel" />
+      ) : isError ? (
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle text-center space-y-3">
+          <AlertCircle className="w-6 h-6 text-danger mx-auto" />
+          <p className="text-xs font-semibold text-foreground">Documents vault unavailable</p>
+          <button onClick={() => refetch()} className="px-3 py-1.5 rounded-control bg-primary-soft text-primary text-xs font-semibold">
+            Retry
+          </button>
         </div>
       ) : filteredDocs.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredDocs.map((doc) => (
-            <Panel key={doc.id} className="p-6 space-y-4 hover:border-primary/50 transition">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-control bg-primary/10 text-primary flex items-center justify-center text-xl font-bold">
-                    📄
+            <div
+              key={doc.id}
+              className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card hover:border-primary/30 transition flex flex-col justify-between"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-panel bg-primary-soft text-primary flex items-center justify-center shrink-0">
+                    <FileText className="w-5 h-5" />
                   </div>
-                  <div>
-                    <h4 className="font-semibold text-zinc-900 text-sm">{doc.title}</h4>
-                    <p className="text-xs text-zinc-500">{doc.fileName}</p>
+                  <div className="min-w-0">
+                    <h3 className="text-xs font-bold text-foreground truncate">{doc.fileName}</h3>
+                    <p className="text-[10px] text-foreground-muted font-mono">{doc.category}</p>
                   </div>
                 </div>
-                <Badge tone={doc.isVerified ? "success" : "neutral"}>
-                  {doc.isVerified ? "Verified" : "Pending"}
-                </Badge>
+
+                <span className="px-2 py-0.5 rounded-pill bg-success/20 text-success text-[9px] font-bold shrink-0">
+                  {doc.status || "VERIFIED"}
+                </span>
               </div>
 
-              <div className="space-y-1.5 text-xs text-zinc-600 border-t border-border/50 pt-3">
-                <div className="flex justify-between">
-                  <span>Type</span>
-                  <span className="font-semibold text-zinc-900">{doc.documentType}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Size</span>
-                  <span>{(doc.fileSize / 1024).toFixed(1)} KB</span>
-                </div>
-                {doc.expiryDate && (
-                  <div className="flex justify-between">
-                    <span>Expiry</span>
-                    <span className={doc.isExpiringSoon ? "text-rose-600 font-semibold" : ""}>
-                      {new Date(doc.expiryDate).toLocaleDateString()}
-                    </span>
-                  </div>
-                )}
-              </div>
+              <div className="pt-4 mt-3 border-t border-border-subtle flex items-center justify-between text-xs">
+                <span className="text-[10px] text-foreground-muted font-mono">
+                  {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : ""}
+                </span>
 
-              <div className="pt-2 flex items-center justify-between border-t border-border/40">
-                <Link href={`/documents/${doc.id}` as Route}>
-                  <Button variant="secondary" className="text-xs">
-                    View Details
-                  </Button>
-                </Link>
-                {doc.downloadUrl && (
-                  <a
-                    href={doc.downloadUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs font-semibold text-primary hover:underline"
+                <div className="flex items-center gap-2">
+                  {doc.downloadUrl && (
+                    <a
+                      href={doc.downloadUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1.5 rounded-control hover:bg-surface-muted text-foreground-secondary transition"
+                      title="Download File"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                  <button
+                    onClick={() => handleDelete(doc.id)}
+                    disabled={deleteMutation.isPending}
+                    className="p-1.5 rounded-control hover:bg-danger/10 text-danger transition"
+                    title="Delete Document"
                   >
-                    Download File ↗
-                  </a>
-                )}
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-            </Panel>
+            </div>
           ))}
         </div>
       ) : (
-        <Panel className="p-12 text-center space-y-3">
-          <span className="text-4xl">📁</span>
-          <h3 className="text-base font-semibold text-zinc-900">No Documents in Vault</h3>
-          <p className="text-sm text-zinc-500">Upload your KYC records, certificates, and compliance docs.</p>
-          <Button variant="primary" onClick={() => setShowUploadModal(true)}>
-            Upload Document Now
-          </Button>
-        </Panel>
+        <div className="py-16 text-center rounded-card bg-surface-raised border border-border-subtle flex flex-col items-center justify-center text-foreground-muted">
+          <FolderOpen className="w-8 h-8 mb-2 opacity-50" />
+          <p className="text-xs font-bold text-foreground">No documents in this category</p>
+          <p className="text-[11px] text-foreground-muted mt-0.5">Upload a document to store it securely.</p>
+        </div>
       )}
 
-      {/* Upload Document Modal */}
-      {showUploadModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <Panel className="max-w-lg w-full p-6 space-y-6 bg-surface shadow-2xl">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h2 className="text-base font-semibold text-zinc-900">Upload Document to Vault</h2>
+      {/* 4. Upload Modal */}
+      {isUploadOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-panel bg-surface-raised border border-border-subtle p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+              <h3 className="text-sm font-bold text-foreground">Upload Employee Document</h3>
               <button
-                type="button"
-                onClick={() => setShowUploadModal(false)}
-                className="text-zinc-400 hover:text-zinc-700 text-xl font-bold"
+                onClick={() => setIsUploadOpen(false)}
+                className="w-7 h-7 rounded-pill hover:bg-surface-muted flex items-center justify-center text-foreground-muted transition"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleUploadSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 mb-1">Document Category</label>
+            <form onSubmit={handleUpload} className="space-y-4">
+              {formError && (
+                <div className="p-3 rounded-control bg-danger/10 border border-danger/20 text-danger text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">Document Category</label>
                 <select
-                  value={uploadType}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUploadType(e.target.value as EssDocumentType)}
-                  className="w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
-                  {[
-                    "PAN",
-                    "AADHAAR",
-                    "PASSPORT",
-                    "DRIVING_LICENSE",
-                    "OFFER_LETTER",
-                    "APPOINTMENT_LETTER",
-                    "PAYSLIP",
-                    "TAX_DOCUMENT",
-                    "CERTIFICATE",
-                    "CUSTOM"
-                  ].map((t) => (
-                    <option key={t} value={t}>
-                      {t.replace("_", " ")}
+                  {DOCUMENT_CATEGORIES.filter((c) => c.value !== "ALL").map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 mb-1">Document Display Title</label>
-                <Input
-                  value={uploadTitle}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUploadTitle(e.target.value)}
-                  placeholder="e.g. My PAN Card"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 mb-1">Select File (PDF / Image)</label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">Document Name / Title</label>
                 <input
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  onChange={handleFileSelected}
-                  className="w-full text-sm text-zinc-600 file:mr-4 file:py-2 file:px-4 file:rounded-control file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-white hover:file:bg-primary-hover"
+                  type="text"
+                  value={fileName}
+                  onChange={(e) => setFileName(e.target.value)}
+                  placeholder="e.g. Passport Copy or Degree Certificate"
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                   required
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 mb-1">Document Expiry Date (Optional)</label>
-                <Input
-                  type="date"
-                  value={uploadExpiry}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUploadExpiry(e.target.value)}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">File URL / Storage Path</label>
+                <input
+                  type="text"
+                  value={fileUrl}
+                  onChange={(e) => setFileUrl(e.target.value)}
+                  placeholder="e.g. /uploads/docs/aadhaar_card.pdf"
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  required
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-border">
-                <Button variant="secondary" type="button" onClick={() => setShowUploadModal(false)}>
+              <div className="pt-3 border-t border-border-subtle flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsUploadOpen(false)}
+                  className="px-4 py-2 rounded-control bg-surface-muted hover:bg-muted text-xs font-semibold text-foreground-secondary transition"
+                >
                   Cancel
-                </Button>
-                <Button variant="primary" type="submit" disabled={uploading}>
-                  {uploading ? "Uploading..." : "Upload Document"}
-                </Button>
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploadMutation.isPending}
+                  className="px-5 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-bold transition shadow-sm inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {uploadMutation.isPending ? "Uploading..." : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      Save Document
+                    </>
+                  )}
+                </button>
               </div>
             </form>
-          </Panel>
+          </div>
         </div>
       )}
     </div>

@@ -1,157 +1,150 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { Route } from "next";
-import Link from "next/link";
-import { Badge } from "../../../components/ui";
-import { apiRequest } from "../../../lib/api";
-import type { PayslipView } from "@vc-wms/shared-types";
+import React, { useState } from "react";
+import {
+  CreditCard,
+  Download,
+  ShieldCheck,
+  Inbox,
+  AlertCircle
+} from "lucide-react";
+import { useMyPayslips } from "../../../lib/queries/use-ess-queries";
+import { useSessionStore } from "../../../lib/session-store";
+import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
 
 export default function EmployeePayslipsPage() {
-  const [payslips, setPayslips] = useState<PayslipView[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const permissions = useSessionStore((state) => state.permissions) || [];
+  const hasPermission = permissions.includes("payslip.view");
 
-  const loadData = async () => {
+  const { data: payslips = [], isLoading, isError, refetch } = useMyPayslips();
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  const handleDownload = async (id: string) => {
     try {
-      setIsLoading(true);
-      setError(null);
-      const data = await apiRequest<PayslipView[]>("/payslips/me");
-      setPayslips(data ?? []);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load payslips.");
+      setDownloadingId(id);
+      window.open(`/api/v1/payslips/${id}/download`, "_blank");
     } finally {
-      setIsLoading(false);
+      setDownloadingId(null);
     }
   };
 
-  useEffect(() => {
-    void loadData();
-  }, []);
-
-  const handleDownload = (payslipId: string) => {
-    window.open(`/api/v1/payslips/${payslipId}/download`, "_blank");
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "DOWNLOADED":
-        return <Badge tone="success">Downloaded</Badge>;
-      case "VIEWED":
-        return <Badge tone="neutral">Viewed</Badge>;
-      case "DISTRIBUTED":
-        return <Badge tone="success">Sent / Ready</Badge>;
-      case "GENERATED":
-        return <Badge tone="warning">Generated</Badge>;
-      default:
-        return <Badge tone="neutral">{status}</Badge>;
-    }
-  };
-
-  const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            My Salary Payslips
-          </h1>
-          <p className="text-sm text-slate-500">
-            View, inspect, and securely download your monthly digital salary slips.
+  if (!hasPermission) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Compensation Access Restricted</h2>
+          <p className="text-xs text-foreground-muted">
+            You do not have permission (`payslip.view`) to access payslip records.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href={"/payroll" as Route}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition"
-          >
-            Payroll Overview
-          </Link>
-        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
+      {/* 1. Header */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">My Payslips & Compensation</h1>
+        <p className="text-xs text-foreground-muted mt-0.5">
+          Official monthly remuneration statements, tax deductions, and download records.
+        </p>
       </div>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {/* Payslips Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* 2. Payslip Cards List */}
+      <div className="space-y-4">
         {isLoading ? (
-          <div className="col-span-full p-12 text-center text-sm text-slate-500">
-            Loading your payslips...
+          <div className="space-y-3">
+            <SkeletonLoader className="h-24 w-full rounded-card" />
+            <SkeletonLoader className="h-24 w-full rounded-card" />
           </div>
-        ) : payslips.length === 0 ? (
-          <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center space-y-3">
-            <div className="text-3xl">📄</div>
-            <h3 className="text-base font-bold text-slate-900">No Payslips Released Yet</h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              Payslips will appear here once the HR department finalizes and locks the monthly payroll cycle.
-            </p>
+        ) : isError ? (
+          <div className="p-8 rounded-card bg-surface-raised border border-border-subtle text-center space-y-3">
+            <AlertCircle className="w-6 h-6 text-danger mx-auto" />
+            <p className="text-xs font-semibold text-foreground">Payslips service unavailable</p>
+            <p className="text-[11px] text-foreground-muted">Unable to retrieve payroll records.</p>
+            <button onClick={() => refetch()} className="px-3 py-1.5 rounded-control bg-primary-soft text-primary text-xs font-semibold">
+              Retry
+            </button>
+          </div>
+        ) : payslips.length > 0 ? (
+          <div className="space-y-3">
+            {payslips.map((p) => {
+              const monthName = MONTH_NAMES[p.month - 1] || `Month ${p.month}`;
+              return (
+                <div
+                  key={p.id}
+                  className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card hover:border-primary/30 transition flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-panel bg-primary-soft text-primary flex items-center justify-center shrink-0">
+                      <CreditCard className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-foreground">
+                          {monthName} {p.year}
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-pill bg-success/20 text-success text-[10px] font-bold">
+                          {p.status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-foreground-muted font-mono mt-0.5">
+                        Generated: {new Date(p.generatedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Financial Metrics */}
+                  <div className="flex items-center gap-6 self-end sm:self-auto">
+                    <div className="text-right">
+                      <span className="text-[10px] text-foreground-muted uppercase font-bold block">Gross</span>
+                      <span className="text-xs font-mono font-semibold text-foreground-secondary tabular-nums">
+                        ₹{p.grossSalary.toLocaleString("en-IN")}
+                      </span>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] text-foreground-muted uppercase font-bold block">Deductions</span>
+                      <span className="text-xs font-mono font-semibold text-danger tabular-nums">
+                        -₹{p.deductions.toLocaleString("en-IN")}
+                      </span>
+                    </div>
+
+                    <div className="text-right pl-4 border-l border-border-subtle">
+                      <span className="text-[10px] text-foreground-muted uppercase font-bold block">Net Pay</span>
+                      <span className="text-sm font-mono font-bold text-primary tabular-nums">
+                        ₹{p.netSalary.toLocaleString("en-IN")}
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => handleDownload(p.id)}
+                      disabled={downloadingId === p.id}
+                      className="p-2.5 rounded-control bg-surface-muted hover:bg-primary hover:text-white text-foreground-secondary transition shadow-sm"
+                      title="Download Payslip PDF"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
-          payslips.map((p) => (
-            <div
-              key={p.id}
-              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition space-y-4 flex flex-col justify-between"
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    {monthNames[p.month - 1]} {p.year}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                      v{p.version}
-                    </span>
-                    {getStatusBadge(p.status)}
-                  </div>
-                </div>
-
-                <div className="border-t border-b border-slate-100 py-3 space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-500">Gross Earnings:</span>
-                    <span className="font-semibold text-slate-900">
-                      ₹{p.grossSalary.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-500">Total Deductions:</span>
-                    <span className="font-semibold text-amber-700">
-                      ₹{p.deductions.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm pt-2 border-t border-slate-100 font-bold">
-                    <span className="text-slate-900">Net Take-Home:</span>
-                    <span className="text-emerald-700 text-base">
-                      ₹{p.netSalary.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 pt-2">
-                <Link
-                  href={`/payslips/${p.id}` as Route}
-                  className="flex-1 text-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs transition"
-                >
-                  View Details
-                </Link>
-                <button
-                  onClick={() => handleDownload(p.id)}
-                  className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 shadow-xs transition"
-                >
-                  ⬇ Download PDF
-                </button>
-              </div>
-            </div>
-          ))
+          <div className="py-16 text-center rounded-card bg-surface-raised border border-border-subtle flex flex-col items-center justify-center text-foreground-muted">
+            <Inbox className="w-8 h-8 mb-2 opacity-50" />
+            <p className="text-xs font-bold text-foreground">No payslips available</p>
+            <p className="text-[11px] text-foreground-muted mt-0.5">
+              Payslip statements will appear here once monthly payroll is processed.
+            </p>
+          </div>
         )}
       </div>
     </div>

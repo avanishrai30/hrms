@@ -1,238 +1,231 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { Route } from "next";
+import React from "react";
 import Link from "next/link";
-import { Badge } from "../../../components/ui";
-import { apiRequest } from "../../../lib/api";
-import type { LeaveBalanceView, LeaveRequestView } from "@vc-wms/shared-types";
+import type { Route } from "next";
+import {
+  Calendar,
+  PlusCircle,
+  Clock,
+  Sun
+} from "lucide-react";
+import {
+  useLeaveBalances,
+  useLeaveRequests,
+  useHolidays,
+  useCancelLeaveRequest
+} from "../../../lib/queries/use-ess-queries";
+import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
-export default function LeaveDashboardPage() {
-  const [balances, setBalances] = useState<LeaveBalanceView[]>([]);
-  const [requests, setRequests] = useState<LeaveRequestView[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isCancelling, setIsCancelling] = useState<string | null>(null);
+export default function EmployeeLeavePage() {
+  const balancesQuery = useLeaveBalances();
+  const requestsQuery = useLeaveRequests();
+  const holidaysQuery = useHolidays();
+  const cancelMutation = useCancelLeaveRequest();
 
-  const loadData = async () => {
+  const balances = balancesQuery.data ?? [];
+  const requests = requestsQuery.data ?? [];
+  const holidays = holidaysQuery.data ?? [];
+
+  const totalAvailable = balancesQuery.isSuccess
+    ? balances.reduce((sum, b) => sum + Number(b.availableDays ?? 0), 0)
+    : null;
+
+  const handleCancel = async (id: string) => {
+    if (!window.confirm("Are you sure you want to cancel this leave request?")) return;
     try {
-      setIsLoading(true);
-      setError(null);
-      const [balData, reqData] = await Promise.all([
-        apiRequest<LeaveBalanceView[]>("/leaves/balances/me"),
-        apiRequest<{ requests: LeaveRequestView[] }>("/leaves/requests/me")
-      ]);
-      setBalances(balData);
-      setRequests(reqData.requests ?? []);
+      await cancelMutation.mutateAsync(id);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load leave data.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadData();
-  }, []);
-
-  const handleCancel = async (requestId: string) => {
-    const reason = prompt("Please enter the reason for cancelling this leave request:");
-    if (!reason) return;
-
-    try {
-      setIsCancelling(requestId);
-      await apiRequest(`/leaves/requests/${requestId}/cancel`, {
-        method: "POST",
-        body: JSON.stringify({ reason })
-      });
-      await loadData();
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to cancel leave request.");
-    } finally {
-      setIsCancelling(null);
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "APPROVED":
-        return <Badge tone="success">Approved</Badge>;
-      case "PENDING_MANAGER":
-        return <Badge tone="warning">Pending Manager</Badge>;
-      case "PENDING_HR":
-        return <Badge tone="warning">Pending HR</Badge>;
-      case "REJECTED":
-        return <Badge tone="danger">Rejected</Badge>;
-      case "CANCELLED":
-        return <Badge tone="neutral">Cancelled</Badge>;
-      default:
-        return <Badge tone="neutral">{status}</Badge>;
+      alert(err instanceof Error ? err.message : "Failed to cancel request");
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header with quick CTA */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
+      {/* 1. Header & Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Leave Management</h1>
-          <p className="text-sm text-slate-500">
-            View available leave balances, submit requests, and track approval status.
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Leave & Time Off</h1>
+          <p className="text-xs text-foreground-muted mt-0.5">
+            Manage your time-off balances, request leaves, and review holiday schedules.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="flex items-center gap-2.5">
           <Link
             href={"/leave/calendar" as Route}
-            className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition"
+            className="px-3.5 py-2 rounded-control bg-surface-muted hover:bg-muted text-foreground-secondary text-xs font-semibold transition inline-flex items-center gap-1.5 border border-border-subtle"
           >
-            Team Calendar
+            <Calendar className="w-3.5 h-3.5 text-primary" />
+            <span>Leave Calendar</span>
           </Link>
-          <Link
-            href={"/leave/balance" as Route}
-            className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition"
-          >
-            Balance Ledger
-          </Link>
+
           <Link
             href={"/leave/request" as Route}
-            className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 shadow-sm transition"
+            className="px-4 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition shadow-sm inline-flex items-center gap-1.5"
           >
-            Apply for Leave
+            <PlusCircle className="w-4 h-4" />
+            <span>Apply for Leave</span>
           </Link>
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
+      {/* 2. Balances Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Available Hero Card */}
+        <div className="rounded-card bg-gradient-to-br from-[#E2E0FC] via-[#D3D0F8] to-[#C4C0F4] p-5 text-zinc-900 shadow-card border border-white/60 flex flex-col justify-between">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-600">Total Available</span>
+          <div className="my-2">
+            <span className="text-3xl font-extrabold font-mono text-zinc-950 tabular-nums">
+              {typeof totalAvailable === "number" ? `${totalAvailable}d` : "—"}
+            </span>
+          </div>
+          <span className="text-[10px] text-zinc-700 font-medium">Accumulated paid & casual balance</span>
         </div>
-      )}
 
-      {/* Balance Summary Cards */}
-      <div>
-        <h2 className="text-base font-semibold text-slate-900 mb-3">Available Balances</h2>
-        {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-28 rounded-xl border border-slate-200 bg-white p-4 animate-pulse" />
-            ))}
-          </div>
-        ) : balances.length === 0 ? (
-          <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-            No active leave policies or balances assigned for this period.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {balances.map((b) => (
-              <div
-                key={b.id}
-                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-slate-300 transition"
-              >
-                <div className="flex items-center justify-between">
-                  <span
-                    className="text-xs font-semibold uppercase px-2 py-0.5 rounded"
-                    style={{
-                      backgroundColor: `${b.leaveType?.color ?? "#3B82F6"}15`,
-                      color: b.leaveType?.color ?? "#3B82F6"
-                    }}
-                  >
-                    {b.leaveType?.code ?? "LEAVE"}
-                  </span>
-                  <span className="text-xs text-slate-400">Year {b.year}</span>
-                </div>
-                <div className="mt-3">
-                  <div className="text-2xl font-bold text-slate-900">
-                    {b.availableDays}{" "}
-                    <span className="text-xs font-normal text-slate-500">days left</span>
-                  </div>
-                  <div className="text-xs text-slate-500 font-medium mt-1">
-                    {b.leaveType?.name ?? "Leave"}
-                  </div>
-                </div>
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                  <span>Used: {b.usedDays}d</span>
-                  <span>Pending: {b.pendingDays}d</span>
-                  <span>Allocated: {b.allocatedDays}d</span>
-                </div>
+        {/* Dynamic Balance Types */}
+        {balancesQuery.isLoading ? (
+          <>
+            <div className="h-28 rounded-card bg-surface-muted/60 animate-pulse border border-border-subtle" />
+            <div className="h-28 rounded-card bg-surface-muted/60 animate-pulse border border-border-subtle" />
+            <div className="h-28 rounded-card bg-surface-muted/60 animate-pulse border border-border-subtle" />
+          </>
+        ) : balances.length > 0 ? (
+          balances.map((b) => (
+            <div
+              key={b.id}
+              className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card flex flex-col justify-between"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground truncate max-w-[120px]">
+                  {b.leaveType?.name || b.leaveType?.code || "Leave"}
+                </span>
+                <span className="px-2 py-0.5 rounded-pill bg-primary-soft text-primary font-mono text-[10px] font-bold">
+                  {b.leaveType?.code || "LEAVE"}
+                </span>
               </div>
-            ))}
+              <div className="my-1.5">
+                <span className="text-2xl font-extrabold font-mono text-foreground tabular-nums">
+                  {b.availableDays}d
+                </span>
+              </div>
+              <div className="text-[10px] text-foreground-muted flex justify-between">
+                <span>Allocated: {b.allocatedDays ?? 0}d</span>
+                <span>Used: {b.consumedDays ?? 0}d</span>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="sm:col-span-3 rounded-card bg-surface-raised border border-border-subtle p-5 text-center text-xs text-foreground-muted flex items-center justify-center">
+            No specific leave types configured for your profile.
           </div>
         )}
       </div>
 
-      {/* Leave Requests Table */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">My Leave History</h2>
-          <span className="text-xs text-slate-500">{requests.length} requests</span>
+      {/* 3. Leave Requests & Holidays Split */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+        {/* Left 2 Cols: My Leave Requests */}
+        <div className="lg:col-span-2 rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary" />
+              My Leave Requests
+            </h3>
+          </div>
+
+          {requestsQuery.isLoading ? (
+            <div className="space-y-2">
+              <SkeletonLoader className="h-12 w-full rounded-control" />
+              <SkeletonLoader className="h-12 w-full rounded-control" />
+            </div>
+          ) : requests.length > 0 ? (
+            <div className="space-y-2.5">
+              {requests.map((r) => (
+                <div
+                  key={r.id}
+                  className="p-3.5 rounded-card bg-surface-muted/50 border border-border-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                >
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-foreground">
+                        {r.leaveType?.name || "Time Off Request"}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-pill text-[10px] font-bold ${
+                          r.status === "APPROVED"
+                            ? "bg-success/20 text-success"
+                            : r.status.includes("PENDING")
+                            ? "bg-warning/20 text-warning"
+                            : "bg-surface-muted text-foreground-muted"
+                        }`}
+                      >
+                        {r.status}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-foreground-secondary font-mono">
+                      {new Date(r.startDate).toLocaleDateString()} → {new Date(r.endDate).toLocaleDateString()}
+                    </p>
+                    {r.reason && <p className="text-[11px] text-foreground-muted italic truncate">{r.reason}</p>}
+                  </div>
+
+                  {r.status.includes("PENDING") && (
+                    <button
+                      onClick={() => handleCancel(r.id)}
+                      disabled={cancelMutation.isPending}
+                      className="px-3 py-1 rounded-control bg-danger/10 hover:bg-danger/20 text-danger text-xs font-semibold transition shrink-0 self-start sm:self-auto"
+                    >
+                      Cancel Request
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-xs text-foreground-muted">
+              No leave requests submitted yet.
+            </div>
+          )}
         </div>
 
-        {isLoading ? (
-          <div className="p-8 text-center text-sm text-slate-500">Loading leave requests...</div>
-        ) : requests.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-500">
-            No leave requests submitted yet. Click &quot;Apply for Leave&quot; above to get started.
+        {/* Right Col: Upcoming Holidays */}
+        <div className="rounded-card bg-[#18153B] text-white p-5 shadow-panel border border-[#2B2758] space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-white/10">
+            <div className="flex items-center gap-2">
+              <Sun className="w-4 h-4 text-purple-300" />
+              <h3 className="text-xs font-bold text-white uppercase tracking-wider">Upcoming Holidays</h3>
+            </div>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
-              <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500 border-b border-slate-200">
-                <tr>
-                  <th className="px-6 py-3">Leave Type</th>
-                  <th className="px-6 py-3">Dates</th>
-                  <th className="px-6 py-3">Days</th>
-                  <th className="px-6 py-3">Reason</th>
-                  <th className="px-6 py-3">Status</th>
-                  <th className="px-6 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {requests.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50/50">
-                    <td className="px-6 py-4 font-medium text-slate-900">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: r.leaveType?.color ?? "#3B82F6" }}
-                        />
-                        <span>{r.leaveType?.name ?? "Leave"}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {new Date(r.startDate).toLocaleDateString()}
-                      {r.startDate !== r.endDate && (
-                        <span> — {new Date(r.endDate).toLocaleDateString()}</span>
-                      )}
-                      {r.isHalfDay && (
-                        <span className="ml-2 text-xs text-amber-600 font-medium">(Half Day)</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 font-semibold text-slate-900">
-                      {r.deductedDays} {r.deductedDays === 1 ? "day" : "days"}
-                    </td>
-                    <td className="px-6 py-4 max-w-xs truncate" title={r.reason}>
-                      {r.reason}
-                    </td>
-                    <td className="px-6 py-4">{getStatusBadge(r.status)}</td>
-                    <td className="px-6 py-4 text-right">
-                      {(r.status === "PENDING_MANAGER" ||
-                        r.status === "PENDING_HR" ||
-                        r.status === "APPROVED") && (
-                        <button
-                          onClick={() => handleCancel(r.id)}
-                          disabled={isCancelling === r.id}
-                          className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
-                        >
-                          {isCancelling === r.id ? "Cancelling..." : "Cancel"}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+
+          {holidaysQuery.isLoading ? (
+            <div className="space-y-2">
+              <SkeletonLoader className="h-10 w-full rounded-control bg-white/10" />
+              <SkeletonLoader className="h-10 w-full rounded-control bg-white/10" />
+            </div>
+          ) : holidays.length > 0 ? (
+            <div className="space-y-2">
+              {holidays.slice(0, 5).map((h) => (
+                <div
+                  key={h.id}
+                  className="p-2.5 rounded-control bg-white/10 flex items-center justify-between gap-2"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-white truncate">{h.name}</p>
+                    <p className="text-[10px] text-purple-200/70 font-mono">
+                      {new Date(h.date).toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" })}
+                    </p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-pill bg-purple-500/20 text-purple-200 text-[9px] font-bold shrink-0">
+                    HOLIDAY
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-6 text-center text-xs text-purple-200/70">
+              No upcoming holidays scheduled.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
