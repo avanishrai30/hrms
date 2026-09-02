@@ -72,16 +72,16 @@ export function HiringOrgWidget({
           </div>
         </div>
 
-        {/* Calm trend notice (No fake bar charts!) */}
+        {/* Neutral capability statement without broken link claims */}
         <div className="p-3 rounded-card bg-surface-muted/50 border border-border-subtle flex items-center gap-2.5 text-xs text-foreground-secondary">
           <BarChart2 className="w-4 h-4 text-primary shrink-0" />
-          <span className="text-[11px]">Workforce trend historical analytics enabled in Analytics Hub.</span>
+          <span className="text-[11px]">Historical workforce trends are not available in this dashboard.</span>
         </div>
       </div>
     );
   }
 
-  // Employee View: Leave Balances by Type
+  // Employee View: Real Leave Balances by Type
   const totalAvailable = leaveBalances.reduce((sum, item) => sum + Number(item.availableDays ?? 0), 0);
 
   return (
@@ -117,7 +117,7 @@ export function HiringOrgWidget({
           leaveBalances.slice(0, 2).map((b) => (
             <div key={b.id} className="flex items-center justify-between text-xs py-0.5">
               <span className="text-foreground-secondary font-medium truncate max-w-[150px]">
-                {b.leaveType?.name || b.leaveType?.code || "Standard Leave"}
+                {b.leaveType?.name || b.leaveType?.code || "Leave type"}
               </span>
               <span className="font-mono font-bold text-foreground tabular-nums">
                 {b.availableDays}d
@@ -125,7 +125,7 @@ export function HiringOrgWidget({
             </div>
           ))
         ) : (
-          <p className="text-[11px] text-foreground-muted">No specific leave types configured.</p>
+          <p className="text-[11px] text-foreground-muted">No leave types assigned.</p>
         )}
       </div>
     </div>

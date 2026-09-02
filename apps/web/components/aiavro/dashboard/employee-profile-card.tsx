@@ -62,8 +62,10 @@ export function EmployeeProfileCard({
     );
   }
 
-  const departmentName = typeof profile.department === "string" ? profile.department : profile.department?.name;
-  const designationName = typeof profile.designation === "string" ? profile.designation : profile.designation?.title || profile.designation?.name;
+  const departmentObj = profile.department;
+  const departmentName = typeof departmentObj === "string" ? departmentObj : departmentObj?.name;
+  const designationObj = profile.designation;
+  const designationName = typeof designationObj === "string" ? designationObj : designationObj?.title || designationObj?.name;
   const locationName = profile.region || profile.businessUnit;
   const initial = (profile.firstName?.charAt(0) || profile.fullName?.charAt(0) || "U").toUpperCase();
 

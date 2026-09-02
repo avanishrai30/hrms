@@ -37,18 +37,32 @@ export default function AiavroEmployeeDashboard() {
 
   // Derived real values with ZERO synthetic fallbacks
   const profileData = profileQuery.data ?? null;
-  const userName = profileData?.firstName || profileData?.fullName;
+  const userName = profileData?.firstName || profileData?.fullName || null;
 
-  const attendanceRecord = attendanceQuery.data?.record;
-  const attendanceStatus = attendanceRecord?.status || (attendanceQuery.isError ? "Unavailable" : "Ready to Clock In");
-  const shiftData = attendanceQuery.data?.shift;
+  const attendanceData = attendanceQuery.data;
+  const attendanceRecord = attendanceData?.record;
+  const attendanceStatus = attendanceQuery.isLoading
+    ? "Loading..."
+    : attendanceQuery.isError
+    ? "Attendance unavailable"
+    : attendanceRecord?.checkInAt && attendanceRecord?.checkOutAt
+    ? "Completed"
+    : attendanceData?.canCheckOut
+    ? "Currently working"
+    : attendanceData?.canCheckIn
+    ? "Ready to clock in"
+    : attendanceRecord?.status
+    ? attendanceRecord.status.replace(/_/g, " ")
+    : "No action available";
+
+  const shiftData = attendanceData?.shift;
 
   const leaveBalances = leaveBalancesQuery.data ?? [];
   const totalLeaveDays = leaveBalancesQuery.isSuccess
     ? leaveBalances.reduce((sum, item) => sum + Number(item.availableDays ?? 0), 0)
     : null;
 
-  const pendingRequests = requestsQuery.data?.requests ?? [];
+  const pendingRequests = requestsQuery.data ?? [];
   const pendingRequestsCount = requestsQuery.isSuccess
     ? pendingRequests.filter((r) => r.status.includes("PENDING")).length
     : null;
@@ -91,8 +105,8 @@ export default function AiavroEmployeeDashboard() {
           status={attendanceRecord?.status}
           shiftName={shiftData?.name}
           shiftHours={shiftData?.workHours}
-          canCheckIn={attendanceQuery.data?.canCheckIn ?? true}
-          canCheckOut={attendanceQuery.data?.canCheckOut ?? false}
+          canCheckIn={attendanceData?.canCheckIn ?? false}
+          canCheckOut={attendanceData?.canCheckOut ?? false}
           isLoading={attendanceQuery.isLoading}
           isError={attendanceQuery.isError}
           onRefresh={() => attendanceQuery.refetch()}
@@ -118,7 +132,7 @@ export default function AiavroEmployeeDashboard() {
         <div className="md:col-span-2">
           <ScheduleCalendar
             holidays={holidaysQuery.data ?? []}
-            leaveRequests={leaveRequestsQuery.data?.requests ?? []}
+            leaveRequests={leaveRequestsQuery.data ?? []}
             isLoading={holidaysQuery.isLoading || leaveRequestsQuery.isLoading}
             isError={holidaysQuery.isError && leaveRequestsQuery.isError}
           />

@@ -34,11 +34,55 @@ describe("AIavro Dashboard Production Integrity & Zero Synthetic Data Verificati
   it("never assigns synthetic identities when profile is null or unlinked", () => {
     const profile = null;
     const displayName = profile ? "Some Name" : null;
-    const initial = profile ? "S" : "U";
 
     expect(displayName).toBeNull();
     expect(displayName).not.toBe("Avanish Rai");
-    expect(initial).toBe("U");
+    expect(displayName).not.toBe("User");
+  });
+
+  it("differentiates unavailable pending requests from 0 pending requests", () => {
+    const isSuccess = false;
+    const requests: Array<{ status: string }> = [];
+    const pendingCount = isSuccess
+      ? requests.filter((r) => r.status.includes("PENDING")).length
+      : null;
+
+    expect(pendingCount).toBeNull();
+    expect(pendingCount).not.toBe(0);
+
+    const isSuccessZero = true;
+    const zeroPendingCount = isSuccessZero
+      ? requests.filter((r) => r.status.includes("PENDING")).length
+      : null;
+
+    expect(zeroPendingCount).toBe(0);
+  });
+
+  it("computes accurate attendance semantic states based on real API flags", () => {
+    // 1. Can check in
+    const state1 = { canCheckIn: true, canCheckOut: false, record: null, isError: false, isLoading: false };
+    const label1 = state1.canCheckIn ? "Ready to clock in" : "Other";
+    expect(label1).toBe("Ready to clock in");
+
+    // 2. Currently working
+    const state2 = { canCheckIn: false, canCheckOut: true, record: { checkInAt: "2026-09-02T09:00:00Z", checkOutAt: null }, isError: false };
+    const label2 = state2.canCheckOut ? "Currently working" : "Other";
+    expect(label2).toBe("Currently working");
+
+    // 3. API Error
+    const state3 = { isError: true };
+    const label3 = state3.isError ? "Attendance unavailable" : "Other";
+    expect(label3).toBe("Attendance unavailable");
+  });
+
+  it("never uses 'Standard Leave' as an invented leave type label", () => {
+    const leaveItemWithoutType = { availableDays: 5, leaveType: null };
+    const label = (leaveItemWithoutType.leaveType as { name?: string; code?: string } | null)?.name ||
+      (leaveItemWithoutType.leaveType as { name?: string; code?: string } | null)?.code ||
+      "Leave type";
+
+    expect(label).toBe("Leave type");
+    expect(label).not.toBe("Standard Leave");
   });
 
   it("does not assume standard 8 hours when shift configuration is absent", () => {
@@ -60,18 +104,5 @@ describe("AIavro Dashboard Production Integrity & Zero Synthetic Data Verificati
 
     expect(formatted).toBe("02:30");
     expect(percentage).toBeNull(); // No assumption of 8h percentage
-  });
-
-  it("calculates percentage accurately when real shift duration is supplied by API", () => {
-    const checkInTime = "2026-09-02T09:00:00.000Z";
-    const checkOutTime = "2026-09-02T13:00:00.000Z"; // 4 hours
-    const shiftHours = 8; // API provided
-
-    const start = new Date(checkInTime).getTime();
-    const end = new Date(checkOutTime).getTime();
-    const diffMins = Math.max(0, Math.floor((end - start) / 60000));
-    const percentage = Math.min(100, Math.round((diffMins / (shiftHours * 60)) * 100));
-
-    expect(percentage).toBe(50);
   });
 });

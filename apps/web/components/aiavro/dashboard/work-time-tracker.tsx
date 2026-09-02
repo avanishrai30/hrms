@@ -3,8 +3,10 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
+import { useQueryClient } from "@tanstack/react-query";
 import { Play, Square, ArrowUpRight, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { apiRequest } from "../../../lib/api";
+import { dashboardKeys } from "../../../lib/queries/use-dashboard-queries";
 import { SkeletonLoader } from "../feedback/aiavro-states";
 
 interface WorkTimeTrackerProps {
@@ -23,15 +25,16 @@ interface WorkTimeTrackerProps {
 export function WorkTimeTracker({
   checkInTime,
   checkOutTime,
-  status = "NOT_MARKED",
+  status,
   shiftName,
   shiftHours,
-  canCheckIn = true,
+  canCheckIn = false,
   canCheckOut = false,
   isLoading,
   isError,
   onRefresh
 }: WorkTimeTrackerProps) {
+  const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -72,6 +75,8 @@ export function WorkTimeTracker({
           body: JSON.stringify({ source: "WEB" })
         });
       }
+      // Instant cache invalidation
+      await queryClient.invalidateQueries({ queryKey: dashboardKeys.attendance() });
       if (onRefresh) onRefresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Attendance update failed";
@@ -119,6 +124,17 @@ export function WorkTimeTracker({
   const strokeDashoffset = duration.percentage !== null
     ? circumference - (duration.percentage / 100) * circumference
     : circumference * (isCheckedIn ? 0.35 : 1);
+
+  // Precise semantic state label
+  const stateLabel = isCheckedIn
+    ? "Elapsed"
+    : checkInTime && checkOutTime
+    ? "Completed"
+    : canCheckIn
+    ? "Ready to clock in"
+    : status
+    ? status.replace(/_/g, " ")
+    : "No action available";
 
   return (
     <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card flex flex-col justify-between min-h-[240px]">
@@ -173,8 +189,8 @@ export function WorkTimeTracker({
             <span className="text-xl font-bold font-mono tracking-tight text-foreground tabular-nums leading-none">
               {duration.formatted}
             </span>
-            <span className="text-[10px] text-foreground-muted font-medium mt-0.5">
-              {isCheckedIn ? "Elapsed" : (status ? status.replace(/_/g, " ") : "Not marked")}
+            <span className="text-[10px] text-foreground-muted font-medium mt-0.5 capitalize">
+              {stateLabel}
             </span>
           </div>
         </div>
@@ -197,7 +213,9 @@ export function WorkTimeTracker({
             ) : (
               <>
                 <Clock className="w-3.5 h-3.5 text-foreground-muted shrink-0" />
-                <span className="truncate">Not clocked in</span>
+                <span className="truncate">
+                  {canCheckIn ? "Ready to clock in" : "Not clocked in"}
+                </span>
               </>
             )}
           </div>

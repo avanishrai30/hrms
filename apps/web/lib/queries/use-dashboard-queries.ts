@@ -31,6 +31,7 @@ export interface AttendanceTodayResponse {
 export interface LeaveBalanceItem {
   id: string;
   availableDays: number;
+  allocatedDays?: number;
   consumedDays?: number;
   accruedDays?: number;
   leaveType?: {
@@ -64,14 +65,14 @@ export interface HolidayItem {
 export interface EmployeeProfileResponse {
   id: string;
   employeeCode?: string;
-  firstName: string;
-  lastName: string;
-  fullName: string;
-  email: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+  email?: string;
   workEmail?: string;
   status?: string;
   employmentType?: string;
-  department?: string | { name: string };
+  department?: string | { name?: string };
   designation?: string | { title?: string; name?: string };
   businessUnit?: string;
   team?: string;
@@ -83,24 +84,26 @@ export interface EmployeeProfileResponse {
 
 export interface EmployeeRequestItem {
   id: string;
+  tenantId?: string;
+  employeeId?: string;
+  employeeName?: string;
+  employeeCode?: string;
   requestType: string;
   status: string;
   title?: string;
   reason?: string;
+  submittedAt?: string;
   createdAt: string;
 }
 
 export interface AnnouncementItem {
   id: string;
+  tenantId: string;
   title: string;
   priority?: string;
   content?: string;
   publishedAt?: string;
-}
-
-export interface EmployeeListResponse {
-  employees?: unknown[];
-  total?: number;
+  isPinned?: boolean;
 }
 
 export const dashboardKeys = {
@@ -145,7 +148,12 @@ export function useLeaveBalances() {
 export function useLeaveRequests() {
   return useQuery({
     queryKey: dashboardKeys.leaveRequests(),
-    queryFn: () => apiRequest<{ requests: LeaveRequestItem[] }>("/leaves/requests/me"),
+    queryFn: async () => {
+      const res = await apiRequest<{ requests: LeaveRequestItem[] } | LeaveRequestItem[]>("/leaves/requests/me");
+      if (Array.isArray(res)) return res;
+      if (res && "requests" in res && Array.isArray(res.requests)) return res.requests;
+      return [];
+    },
     retry: 1,
     staleTime: 30000
   });
@@ -163,7 +171,12 @@ export function useHolidays() {
 export function useEmployeeRequests() {
   return useQuery({
     queryKey: dashboardKeys.requests(),
-    queryFn: () => apiRequest<{ requests: EmployeeRequestItem[] }>("/requests?limit=10"),
+    queryFn: async () => {
+      const res = await apiRequest<EmployeeRequestItem[] | { requests: EmployeeRequestItem[] }>("/requests?limit=10");
+      if (Array.isArray(res)) return res;
+      if (res && "requests" in res && Array.isArray(res.requests)) return res.requests;
+      return [];
+    },
     retry: 1,
     staleTime: 30000
   });
@@ -172,7 +185,10 @@ export function useEmployeeRequests() {
 export function useAnnouncements() {
   return useQuery({
     queryKey: dashboardKeys.announcements(),
-    queryFn: () => apiRequest<AnnouncementItem[]>("/announcements"),
+    queryFn: async () => {
+      const res = await apiRequest<AnnouncementItem[]>("/announcements");
+      return Array.isArray(res) ? res : [];
+    },
     retry: 1,
     staleTime: 60000
   });
@@ -182,11 +198,10 @@ export function useEmployeeCount(enabled: boolean) {
   return useQuery({
     queryKey: dashboardKeys.employeeCount(),
     queryFn: async () => {
-      const res = await apiRequest<EmployeeListResponse | unknown[]>("/employees?limit=1");
+      const res = await apiRequest<unknown[] | { total?: number }>("/employees?limit=1");
       if (Array.isArray(res)) return res.length;
-      if (typeof res === "object" && res !== null) {
-        if ("total" in res && typeof res.total === "number") return res.total;
-        if ("employees" in res && Array.isArray(res.employees)) return res.employees.length;
+      if (typeof res === "object" && res !== null && "total" in res && typeof res.total === "number") {
+        return res.total;
       }
       return null;
     },

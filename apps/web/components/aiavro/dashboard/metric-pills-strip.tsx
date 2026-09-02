@@ -15,19 +15,17 @@ interface MetricPillsStripProps {
 export function MetricPillsStrip({
   userName,
   isHrOrAdmin,
-  attendanceStatus = "Ready to Clock In",
+  attendanceStatus,
   leaveBalanceDays,
   pendingRequestsCount,
   employeeCount
 }: MetricPillsStripProps) {
-  const displayName = userName || "User";
-
   return (
     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
       {/* Welcome Title */}
       <div>
         <h1 className="text-2xl md:text-[28px] font-bold tracking-tight text-foreground">
-          Welcome back, <span className="text-primary">{displayName}</span>
+          Welcome back{userName ? <>, <span className="text-primary">{userName}</span></> : ""}
         </h1>
         <p className="text-xs text-foreground-muted mt-0.5 font-medium">
           {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })} • AIavro Workforce OS
@@ -39,7 +37,7 @@ export function MetricPillsStrip({
         <div className="flex items-center gap-2 p-1.5 rounded-pill bg-surface-raised border border-border-subtle shadow-card">
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-pill bg-primary text-white text-xs font-semibold">
             <Clock className="w-3.5 h-3.5" />
-            <span>{attendanceStatus || "Ready"}</span>
+            <span>{attendanceStatus || "Attendance unavailable"}</span>
           </div>
 
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-pill bg-primary-soft text-primary text-xs font-semibold">
@@ -52,7 +50,7 @@ export function MetricPillsStrip({
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-pill bg-surface-muted text-foreground-secondary text-xs font-semibold">
             <CheckCircle2 className="w-3.5 h-3.5 text-success" />
             <span>
-              {typeof pendingRequestsCount === "number" ? `${pendingRequestsCount} Pending` : "0 Pending"}
+              {typeof pendingRequestsCount === "number" ? `${pendingRequestsCount} Pending` : "— Pending"}
             </span>
           </div>
         </div>
