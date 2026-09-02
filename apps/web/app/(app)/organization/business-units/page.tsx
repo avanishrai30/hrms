@@ -1,341 +1,226 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Badge, Button, Field, Input, Panel } from "../../../../components/ui";
-import { apiRequest } from "../../../../lib/api";
-import type { BusinessUnitView } from "@vc-wms/shared-types";
-
-interface ExtendedBusinessUnitView extends BusinessUnitView {
-  parent?: BusinessUnitView | null;
-  _count?: {
-    regions: number;
-    employees: number;
-    children: number;
-  };
-}
+import React, { useState } from "react";
+import Link from "next/link";
+import type { Route } from "next";
+import {
+  Network,
+  Plus,
+  ArrowLeft,
+  ShieldCheck,
+  AlertCircle,
+  X,
+  Send
+} from "lucide-react";
+import { useBusinessUnits, useCreateBusinessUnitMutation } from "../../../../lib/queries/use-people-queries";
+import { usePermissionGate } from "../../../../lib/session-store";
+import { SkeletonLoader } from "../../../../components/aiavro/feedback/aiavro-states";
 
 export default function BusinessUnitsPage() {
-  const [businessUnits, setBusinessUnits] = useState<ExtendedBusinessUnitView[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const gate = usePermissionGate(["organization.view"]);
 
-  // Editor Modal
-  const [showEditor, setShowEditor] = useState(false);
-  const [editingBU, setEditingBU] = useState<ExtendedBusinessUnitView | null>(null);
-  const [formName, setFormName] = useState("");
-  const [formCode, setFormCode] = useState("");
-  const [formDescription, setFormDescription] = useState("");
-  const [formParentId, setFormParentId] = useState("");
-  const [formIsActive, setFormIsActive] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [description, setDescription] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
 
-  // Delete Modal
-  const [deletingBU, setDeletingBU] = useState<ExtendedBusinessUnitView | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const { data: units = [], isLoading, isError, refetch } = useBusinessUnits(gate.isAuthorized);
+  const createMutation = useCreateBusinessUnitMutation();
 
-  const loadData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const res = await apiRequest<ExtendedBusinessUnitView[]>("/organization/business-units");
-      setBusinessUnits(res ?? []);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load business units.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadData();
-  }, []);
-
-  const handleOpenCreate = () => {
-    setEditingBU(null);
-    setFormName("");
-    setFormCode("");
-    setFormDescription("");
-    setFormParentId("");
-    setFormIsActive(true);
-    setShowEditor(true);
-  };
-
-  const handleOpenEdit = (bu: ExtendedBusinessUnitView) => {
-    setEditingBU(bu);
-    setFormName(bu.name);
-    setFormCode(bu.code);
-    setFormDescription(bu.description ?? "");
-    setFormParentId(bu.parentId ?? "");
-    setFormIsActive(bu.isActive);
-    setShowEditor(true);
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      setIsSaving(true);
-      setError(null);
-
-      if (editingBU) {
-        await apiRequest(`/organization/business-units/${editingBU.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            name: formName,
-            description: formDescription || null,
-            parentId: formParentId || null,
-            isActive: formIsActive
-          })
-        });
-        setSuccessMessage(`Business unit "${formName}" updated successfully.`);
-      } else {
-        await apiRequest("/organization/business-units", {
-          method: "POST",
-          body: JSON.stringify({
-            name: formName,
-            code: formCode,
-            description: formDescription || null,
-            parentId: formParentId || null,
-            isActive: formIsActive
-          })
-        });
-        setSuccessMessage(`Business unit "${formName}" created successfully.`);
-      }
-
-      setShowEditor(false);
-      await loadData();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to save business unit.");
-    } finally {
-      setIsSaving(false);
+    if (!name.trim() || !code.trim()) {
+      setFormError("Please provide both name and code.");
+      return;
     }
-  };
-
-  const handleDelete = async () => {
-    if (!deletingBU) return;
     try {
-      setIsDeleting(true);
-      setError(null);
-      await apiRequest(`/organization/business-units/${deletingBU.id}`, {
-        method: "DELETE"
+      setFormError(null);
+      await createMutation.mutateAsync({
+        name: name.trim(),
+        code: code.trim().toUpperCase(),
+        description: description.trim() ? description.trim() : undefined
       });
-      setSuccessMessage(`Business unit "${deletingBU.name}" deleted.`);
-      setDeletingBU(null);
-      await loadData();
+      setIsModalOpen(false);
+      setName("");
+      setCode("");
+      setDescription("");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to delete business unit.");
-    } finally {
-      setIsDeleting(false);
+      setFormError(err instanceof Error ? err.message : "Failed to create business unit.");
     }
   };
 
-  const filteredBUs = businessUnits.filter(
-    (b) =>
-      b.name.toLowerCase().includes(search.toLowerCase()) ||
-      b.code.toLowerCase().includes(search.toLowerCase())
-  );
+  if (gate.isLoading || (gate.isAuthorized && isLoading)) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-pulse">
+        <div className="h-8 w-64 rounded-control bg-surface-muted/60" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <SkeletonLoader className="h-32 rounded-card" />
+          <SkeletonLoader className="h-32 rounded-card" />
+          <SkeletonLoader className="h-32 rounded-card" />
+        </div>
+      </div>
+    );
+  }
 
-  return (
-    <div className="mx-auto grid max-w-[1440px] gap-6 p-4 md:p-6 lg:p-8">
-      {/* Header */}
-      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Business Units Directory</h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            Define corporate divisions, autonomous operating entities, and hierarchical parent-child relationships.
+  if (!gate.isAuthorized) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Business Units Access Restricted</h2>
+          <p className="text-xs text-foreground-muted">
+            You do not have permission (`organization.view`) to access business units.
           </p>
         </div>
-        <Button variant="primary" onClick={handleOpenCreate}>
-          + New Business Unit
-        </Button>
-      </header>
+      </div>
+    );
+  }
 
-      {error && (
-        <div className="rounded-control border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
-      )}
-      {successMessage && (
-        <div className="rounded-control border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-          {successMessage}
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
+      {/* 1. Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <Link
+            href={"/organization" as Route}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-foreground-muted hover:text-primary transition"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Organization</span>
+          </Link>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Business Units</h1>
+          <p className="text-xs text-foreground-muted">
+            Strategic operational divisions and corporate business units.
+          </p>
         </div>
-      )}
 
-      {/* Filter Bar */}
-      <Panel className="flex items-center justify-between">
-        <div className="w-full max-w-sm">
-          <Input
-            placeholder="Search business units by name or code..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <span className="text-xs text-zinc-500 font-medium">{filteredBUs.length} Units Found</span>
-      </Panel>
-
-      {/* Directory Grid */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {isLoading ? (
-          <div className="col-span-full py-12 text-center text-sm text-zinc-500">Loading business units...</div>
-        ) : filteredBUs.length === 0 ? (
-          <div className="col-span-full py-16 text-center">
-            <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-muted text-xl">🏢</div>
-            <h3 className="text-base font-semibold text-zinc-900">No business units found</h3>
-            <p className="mt-1 text-sm text-zinc-500">Click &quot;New Business Unit&quot; to establish your enterprise structure.</p>
-          </div>
-        ) : (
-          filteredBUs.map((bu) => (
-            <Panel key={bu.id} className="flex flex-col justify-between p-5 space-y-4 hover:border-primary/50 transition">
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="rounded bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">
-                    {bu.code}
-                  </span>
-                  <Badge tone={bu.isActive ? "success" : "neutral"}>
-                    {bu.isActive ? "Active" : "Inactive"}
-                  </Badge>
-                </div>
-                <h3 className="mt-2 text-lg font-bold text-zinc-950">{bu.name}</h3>
-                {bu.description && <p className="mt-1 text-xs text-zinc-600 line-clamp-2">{bu.description}</p>}
-
-                {bu.parent && (
-                  <p className="mt-2 text-xs text-zinc-500">
-                    Parent Unit: <strong className="text-zinc-800 font-medium">{bu.parent.name}</strong>
-                  </p>
-                )}
-              </div>
-
-              <div className="border-t border-border pt-3">
-                <div className="grid grid-cols-3 gap-2 text-center text-xs mb-4">
-                  <div className="rounded bg-muted/60 p-2">
-                    <p className="font-bold text-zinc-900">{bu._count?.regions ?? 0}</p>
-                    <p className="text-[10px] text-zinc-500">Regions</p>
-                  </div>
-                  <div className="rounded bg-muted/60 p-2">
-                    <p className="font-bold text-zinc-900">{bu._count?.children ?? 0}</p>
-                    <p className="text-[10px] text-zinc-500">Sub-BUs</p>
-                  </div>
-                  <div className="rounded bg-muted/60 p-2">
-                    <p className="font-bold text-zinc-900">{bu._count?.employees ?? 0}</p>
-                    <p className="text-[10px] text-zinc-500">Employees</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-2">
-                  <Button variant="secondary" className="h-8 text-xs" onClick={() => handleOpenEdit(bu)}>
-                    Edit
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="h-8 text-xs text-red-600 hover:bg-red-50"
-                    onClick={() => setDeletingBU(bu)}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </div>
-            </Panel>
-          ))
-        )}
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="px-4 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition shadow-sm inline-flex items-center gap-1.5 self-start sm:self-auto"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add Business Unit</span>
+        </button>
       </div>
 
-      {/* Editor Modal */}
-      {showEditor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-panel border border-border bg-surface p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-zinc-950">
-              {editingBU ? `Edit Business Unit: ${editingBU.name}` : "Create Business Unit"}
-            </h2>
-
-            <form onSubmit={handleSave} className="mt-4 space-y-4">
-              <Field label="Business Unit Name">
-                <Input
-                  required
-                  placeholder="e.g. Agronomy Operations"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                />
-              </Field>
-
-              <Field label="Unit Code">
-                <Input
-                  required
-                  disabled={Boolean(editingBU)}
-                  placeholder="e.g. AGRI_OPS"
-                  value={formCode}
-                  onChange={(e) => setFormCode(e.target.value.toUpperCase())}
-                />
-              </Field>
-
-              <Field label="Parent Business Unit (Optional Hierarchy)">
-                <select
-                  className="h-11 w-full rounded-control border border-border bg-surface px-3 text-sm text-zinc-950 outline-none"
-                  value={formParentId}
-                  onChange={(e) => setFormParentId(e.target.value)}
-                >
-                  <option value="">-- None (Top Level Root Unit) --</option>
-                  {businessUnits
-                    .filter((b) => !editingBU || b.id !== editingBU.id)
-                    .map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} ({b.code})
-                      </option>
-                    ))}
-                </select>
-              </Field>
-
-              <Field label="Description">
-                <textarea
-                  rows={3}
-                  className="w-full rounded-control border border-border bg-surface p-3 text-sm text-zinc-950 outline-none focus:border-primary"
-                  placeholder="Operational scope or mission..."
-                  value={formDescription}
-                  onChange={(e) => setFormDescription(e.target.value)}
-                />
-              </Field>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="buIsActive"
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                  checked={formIsActive}
-                  onChange={(e) => setFormIsActive(e.target.checked)}
-                />
-                <label htmlFor="buIsActive" className="text-sm font-medium text-zinc-800">
-                  Active Status
-                </label>
+      {/* 2. Units Grid */}
+      {isError ? (
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle text-center space-y-3">
+          <AlertCircle className="w-6 h-6 text-danger mx-auto" />
+          <p className="text-xs font-semibold text-foreground">Business units unavailable</p>
+          <button onClick={() => refetch()} className="px-3 py-1.5 rounded-control bg-primary-soft text-primary text-xs font-semibold">
+            Retry
+          </button>
+        </div>
+      ) : units.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {units.map((unit) => (
+            <div
+              key={unit.id}
+              className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card hover:border-primary/30 transition space-y-2 flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-foreground">{unit.name}</h3>
+                  <span className="px-2 py-0.5 rounded-pill bg-primary-soft text-primary text-[10px] font-mono font-bold">
+                    {unit.code}
+                  </span>
+                </div>
+                <p className="text-xs text-foreground-secondary mt-1 line-clamp-2">
+                  {unit.description || "No description provided."}
+                </p>
               </div>
-
-              <div className="mt-6 flex justify-end gap-3">
-                <Button variant="secondary" type="button" onClick={() => setShowEditor(false)}>
-                  Cancel
-                </Button>
-                <Button variant="primary" type="submit" disabled={isSaving}>
-                  {isSaving ? "Saving..." : editingBU ? "Update Unit" : "Create Unit"}
-                </Button>
-              </div>
-            </form>
-          </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="py-16 text-center rounded-card bg-surface-raised border border-border-subtle flex flex-col items-center justify-center text-foreground-muted">
+          <Network className="w-8 h-8 mb-2 opacity-50" />
+          <p className="text-xs font-bold text-foreground">No business units found</p>
+          <p className="text-[11px] text-foreground-muted mt-0.5">Add business units to group departments and regions.</p>
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {deletingBU && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-panel border border-border bg-surface p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-zinc-950">Delete Business Unit</h2>
-            <p className="mt-2 text-sm text-zinc-600">
-              Are you sure you want to delete <strong className="text-zinc-950">&quot;{deletingBU.name}&quot;</strong>? Any child sub-units or regions will be unlinked.
-            </p>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <Button variant="secondary" onClick={() => setDeletingBU(null)}>
-                Cancel
-              </Button>
-              <Button variant="danger" onClick={handleDelete} disabled={isDeleting}>
-                {isDeleting ? "Deleting..." : "Confirm Delete"}
-              </Button>
+      {/* 3. Add Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-panel bg-surface-raised border border-border-subtle p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+              <h3 className="text-sm font-bold text-foreground">Add Business Unit</h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="w-7 h-7 rounded-pill hover:bg-surface-muted flex items-center justify-center text-foreground-muted"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
+
+            <form onSubmit={handleCreate} className="space-y-4 text-xs">
+              {formError && (
+                <div className="p-3 rounded-control bg-danger/10 border border-danger/20 text-danger flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="font-bold text-foreground">Unit Name *</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Products & Technology"
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-foreground">Code *</label>
+                <input
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="e.g. PROD-TECH"
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-foreground">Description</label>
+                <textarea
+                  rows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Optional details..."
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-border-subtle flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 rounded-control bg-surface-muted hover:bg-muted font-semibold text-foreground-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createMutation.isPending}
+                  className="px-5 py-2 rounded-control bg-primary hover:bg-primary-hover text-white font-bold transition shadow-sm inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {createMutation.isPending ? "Saving..." : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      Save Unit
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -1,163 +1,217 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Badge, Input, Panel } from "../../../components/ui";
-import { apiRequest } from "../../../lib/api";
-import { getOfflineData, saveOfflineData } from "../../../lib/offline-storage";
-import type { DirectoryEmployeeView } from "@vc-wms/shared-types";
+import React, { useState } from "react";
+import Link from "next/link";
+import type { Route } from "next";
+import {
+  Search,
+  Mail,
+  MapPin,
+  Building,
+  User,
+  Users,
+  ShieldCheck,
+  AlertCircle
+} from "lucide-react";
+import { useDirectory, useDepartments } from "../../../lib/queries/use-people-queries";
+import { usePermissionGate } from "../../../lib/session-store";
+import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
 export default function OrganizationDirectoryPage() {
-  const [employees, setEmployees] = useState<DirectoryEmployeeView[]>([]);
-  const [loading, setLoading] = useState(true);
+  const gate = usePermissionGate(["directory.view", "employees.read"]);
+
   const [search, setSearch] = useState("");
-  const [selectedDept, setSelectedDept] = useState<string>("ALL");
-  const [error, setError] = useState<string | null>(null);
+  const [selectedDeptId, setSelectedDeptId] = useState<string>("ALL");
 
-  useEffect(() => {
-    async function loadDirectory() {
-      try {
-        setLoading(true);
-        const res = await apiRequest<DirectoryEmployeeView[]>("/directory");
-        setEmployees(res);
-        saveOfflineData("directory_list", res);
-      } catch (err: unknown) {
-        const cached = getOfflineData<DirectoryEmployeeView[]>("directory_list");
-        if (cached) {
-          setEmployees(cached);
-        } else {
-          setError(err instanceof Error ? err.message : "Failed to load employee directory");
-        }
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadDirectory();
-  }, []);
+  const { data: departments = [] } = useDepartments(gate.isAuthorized);
+  const { data: employees = [], isLoading, isError, refetch } = useDirectory(
+    {
+      search: search.trim() ? search.trim() : undefined,
+      departmentId: selectedDeptId !== "ALL" ? selectedDeptId : undefined
+    },
+    gate.isAuthorized
+  );
 
-  const departments = Array.from(new Set(employees.map((e) => e.department).filter(Boolean)));
+  if (gate.isLoading || (gate.isAuthorized && isLoading)) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-pulse">
+        <div className="h-8 w-64 rounded-control bg-surface-muted/60" />
+        <div className="h-12 w-full rounded-control bg-surface-muted/60" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <SkeletonLoader className="h-44 rounded-card" />
+          <SkeletonLoader className="h-44 rounded-card" />
+          <SkeletonLoader className="h-44 rounded-card" />
+          <SkeletonLoader className="h-44 rounded-card" />
+        </div>
+      </div>
+    );
+  }
 
-  const filtered = employees.filter((e) => {
-    const matchesDept = selectedDept === "ALL" || e.department === selectedDept;
-    const matchesSearch =
-      !search ||
-      e.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      e.employeeCode.toLowerCase().includes(search.toLowerCase()) ||
-      e.designation.toLowerCase().includes(search.toLowerCase()) ||
-      e.email.toLowerCase().includes(search.toLowerCase());
-    return matchesDept && matchesSearch;
-  });
+  if (!gate.isAuthorized) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Directory Access Restricted</h2>
+          <p className="text-xs text-foreground-muted">
+            You do not have permission (`directory.view`) to access the employee directory.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-4 sm:p-8 space-y-6 max-w-7xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-950">Organization Directory</h1>
-        <p className="text-sm text-zinc-500">
-          Search colleagues, find team members, and explore reporting structures
-        </p>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300">
+      {/* 1. Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Organization Directory</h1>
+          <p className="text-xs text-foreground-muted mt-0.5">
+            Discover colleagues, explore departments, and look up workplace contacts.
+          </p>
+        </div>
+
+        <Link
+          href={"/org-chart" as Route}
+          className="px-3.5 py-2 rounded-control bg-surface-raised border border-border-subtle hover:bg-surface-muted text-xs font-semibold text-foreground transition inline-flex items-center gap-1.5 shadow-sm self-start sm:self-auto"
+        >
+          <Building className="w-4 h-4 text-primary" />
+          <span>View Org Chart</span>
+        </Link>
       </div>
 
-      {error && (
-        <div className="p-4 rounded-control bg-rose-500/10 border border-rose-500/30 text-rose-700 text-sm">
-          {error}
-        </div>
-      )}
-
-      {/* Filter and Search Bar */}
-      <Panel className="p-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
-        <div className="w-full sm:w-80">
-          <Input
+      {/* 2. Search & Department Filters */}
+      <div className="p-4 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+        <div className="relative">
+          <Search className="w-4 h-4 text-foreground-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
             value={search}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
-            placeholder="Search by name, role, email, code..."
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, employee code, role, or email..."
+            className="w-full pl-10 pr-4 py-2.5 rounded-control bg-surface border border-border text-xs text-foreground placeholder:text-foreground-muted focus:outline-none focus:ring-2 focus:ring-primary/20 transition"
           />
         </div>
-        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-2 sm:pb-0">
-          <button
-            type="button"
-            onClick={() => setSelectedDept("ALL")}
-            className={`px-3 py-1.5 rounded-control text-xs font-semibold whitespace-nowrap transition ${
-              selectedDept === "ALL"
-                ? "bg-primary text-white"
-                : "bg-surface border border-border text-zinc-700 hover:bg-muted"
-            }`}
-          >
-            All Departments
-          </button>
-          {departments.map((d) => (
+
+        {departments.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1">
             <button
-              key={d}
               type="button"
-              onClick={() => setSelectedDept(d)}
-              className={`px-3 py-1.5 rounded-control text-xs font-semibold whitespace-nowrap transition ${
-                selectedDept === d
-                  ? "bg-primary text-white"
-                  : "bg-surface border border-border text-zinc-700 hover:bg-muted"
+              onClick={() => setSelectedDeptId("ALL")}
+              className={`px-3 py-1.5 rounded-pill text-xs font-semibold whitespace-nowrap transition ${
+                selectedDeptId === "ALL"
+                  ? "bg-primary text-white shadow-sm"
+                  : "bg-surface border border-border-subtle text-foreground-secondary hover:bg-surface-muted"
               }`}
             >
-              {d}
+              All Departments
             </button>
-          ))}
-        </div>
-      </Panel>
+            {departments.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => setSelectedDeptId(d.id)}
+                className={`px-3 py-1.5 rounded-pill text-xs font-semibold whitespace-nowrap transition ${
+                  selectedDeptId === d.id
+                    ? "bg-primary text-white shadow-sm"
+                    : "bg-surface border border-border-subtle text-foreground-secondary hover:bg-surface-muted"
+                }`}
+              >
+                {d.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* Directory Grid */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="h-44 bg-muted animate-pulse rounded-panel" />
-          <div className="h-44 bg-muted animate-pulse rounded-panel" />
-          <div className="h-44 bg-muted animate-pulse rounded-panel" />
+      {/* 3. Employee Cards Grid */}
+      {isError ? (
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle text-center space-y-3">
+          <AlertCircle className="w-6 h-6 text-danger mx-auto" />
+          <p className="text-xs font-semibold text-foreground">Directory unavailable</p>
+          <p className="text-[11px] text-foreground-muted">Unable to retrieve employee directory records.</p>
+          <button onClick={() => refetch()} className="px-3 py-1.5 rounded-control bg-primary-soft text-primary text-xs font-semibold">
+            Retry
+          </button>
         </div>
-      ) : filtered.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.map((emp) => (
-            <Panel key={emp.id} className="p-6 space-y-4 hover:border-primary/50 transition">
-              <div className="flex items-start gap-4">
-                <div className="h-14 w-14 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center text-xl font-bold">
-                  {emp.fullName.charAt(0)}
-                </div>
-                <div className="space-y-0.5 flex-1 min-w-0">
-                  <h4 className="font-bold text-zinc-950 text-base truncate">{emp.fullName}</h4>
-                  <p className="text-xs font-medium text-primary truncate">{emp.designation}</p>
-                  <p className="text-xs text-zinc-500 truncate">{emp.department}</p>
-                </div>
-              </div>
-
-              <div className="space-y-1.5 text-xs text-zinc-600 border-t border-border/50 pt-3">
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Employee Code</span>
-                  <span className="font-mono font-medium text-zinc-900">{emp.employeeCode}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Email</span>
-                  <span className="text-zinc-900 truncate max-w-[180px]">{emp.email}</span>
-                </div>
-                {emp.phone && (
-                  <div className="flex justify-between">
-                    <span className="text-zinc-500">Phone</span>
-                    <span>{emp.phone}</span>
+      ) : employees.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {employees.map((emp) => {
+            const initial = (emp.fullName || "U").charAt(0).toUpperCase();
+            return (
+              <div
+                key={emp.id}
+                className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card hover:border-primary/40 transition flex flex-col justify-between group"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="w-12 h-12 rounded-panel overflow-hidden bg-primary-soft text-primary font-bold flex items-center justify-center text-base shrink-0 border border-border-subtle">
+                      {emp.profilePhoto ? (
+                        <img src={emp.profilePhoto} alt={emp.fullName} className="w-full h-full object-cover" />
+                      ) : (
+                        initial
+                      )}
+                    </div>
+                    {emp.employeeCode && (
+                      <span className="px-2 py-0.5 rounded-pill bg-surface-muted text-foreground-muted text-[10px] font-mono font-semibold">
+                        {emp.employeeCode}
+                      </span>
+                    )}
                   </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Reports To</span>
-                  <span className="font-medium text-zinc-900">{emp.managerName || "Direct Leadership"}</span>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition line-clamp-1">
+                      {emp.fullName}
+                    </h3>
+                    <p className="text-xs text-foreground-secondary font-medium mt-0.5 line-clamp-1">
+                      {emp.designation || "—"}
+                    </p>
+                    <p className="text-[11px] text-foreground-muted font-medium mt-0.5">
+                      {emp.department || "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-3 mt-3 border-t border-border-subtle space-y-1.5 text-xs">
+                  {emp.email && (
+                    <a
+                      href={`mailto:${emp.email}`}
+                      className="flex items-center gap-1.5 text-[11px] text-foreground-muted hover:text-primary transition truncate"
+                    >
+                      <Mail className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{emp.email}</span>
+                    </a>
+                  )}
+                  {emp.region && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-foreground-muted truncate">
+                      <MapPin className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{emp.region}</span>
+                    </div>
+                  )}
+
+                  <div className="pt-2">
+                    <Link
+                      href={`/employees/${emp.id}` as Route}
+                      className="w-full py-1.5 rounded-control bg-surface-muted hover:bg-primary-soft hover:text-primary text-[11px] font-semibold text-foreground-secondary transition flex items-center justify-center gap-1"
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      <span>View Profile</span>
+                    </Link>
+                  </div>
                 </div>
               </div>
-
-              <div className="pt-2 flex items-center justify-between border-t border-border/40 text-xs">
-                <Badge tone="success">{emp.status}</Badge>
-                <span className="text-zinc-400">
-                  Joined {new Date(emp.joiningDate).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
-                </span>
-              </div>
-            </Panel>
-          ))}
+            );
+          })}
         </div>
       ) : (
-        <Panel className="p-12 text-center space-y-3">
-          <span className="text-4xl">👥</span>
-          <h3 className="text-base font-semibold text-zinc-900">No Colleagues Found</h3>
-          <p className="text-sm text-zinc-500">Try searching with a different name or department filter.</p>
-        </Panel>
+        <div className="py-16 text-center rounded-card bg-surface-raised border border-border-subtle flex flex-col items-center justify-center text-foreground-muted">
+          <Users className="w-8 h-8 mb-2 opacity-50" />
+          <p className="text-xs font-bold text-foreground">No employees found</p>
+          <p className="text-[11px] text-foreground-muted mt-0.5">
+            Try adjusting your search query or department filter.
+          </p>
+        </div>
       )}
     </div>
   );

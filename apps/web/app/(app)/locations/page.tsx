@@ -1,231 +1,279 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import type { Route } from "next";
-import Link from "next/link";
-import { useState } from "react";
-import { Badge, Button, Field, Input, Panel } from "../../../components/ui";
-import { apiRequest } from "../../../lib/api";
+import React, { useState } from "react";
+import {
+  MapPin,
+  Plus,
+  Building,
+  ShieldCheck,
+  AlertCircle,
+  X,
+  Send
+} from "lucide-react";
+import { useLocations, useCreateLocationMutation } from "../../../lib/queries/use-people-queries";
+import { usePermissionGate } from "../../../lib/session-store";
+import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
-interface LocationItem {
-  id: string;
-  name: string;
-  code: string;
-  description: string | null;
-  type: string;
-  latitude: number;
-  longitude: number;
-  radiusMeters: number;
-  maxAccuracyMeters: number;
-  isActive: boolean;
-  createdAt: string;
-  _count?: {
-    assignments: number;
+const LOCATION_TYPES = ["OFFICE", "FACTORY", "WAREHOUSE", "RETAIL_OUTLET", "DISTRIBUTION_CENTER", "CUSTOM"];
+
+export default function WorkplaceLocationsPage() {
+  const gate = usePermissionGate(["location.view"]);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [type, setType] = useState("OFFICE");
+  const [description, setDescription] = useState("");
+  const [radiusMeters, setRadiusMeters] = useState(200);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const { data: locations = [], isLoading, isError, refetch } = useLocations(undefined, gate.isAuthorized);
+  const createMutation = useCreateLocationMutation();
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !code.trim()) {
+      setFormError("Please provide both name and code.");
+      return;
+    }
+    try {
+      setFormError(null);
+      await createMutation.mutateAsync({
+        name: name.trim(),
+        code: code.trim().toUpperCase(),
+        type,
+        description: description.trim() || undefined,
+        radiusMeters: Number(radiusMeters) || 200,
+        latitude: 12.9716,
+        longitude: 77.5946,
+        maxAccuracyMeters: 50,
+        isActive: true
+      });
+      setIsModalOpen(false);
+      setName("");
+      setCode("");
+      setDescription("");
+    } catch (err: unknown) {
+      setFormError(err instanceof Error ? err.message : "Failed to create location.");
+    }
   };
-}
 
-interface LocationListResponse {
-  locations: LocationItem[];
-  total: number;
-  page: number;
-  limit: number;
-}
+  if (gate.isLoading || (gate.isAuthorized && isLoading)) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-pulse">
+        <div className="h-8 w-64 rounded-control bg-surface-muted/60" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <SkeletonLoader className="h-32 rounded-card" />
+          <SkeletonLoader className="h-32 rounded-card" />
+          <SkeletonLoader className="h-32 rounded-card" />
+        </div>
+      </div>
+    );
+  }
 
-export default function LocationsListPage() {
-  const [search, setSearch] = useState("");
-  const [type, setType] = useState("");
-  const [isActive, setIsActive] = useState<string>("");
-  const [page, setPage] = useState(1);
-
-  const queryParams = new URLSearchParams();
-  if (search) queryParams.set("search", search);
-  if (type) queryParams.set("type", type);
-  if (isActive !== "") queryParams.set("isActive", isActive);
-  queryParams.set("page", String(page));
-  queryParams.set("limit", "20");
-
-  const locationsQuery = useQuery({
-    queryKey: ["locations-list", queryParams.toString()],
-    queryFn: () => apiRequest<LocationListResponse>(`/locations?${queryParams.toString()}`)
-  });
-
-  const getTypeBadgeTone = (t: string): "neutral" | "success" | "warning" | "danger" => {
-    if (t === "OFFICE") return "neutral";
-    if (t === "FACTORY") return "warning";
-    if (t === "WAREHOUSE") return "success";
-    return "neutral";
-  };
-
-  return (
-    <div className="mx-auto grid max-w-6xl gap-6 p-4 md:p-6 lg:p-8">
-      {/* Header */}
-      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Work Locations</h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            Define workplaces, GPS geofences, and manage employee location assignments.
+  if (!gate.isAuthorized) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Locations Access Restricted</h2>
+          <p className="text-xs text-foreground-muted">
+            You do not have permission (`location.view`) to access workplace location records.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href={"/admin/location-audit" as Route}>
-            <Button variant="secondary">Location Audit</Button>
-          </Link>
-          <Link href={"/locations/new" as Route}>
-            <Button>Add Location</Button>
-          </Link>
-        </div>
-      </header>
+      </div>
+    );
+  }
 
-      {/* Filter Bar */}
-      <Panel className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-        <Field label="Search">
-          <Input
-            placeholder="Search name or code..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          />
-        </Field>
-
-        <Field label="Location Type">
-          <select
-            className="h-11 rounded-control border border-border bg-surface px-3 text-sm text-zinc-950"
-            value={type}
-            onChange={(e) => { setType(e.target.value); setPage(1); }}
-          >
-            <option value="">All Types</option>
-            <option value="OFFICE">Office</option>
-            <option value="FACTORY">Factory</option>
-            <option value="WAREHOUSE">Warehouse</option>
-            <option value="RETAIL_OUTLET">Retail Outlet</option>
-            <option value="DISTRIBUTION_CENTER">Distribution Center</option>
-            <option value="CUSTOM">Custom</option>
-          </select>
-        </Field>
-
-        <Field label="Status">
-          <select
-            className="h-11 rounded-control border border-border bg-surface px-3 text-sm text-zinc-950"
-            value={isActive}
-            onChange={(e) => { setIsActive(e.target.value); setPage(1); }}
-          >
-            <option value="">All Statuses</option>
-            <option value="true">Active Only</option>
-            <option value="false">Inactive Only</option>
-          </select>
-        </Field>
-
-        <div className="flex items-end">
-          <Button
-            variant="secondary"
-            className="w-full"
-            onClick={() => {
-              setSearch("");
-              setType("");
-              setIsActive("");
-              setPage(1);
-            }}
-          >
-            Reset
-          </Button>
-        </div>
-      </Panel>
-
-      {/* Locations Table */}
-      <Panel className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-border bg-muted/60 text-xs font-semibold uppercase text-zinc-500">
-              <tr>
-                <th className="px-4 py-3">Location</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Coordinates</th>
-                <th className="px-4 py-3">Geofence Radius</th>
-                <th className="px-4 py-3">Assigned Staff</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {locationsQuery.isLoading ? (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-zinc-500">Loading locations...</td>
-                </tr>
-              ) : locationsQuery.data?.locations && locationsQuery.data.locations.length > 0 ? (
-                locationsQuery.data.locations.map((loc) => (
-                  <tr key={loc.id} className="hover:bg-muted/30">
-                    <td className="px-4 py-3.5">
-                      <p className="font-medium text-zinc-950">{loc.name}</p>
-                      <p className="text-xs text-zinc-500">{loc.code}</p>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <Badge tone={getTypeBadgeTone(loc.type)}>{loc.type.replace(/_/g, " ")}</Badge>
-                    </td>
-                    <td className="px-4 py-3.5 font-mono text-xs text-zinc-600">
-                      {loc.latitude.toFixed(4)}, {loc.longitude.toFixed(4)}
-                    </td>
-                    <td className="px-4 py-3.5 text-zinc-700">
-                      <span className="font-medium text-zinc-950">{loc.radiusMeters}m</span> (Max acc: {loc.maxAccuracyMeters}m)
-                    </td>
-                    <td className="px-4 py-3.5 text-zinc-600">
-                      {loc._count?.assignments ?? 0} assigned
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <Badge tone={loc.isActive ? "success" : "danger"}>
-                        {loc.isActive ? "Active" : "Inactive"}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3.5 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Link href={`/locations/${loc.id}/assignments` as Route}>
-                          <Button variant="secondary" className="h-8 px-2.5 text-xs">
-                            Assign
-                          </Button>
-                        </Link>
-                        <Link href={`/locations/${loc.id}` as Route}>
-                          <Button variant="secondary" className="h-8 px-2.5 text-xs">
-                            Details
-                          </Button>
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-zinc-500">No locations configured yet.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
+      {/* 1. Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Workplace Locations</h1>
+          <p className="text-xs text-foreground-muted mt-0.5">
+            Geofenced physical facilities, office hubs, and manufacturing sites.
+          </p>
         </div>
 
-        {/* Pagination */}
-        {locationsQuery.data && locationsQuery.data.total > 20 && (
-          <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-zinc-500">
-            <span>
-              Showing {((page - 1) * 20) + 1} – {Math.min(page * 20, locationsQuery.data.total)} of {locationsQuery.data.total}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                className="h-8 px-3 text-xs"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="secondary"
-                className="h-8 px-3 text-xs"
-                disabled={page * 20 >= locationsQuery.data.total}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="px-4 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition shadow-sm inline-flex items-center gap-1.5 self-start sm:self-auto"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add Location</span>
+        </button>
+      </div>
+
+      {/* 2. Locations Cards */}
+      {isError ? (
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle text-center space-y-3">
+          <AlertCircle className="w-6 h-6 text-danger mx-auto" />
+          <p className="text-xs font-semibold text-foreground">Locations unavailable</p>
+          <button onClick={() => refetch()} className="px-3 py-1.5 rounded-control bg-primary-soft text-primary text-xs font-semibold">
+            Retry
+          </button>
+        </div>
+      ) : locations.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {locations.map((loc) => (
+            <div
+              key={loc.id}
+              className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card hover:border-primary/30 transition flex flex-col justify-between"
+            >
+              <div className="space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-panel bg-primary-soft text-primary flex items-center justify-center shrink-0">
+                      <Building className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-foreground">{loc.name}</h3>
+                      <p className="text-[10px] text-foreground-muted font-mono">{loc.code}</p>
+                    </div>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded-pill text-[9px] font-bold ${
+                      loc.isActive ? "bg-success/20 text-success" : "bg-surface-muted text-foreground-muted"
+                    }`}
+                  >
+                    {loc.isActive ? "ACTIVE" : "INACTIVE"}
+                  </span>
+                </div>
+
+                {loc.description && (
+                  <p className="text-xs text-foreground-secondary line-clamp-2">
+                    {loc.description}
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-3 mt-3 border-t border-border-subtle flex items-center justify-between text-[10px] text-foreground-muted font-mono">
+                <span>Radius: {loc.radiusMeters || 200}m</span>
+                <span className="uppercase">{loc.type || "OFFICE"}</span>
+              </div>
             </div>
+          ))}
+        </div>
+      ) : (
+        <div className="py-16 text-center rounded-card bg-surface-raised border border-border-subtle flex flex-col items-center justify-center text-foreground-muted">
+          <MapPin className="w-8 h-8 mb-2 opacity-50" />
+          <p className="text-xs font-bold text-foreground">No workplace locations found</p>
+          <p className="text-[11px] text-foreground-muted mt-0.5">Add a new physical location to configure attendance geofencing.</p>
+        </div>
+      )}
+
+      {/* 3. Add Location Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-panel bg-surface-raised border border-border-subtle p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+              <h3 className="text-sm font-bold text-foreground">Add Workplace Location</h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="w-7 h-7 rounded-pill hover:bg-surface-muted flex items-center justify-center text-foreground-muted"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreate} className="space-y-4 text-xs">
+              {formError && (
+                <div className="p-3 rounded-control bg-danger/10 border border-danger/20 text-danger flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="font-bold text-foreground">Location Name *</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Bangalore Tech Hub"
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-foreground">Location Code *</label>
+                  <input
+                    type="text"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder="e.g. BLR-HQ"
+                    className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-foreground">Facility Type</label>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value)}
+                    className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    {LOCATION_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-foreground">Geofence Radius (m)</label>
+                <input
+                  type="number"
+                  value={radiusMeters}
+                  onChange={(e) => setRadiusMeters(Number(e.target.value))}
+                  min={50}
+                  max={5000}
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-foreground">Description</label>
+                <textarea
+                  rows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Optional details..."
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-border-subtle flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 rounded-control bg-surface-muted hover:bg-muted font-semibold text-foreground-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createMutation.isPending}
+                  className="px-5 py-2 rounded-control bg-primary hover:bg-primary-hover text-white font-bold transition shadow-sm inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {createMutation.isPending ? "Saving..." : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      Save Location
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </Panel>
+        </div>
+      )}
     </div>
   );
 }

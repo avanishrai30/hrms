@@ -23,11 +23,19 @@ export const navGroups: NavGroup[] = [
       { href: "/employees", label: "Employees", permission: "employees.read" },
       { href: "/directory", label: "Directory", permission: "directory.view" },
       { href: "/organization", label: "Organization", permission: "organization.view" },
+      { href: "/org-chart" as Route, label: "Org Chart", permission: "directory.view" },
       { href: "/organization/business-units" as Route, label: "Business Units", permission: "organization.view" },
-      { href: "/organization/teams" as Route, label: "Teams", permission: "organization.view" },
-      { href: "/documents", label: "Documents", permission: "documents.view" },
-      { href: "/profile", label: "My Profile", permission: "profile.view" },
-      { href: "/requests", label: "Requests", permission: "requests.view" }
+      { href: "/organization/teams" as Route, label: "Teams", permission: "organization.view" }
+    ]
+  },
+  {
+    label: "Manager",
+    href: "/mss" as Route,
+    permission: "mss.read" as PermissionCode,
+    items: [
+      { href: "/mss" as Route, label: "Overview", permission: "mss.read" as PermissionCode },
+      { href: "/mss/team" as Route, label: "My Team", permission: "mss.read" as PermissionCode },
+      { href: "/mss/approvals" as Route, label: "Approvals", permission: "mss.read" as PermissionCode }
     ]
   },
   {

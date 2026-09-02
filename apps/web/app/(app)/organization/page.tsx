@@ -1,283 +1,472 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { Route } from "next";
+import React, { useState } from "react";
 import Link from "next/link";
-import { Badge, Button, Input, Panel } from "../../../components/ui";
-import { apiRequest } from "../../../lib/api";
-import type { OrgHierarchyNode } from "@vc-wms/shared-types";
+import type { Route } from "next";
+import {
+  Building2,
+  Plus,
+  Network,
+  Users,
+  Briefcase,
+  ShieldCheck,
+  AlertCircle,
+  X,
+  Send
+} from "lucide-react";
+import {
+  useDepartments,
+  useDesignations,
+  useBusinessUnits,
+  useTeams,
+  useCreateDepartmentMutation,
+  useCreateDesignationMutation
+} from "../../../lib/queries/use-people-queries";
+import { usePermissionGate } from "../../../lib/session-store";
+import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
-interface ReportingNode {
-  id: string;
-  employeeCode: string;
-  fullName: string;
-  email: string;
-  status: string;
-  department?: { name: string } | null;
-  designation?: { name: string } | null;
-  businessUnit?: { name: string } | null;
-  region?: { name: string } | null;
-  team?: { name: string } | null;
-  level: number;
-}
+export default function OrganizationManagementPage() {
+  const gate = usePermissionGate(["organization.view", "departments.read"]);
 
-function OrgTreeNodeItem({ node }: { node: OrgHierarchyNode }) {
-  const [isOpen, setIsOpen] = useState(true);
-  const hasChildren = node.children && node.children.length > 0;
+  const [activeTab, setActiveTab] = useState<"departments" | "designations">("departments");
+  const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
+  const [isDesigModalOpen, setIsDesigModalOpen] = useState(false);
 
-  const typeConfig: Record<string, { label: string; badgeTone: "neutral" | "success" | "warning" | "danger"; icon: string }> = {
-    BUSINESS_UNIT: { label: "Business Unit", badgeTone: "neutral", icon: "🏢" },
-    REGION: { label: "Region", badgeTone: "success", icon: "📍" },
-    DEPARTMENT: { label: "Department", badgeTone: "warning", icon: "👥" },
-    TEAM: { label: "Team", badgeTone: "neutral", icon: "⚡" }
-  };
+  // Department Form
+  const [deptName, setDeptName] = useState("");
+  const [deptCode, setDeptCode] = useState("");
+  const [deptDesc, setDeptDesc] = useState("");
+  const [deptError, setDeptError] = useState<string | null>(null);
 
-  const config = typeConfig[node.type] ?? { label: node.type, badgeTone: "neutral" as const, icon: "📁" };
+  // Designation Form
+  const [desigName, setDesigName] = useState("");
+  const [desigCode, setDesigCode] = useState("");
+  const [desigDeptId, setDesigDeptId] = useState("");
+  const [desigError, setDesigError] = useState<string | null>(null);
 
-  return (
-    <div className="space-y-2">
-      <div
-        className={`flex items-center justify-between rounded-control border border-border bg-surface p-3 transition hover:border-primary/50 ${
-          node.type === "BUSINESS_UNIT"
-            ? "border-l-4 border-l-primary shadow-sm"
-            : node.type === "REGION"
-            ? "border-l-4 border-l-emerald-500"
-            : node.type === "DEPARTMENT"
-            ? "border-l-4 border-l-amber-500"
-            : "border-l-4 border-l-zinc-400"
-        }`}
-      >
-        <div className="flex items-center gap-3">
-          {hasChildren && (
-            <button
-              type="button"
-              onClick={() => setIsOpen(!isOpen)}
-              className="grid h-6 w-6 place-items-center rounded bg-muted text-xs font-bold text-zinc-600 hover:bg-zinc-200"
-            >
-              {isOpen ? "−" : "+"}
-            </button>
-          )}
-          {!hasChildren && <span className="w-6 text-center text-xs text-zinc-300">•</span>}
-          <span className="text-base">{config.icon}</span>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-zinc-950">{node.name}</span>
-              <span className="font-mono text-xs text-zinc-400">({node.code})</span>
-            </div>
-          </div>
-        </div>
+  const deptsQuery = useDepartments(gate.isAuthorized);
+  const desigsQuery = useDesignations(gate.isAuthorized);
+  const buQuery = useBusinessUnits(gate.isAuthorized);
+  const teamsQuery = useTeams(gate.isAuthorized);
 
-        <div className="flex items-center gap-2">
-          <Badge tone={config.badgeTone}>{config.label}</Badge>
-          {hasChildren && (
-            <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-medium text-zinc-600">
-              {node.children.length} sub-units
-            </span>
-          )}
-        </div>
-      </div>
+  const createDeptMutation = useCreateDepartmentMutation();
+  const createDesigMutation = useCreateDesignationMutation();
 
-      {hasChildren && isOpen && (
-        <div className="ml-6 space-y-2 border-l-2 border-dashed border-border pl-4">
-          {node.children.map((child) => (
-            <OrgTreeNodeItem key={child.id} node={child} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+  const departments = deptsQuery.data ?? [];
+  const designations = desigsQuery.data ?? [];
+  const businessUnits = buQuery.data ?? [];
+  const teams = teamsQuery.data ?? [];
 
-export default function OrganizationPage() {
-  const [tree, setTree] = useState<OrgHierarchyNode[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Quick stats
-  const [buCount, setBuCount] = useState(0);
-  const [regionCount, setRegionCount] = useState(0);
-  const [teamCount, setTeamCount] = useState(0);
-  const [deptCount, setDeptCount] = useState(0);
-
-  // Reporting line inspection
-  const [searchEmployeeId, setSearchEmployeeId] = useState("");
-  const [reportingChain, setReportingChain] = useState<ReportingNode[] | null>(null);
-  const [isResolvingChain, setIsResolvingChain] = useState(false);
-  const [chainError, setChainError] = useState<string | null>(null);
-
-  const loadData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const [treeRes, buRes, regRes, teamRes, deptRes] = await Promise.all([
-        apiRequest<OrgHierarchyNode[]>("/organization/tree"),
-        apiRequest<unknown[]>("/organization/business-units").catch(() => []),
-        apiRequest<unknown[]>("/organization/regions").catch(() => []),
-        apiRequest<unknown[]>("/organization/teams").catch(() => []),
-        apiRequest<unknown[]>("/departments").catch(() => [])
-      ]);
-
-      setTree(treeRes ?? []);
-      setBuCount(buRes.length);
-      setRegionCount(regRes.length);
-      setTeamCount(teamRes.length);
-      setDeptCount(deptRes.length);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load organizational hierarchy.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadData();
-  }, []);
-
-  const handleResolveChain = async (e: React.FormEvent) => {
+  const handleCreateDept = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchEmployeeId) return;
+    if (!deptName.trim() || !deptCode.trim()) {
+      setDeptError("Please provide both name and code.");
+      return;
+    }
     try {
-      setIsResolvingChain(true);
-      setChainError(null);
-      const chain = await apiRequest<ReportingNode[]>(`/organization/reporting-chain/${searchEmployeeId}`);
-      setReportingChain(chain ?? []);
+      setDeptError(null);
+      await createDeptMutation.mutateAsync({
+        name: deptName.trim(),
+        code: deptCode.trim().toUpperCase(),
+        description: deptDesc.trim() ? deptDesc.trim() : undefined
+      });
+      setIsDeptModalOpen(false);
+      setDeptName("");
+      setDeptCode("");
+      setDeptDesc("");
     } catch (err: unknown) {
-      setChainError(err instanceof Error ? err.message : "Failed to resolve reporting line.");
-      setReportingChain(null);
-    } finally {
-      setIsResolvingChain(false);
+      setDeptError(err instanceof Error ? err.message : "Failed to create department");
     }
   };
 
-  return (
-    <div className="mx-auto grid max-w-[1440px] gap-6 p-4 md:p-6 lg:p-8">
-      {/* Header */}
-      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Enterprise Organization Structure</h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            Hierarchical visualization across Business Units, Regional hubs, Departments, and Functional Teams.
+  const handleCreateDesig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!desigName.trim() || !desigCode.trim() || !desigDeptId) {
+      setDesigError("Please fill in name, code, and select a department.");
+      return;
+    }
+    try {
+      setDesigError(null);
+      await createDesigMutation.mutateAsync({
+        name: desigName.trim(),
+        code: desigCode.trim().toUpperCase(),
+        departmentId: desigDeptId
+      });
+      setIsDesigModalOpen(false);
+      setDesigName("");
+      setDesigCode("");
+    } catch (err: unknown) {
+      setDesigError(err instanceof Error ? err.message : "Failed to create designation");
+    }
+  };
+
+  if (gate.isLoading || (gate.isAuthorized && deptsQuery.isLoading)) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-pulse">
+        <div className="h-8 w-64 rounded-control bg-surface-muted/60" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <SkeletonLoader className="h-24 rounded-card" />
+          <SkeletonLoader className="h-24 rounded-card" />
+          <SkeletonLoader className="h-24 rounded-card" />
+          <SkeletonLoader className="h-24 rounded-card" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!gate.isAuthorized) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Organization Management Access Restricted</h2>
+          <p className="text-xs text-foreground-muted">
+            You do not have permission (`organization.view`) to view organization structures.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link href={"/organization/business-units" as Route}>
-            <Button variant="secondary">Business Units Directory</Button>
-          </Link>
-          <Link href={"/organization/teams" as Route}>
-            <Button variant="secondary">Teams Directory</Button>
-          </Link>
-        </div>
-      </header>
+      </div>
+    );
+  }
 
-      {error && (
-        <div className="rounded-control border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300">
+      {/* 1. Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Organization Architecture</h1>
+          <p className="text-xs text-foreground-muted mt-0.5">
+            Configure departments, designations, business units, and reporting hierarchies.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <Link
+            href={"/org-chart" as Route}
+            className="px-3.5 py-2 rounded-control bg-surface-raised border border-border-subtle hover:bg-surface-muted text-xs font-semibold text-foreground transition inline-flex items-center gap-1.5 shadow-sm"
+          >
+            <Network className="w-4 h-4 text-primary" />
+            <span>Org Chart</span>
+          </Link>
+          <button
+            onClick={() => {
+              if (activeTab === "departments") setIsDeptModalOpen(true);
+              else {
+                setDesigDeptId(departments[0]?.id || "");
+                setIsDesigModalOpen(true);
+              }
+            }}
+            className="px-4 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition shadow-sm inline-flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{activeTab === "departments" ? "Add Department" : "Add Designation"}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Real Metrics Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-4 rounded-card bg-surface-raised border border-border-subtle shadow-card flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-foreground-muted uppercase tracking-wider">Departments</p>
+            <p className="text-2xl font-extrabold font-mono text-foreground tabular-nums mt-1">
+              {deptsQuery.isSuccess ? departments.length : "—"}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-pill bg-primary-soft text-primary flex items-center justify-center">
+            <Building2 className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="p-4 rounded-card bg-surface-raised border border-border-subtle shadow-card flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-foreground-muted uppercase tracking-wider">Designations</p>
+            <p className="text-2xl font-extrabold font-mono text-foreground tabular-nums mt-1">
+              {desigsQuery.isSuccess ? designations.length : "—"}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-pill bg-primary-soft text-primary flex items-center justify-center">
+            <Briefcase className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="p-4 rounded-card bg-surface-raised border border-border-subtle shadow-card flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-foreground-muted uppercase tracking-wider">Business Units</p>
+            <p className="text-2xl font-extrabold font-mono text-foreground tabular-nums mt-1">
+              {buQuery.isSuccess ? businessUnits.length : "—"}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-pill bg-primary-soft text-primary flex items-center justify-center">
+            <Network className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="p-4 rounded-card bg-surface-raised border border-border-subtle shadow-card flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-foreground-muted uppercase tracking-wider">Teams</p>
+            <p className="text-2xl font-extrabold font-mono text-foreground tabular-nums mt-1">
+              {teamsQuery.isSuccess ? teams.length : "—"}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-pill bg-primary-soft text-primary flex items-center justify-center">
+            <Users className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-border-subtle pb-2">
+        <button
+          onClick={() => setActiveTab("departments")}
+          className={`px-4 py-2 rounded-control text-xs font-semibold transition ${
+            activeTab === "departments"
+              ? "bg-primary text-white shadow-sm"
+              : "text-foreground-secondary hover:bg-surface-muted"
+          }`}
+        >
+          Departments
+        </button>
+        <button
+          onClick={() => setActiveTab("designations")}
+          className={`px-4 py-2 rounded-control text-xs font-semibold transition ${
+            activeTab === "designations"
+              ? "bg-primary text-white shadow-sm"
+              : "text-foreground-secondary hover:bg-surface-muted"
+          }`}
+        >
+          Designations
+        </button>
+      </div>
+
+      {/* 4. Tab Tables */}
+      {activeTab === "departments" && (
+        <div className="rounded-card bg-surface-raised border border-border-subtle shadow-card overflow-hidden">
+          {departments.length > 0 ? (
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border-subtle text-foreground-muted bg-surface-muted/30">
+                  <th className="py-3 px-4 font-semibold">Department</th>
+                  <th className="py-3 px-4 font-semibold">Code</th>
+                  <th className="py-3 px-4 font-semibold">Description</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {departments.map((d) => (
+                  <tr key={d.id} className="hover:bg-surface-muted/30 transition">
+                    <td className="py-3 px-4 font-bold text-foreground">{d.name}</td>
+                    <td className="py-3 px-4 font-mono text-primary font-semibold">{d.code}</td>
+                    <td className="py-3 px-4 text-foreground-secondary">{d.description || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="py-12 text-center text-xs text-foreground-muted">
+              No departments configured yet.
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Stats Summary Cards */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Panel className="p-4">
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Business Units</p>
-          <p className="mt-2 text-2xl font-bold text-zinc-950">{buCount}</p>
-          <p className="mt-1 text-xs text-zinc-500">Autonomous business lines</p>
-        </Panel>
-        <Panel className="p-4">
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Regions & Hubs</p>
-          <p className="mt-2 text-2xl font-bold text-zinc-950">{regionCount}</p>
-          <p className="mt-1 text-xs text-zinc-500">Geographic branches</p>
-        </Panel>
-        <Panel className="p-4">
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Departments</p>
-          <p className="mt-2 text-2xl font-bold text-zinc-950">{deptCount}</p>
-          <p className="mt-1 text-xs text-zinc-500">Functional areas</p>
-        </Panel>
-        <Panel className="p-4">
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Functional Teams</p>
-          <p className="mt-2 text-2xl font-bold text-zinc-950">{teamCount}</p>
-          <p className="mt-1 text-xs text-zinc-500">Operational squads</p>
-        </Panel>
-      </div>
-
-      {/* Main Grid: Tree View + Reporting Chain Resolver */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Visual Org Tree */}
-        <Panel className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <h2 className="text-base font-semibold text-zinc-950">Hierarchical Structure</h2>
-            <Button variant="ghost" className="text-xs h-7" onClick={loadData}>
-              Refresh Tree
-            </Button>
-          </div>
-
-          {isLoading ? (
-            <div className="py-12 text-center text-sm text-zinc-500">Constructing organization tree...</div>
-          ) : tree.length === 0 ? (
-            <div className="py-12 text-center text-sm text-zinc-500">
-              No organization units defined. Start by creating Business Units or Teams.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {tree.map((rootNode) => (
-                <OrgTreeNodeItem key={rootNode.id} node={rootNode} />
-              ))}
-            </div>
-          )}
-        </Panel>
-
-        {/* Reporting Line Inspector */}
-        <Panel className="lg:col-span-1 space-y-4">
-          <h2 className="text-base font-semibold text-zinc-950">Reporting Chain Inspector</h2>
-          <p className="text-xs text-zinc-600">
-            Query any employee UUID to trace their complete management chain up to executive leadership.
-          </p>
-
-          <form onSubmit={handleResolveChain} className="space-y-3">
-            <Input
-              required
-              placeholder="Enter Employee UUID..."
-              value={searchEmployeeId}
-              onChange={(e) => setSearchEmployeeId(e.target.value)}
-            />
-            <Button variant="primary" type="submit" className="w-full h-9 text-xs" disabled={isResolvingChain}>
-              {isResolvingChain ? "Resolving..." : "Trace Reporting Line"}
-            </Button>
-          </form>
-
-          {chainError && (
-            <div className="rounded-control bg-red-50 p-3 text-xs text-red-700">{chainError}</div>
-          )}
-
-          {reportingChain && (
-            <div className="mt-4 space-y-3 border-t border-border pt-4">
-              <h3 className="text-xs font-semibold text-zinc-700 uppercase tracking-wide">
-                Reporting Chain ({reportingChain.length} Levels)
-              </h3>
-              <div className="space-y-2">
-                {reportingChain.map((node, i) => (
-                  <div
-                    key={node.id}
-                    className={`rounded-control border p-3 text-xs ${
-                      i === 0
-                        ? "border-primary/50 bg-primary/5 font-semibold text-zinc-950"
-                        : "border-border bg-surface text-zinc-700"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span>{i === 0 ? "Target Employee" : `Level ${i} Manager`}</span>
-                      <span className="font-mono text-[11px] text-zinc-400">{node.employeeCode}</span>
-                    </div>
-                    <p className="mt-1 font-bold text-sm text-zinc-950">{node.fullName}</p>
-                    <p className="text-zinc-500">{node.email}</p>
-                    <div className="mt-2 flex flex-wrap gap-1 text-[11px] text-zinc-600">
-                      {node.designation && <span>{node.designation.name}</span>}
-                      {node.department && <span>• {node.department.name}</span>}
-                    </div>
-                  </div>
+      {activeTab === "designations" && (
+        <div className="rounded-card bg-surface-raised border border-border-subtle shadow-card overflow-hidden">
+          {designations.length > 0 ? (
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border-subtle text-foreground-muted bg-surface-muted/30">
+                  <th className="py-3 px-4 font-semibold">Designation Title</th>
+                  <th className="py-3 px-4 font-semibold">Code</th>
+                  <th className="py-3 px-4 font-semibold">Department</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {designations.map((d) => (
+                  <tr key={d.id} className="hover:bg-surface-muted/30 transition">
+                    <td className="py-3 px-4 font-bold text-foreground">{d.name}</td>
+                    <td className="py-3 px-4 font-mono text-primary font-semibold">{d.code}</td>
+                    <td className="py-3 px-4 text-foreground-secondary">{d.department?.name || "—"}</td>
+                  </tr>
                 ))}
-              </div>
+              </tbody>
+            </table>
+          ) : (
+            <div className="py-12 text-center text-xs text-foreground-muted">
+              No designations configured yet.
             </div>
           )}
-        </Panel>
-      </div>
+        </div>
+      )}
+
+      {/* 5. Add Department Modal */}
+      {isDeptModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-panel bg-surface-raised border border-border-subtle p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+              <h3 className="text-sm font-bold text-foreground">Add Department</h3>
+              <button
+                onClick={() => setIsDeptModalOpen(false)}
+                className="w-7 h-7 rounded-pill hover:bg-surface-muted flex items-center justify-center text-foreground-muted"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateDept} className="space-y-4 text-xs">
+              {deptError && (
+                <div className="p-3 rounded-control bg-danger/10 border border-danger/20 text-danger flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{deptError}</span>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="font-bold text-foreground">Department Name *</label>
+                <input
+                  type="text"
+                  value={deptName}
+                  onChange={(e) => setDeptName(e.target.value)}
+                  placeholder="e.g. Engineering"
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-foreground">Department Code *</label>
+                <input
+                  type="text"
+                  value={deptCode}
+                  onChange={(e) => setDeptCode(e.target.value)}
+                  placeholder="e.g. ENG"
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-foreground">Description</label>
+                <textarea
+                  rows={2}
+                  value={deptDesc}
+                  onChange={(e) => setDeptDesc(e.target.value)}
+                  placeholder="Optional notes..."
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-border-subtle flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsDeptModalOpen(false)}
+                  className="px-4 py-2 rounded-control bg-surface-muted hover:bg-muted font-semibold text-foreground-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createDeptMutation.isPending}
+                  className="px-5 py-2 rounded-control bg-primary hover:bg-primary-hover text-white font-bold transition shadow-sm inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {createDeptMutation.isPending ? "Creating..." : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      Save Department
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Add Designation Modal */}
+      {isDesigModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-panel bg-surface-raised border border-border-subtle p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+              <h3 className="text-sm font-bold text-foreground">Add Designation</h3>
+              <button
+                onClick={() => setIsDesigModalOpen(false)}
+                className="w-7 h-7 rounded-pill hover:bg-surface-muted flex items-center justify-center text-foreground-muted"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateDesig} className="space-y-4 text-xs">
+              {desigError && (
+                <div className="p-3 rounded-control bg-danger/10 border border-danger/20 text-danger flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{desigError}</span>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="font-bold text-foreground">Designation Title *</label>
+                <input
+                  type="text"
+                  value={desigName}
+                  onChange={(e) => setDesigName(e.target.value)}
+                  placeholder="e.g. Senior Software Engineer"
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-foreground">Code *</label>
+                <input
+                  type="text"
+                  value={desigCode}
+                  onChange={(e) => setDesigCode(e.target.value)}
+                  placeholder="e.g. SSE"
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-foreground">Department *</label>
+                <select
+                  value={desigDeptId}
+                  onChange={(e) => setDesigDeptId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  required
+                >
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-3 border-t border-border-subtle flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsDesigModalOpen(false)}
+                  className="px-4 py-2 rounded-control bg-surface-muted hover:bg-muted font-semibold text-foreground-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createDesigMutation.isPending}
+                  className="px-5 py-2 rounded-control bg-primary hover:bg-primary-hover text-white font-bold transition shadow-sm inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {createDesigMutation.isPending ? "Creating..." : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      Save Designation
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

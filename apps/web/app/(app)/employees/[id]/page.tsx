@@ -1,229 +1,325 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import type { Route } from "next";
+import React, { useState, use } from "react";
 import Link from "next/link";
-import { use } from "react";
-import { Button } from "../../../../components/ui";
-import { ErrorState, LoadingState, PermissionState, Section, StatusBadge, Surface } from "../../../../components/page-primitives";
-import { apiRequest } from "../../../../lib/api";
-import { useSessionStore } from "../../../../lib/session-store";
+import type { Route } from "next";
+import {
+  User,
+  Briefcase,
+  Building,
+  FileText,
+  Clock,
+  ArrowLeft,
+  ShieldCheck,
+  AlertCircle
+} from "lucide-react";
+import {
+  useEmployee,
+  useEmployeeTimeline,
+  useEmployeeDocuments
+} from "../../../../lib/queries/use-people-queries";
+import { usePermissionGate } from "../../../../lib/session-store";
 
-interface EmployeeDocument {
-  id: string;
-  documentType: string;
-  customTypeLabel?: string;
-  fileName: string;
-  version: number;
-  status: string;
-  createdAt: string;
-}
-
-interface TimelineEvent {
-  id: string;
-  eventType: string;
-  message: string;
-  createdAt: string;
-}
-
-interface EmployeeStatusHistory {
-  id: string;
-  previousStatus: string;
-  newStatus: string;
-  reason: string;
-  createdAt: string;
-}
-
-interface EmployeeDetail {
-  id: string;
-  employeeCode: string;
-  fullName: string;
-  preferredName?: string;
-  email: string;
-  personalEmail?: string;
-  phone?: string;
-  status: string;
-  employmentType: string;
-  salaryType: string;
-  joiningDate: string;
-  probationEndsAt?: string;
-  noticePeriodEndsAt?: string;
-  profilePhotoObjectKey?: string;
-  dateOfBirth?: string;
-  gender?: string;
-  emergencyContact?: Record<string, unknown>;
-  bankDetails?: Record<string, unknown>;
-  governmentIds?: Record<string, unknown>;
-  currentAddress?: Record<string, unknown>;
-  permanentAddress?: Record<string, unknown>;
-  department: { name: string };
-  designation: { name: string };
-  documents: EmployeeDocument[];
-  timelineEvents: TimelineEvent[];
-  statusHistory: EmployeeStatusHistory[];
-  profileCompletionScore: number;
-  permissionsSummary: { roles: Array<{ code: string; name: string }>; permissions: string[] };
-}
-
-export default function EmployeeProfilePage({ params }: { params: Promise<{ id: string }> }) {
+export default function EmployeeDetailPage({
+  params
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = use(params);
-  const permissions = useSessionStore((state) => state.permissions);
-  const employee = useQuery({
-    queryKey: ["employee", id],
-    queryFn: () => apiRequest<EmployeeDetail>(`/employees/${id}`)
-  });
+  const gate = usePermissionGate(["employees.read"]);
+  const [activeTab, setActiveTab] = useState<"overview" | "org" | "documents" | "timeline">("overview");
 
-  if (!permissions.includes("employees.read")) {
-    return <PermissionState title="Employee profiles are not available for your role." />;
+  const { data: employee, isLoading, isError, refetch } = useEmployee(id, gate.isAuthorized);
+  const { data: timeline = [] } = useEmployeeTimeline(id, gate.isAuthorized && activeTab === "timeline");
+  const { data: documents = [] } = useEmployeeDocuments(id, gate.isAuthorized && activeTab === "documents");
+
+  if (gate.isLoading || (gate.isAuthorized && isLoading)) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 animate-pulse">
+        <div className="h-6 w-32 rounded-control bg-surface-muted/60" />
+        <div className="h-44 rounded-card bg-surface-muted/60" />
+        <div className="h-64 rounded-card bg-surface-muted/60" />
+      </div>
+    );
   }
 
-  return (
-    <div className="mx-auto grid max-w-6xl gap-6 p-4 md:p-6 lg:p-8">
-      {employee.isLoading ? <Surface><LoadingState label="Loading employee profile" /></Surface> : null}
-      {employee.isError ? <ErrorState message="Employee could not be loaded." /> : null}
-      {employee.data ? (
-        <>
-          <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-4">
-              <div className="grid h-16 w-16 shrink-0 place-items-center rounded-panel bg-muted text-lg font-semibold text-zinc-700">
-                {employee.data.profilePhotoObjectKey ? "IMG" : employee.data.fullName.slice(0, 1)}
-              </div>
-              <div>
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <StatusBadge tone={employee.data.status === "ACTIVE" ? "success" : employee.data.status === "ARCHIVED" ? "danger" : "neutral"}>
-                    {employee.data.status}
-                  </StatusBadge>
-                  <span className="text-xs font-medium text-zinc-500">{employee.data.employeeCode}</span>
-                </div>
-                <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">{employee.data.fullName}</h1>
-                <p className="mt-1 text-sm text-zinc-600">{employee.data.designation.name} in {employee.data.department.name}</p>
-              </div>
-            </div>
-            <Link href={`/employees/${employee.data.id}/edit` as Route}>
-              <Button>Edit employee</Button>
-            </Link>
-          </header>
-
-          <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-            <Surface>
-              <p className="text-sm font-semibold text-zinc-950">Profile completion</p>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-primary" style={{ width: `${employee.data.profileCompletionScore}%` }} />
-              </div>
-              <p className="mt-3 text-2xl font-semibold tabular-nums text-zinc-950">{employee.data.profileCompletionScore}%</p>
-              <div className="mt-5 grid gap-2 text-sm text-zinc-600">
-                <span>{employee.data.email}</span>
-                <span>{employee.data.phone ?? "Phone not provided"}</span>
-                <span>Joined {new Date(employee.data.joiningDate).toLocaleDateString()}</span>
-              </div>
-            </Surface>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <InfoPanel title="Personal information" data={{
-                "Preferred name": employee.data.preferredName,
-                "Work email": employee.data.email,
-                "Personal email": employee.data.personalEmail,
-                Phone: employee.data.phone,
-                "Date of birth": employee.data.dateOfBirth ? new Date(employee.data.dateOfBirth).toLocaleDateString() : undefined,
-                Gender: employee.data.gender ? employee.data.gender.charAt(0) + employee.data.gender.slice(1).toLowerCase().replace(/_/g, ' ') : undefined
-              }} />
-              <InfoPanel title="Employment information" data={{
-                Department: employee.data.department.name,
-                Designation: employee.data.designation.name,
-                "Employment type": employee.data.employmentType,
-                "Salary type": employee.data.salaryType,
-                "Probation ends": employee.data.probationEndsAt ? new Date(employee.data.probationEndsAt).toLocaleDateString() : undefined,
-                "Notice ends": employee.data.noticePeriodEndsAt ? new Date(employee.data.noticePeriodEndsAt).toLocaleDateString() : undefined
-              }} />
-              <InfoPanel title="Emergency contact" data={flattenRecord(employee.data.emergencyContact)} />
-              <InfoPanel title="Bank details" data={flattenRecord(employee.data.bankDetails)} />
-              <InfoPanel title="Government IDs" data={flattenRecord(employee.data.governmentIds)} />
-              <InfoPanel title="Current Address" data={flattenRecord(employee.data.currentAddress)} />
-              <InfoPanel title="Permanent Address" data={flattenRecord(employee.data.permanentAddress)} />
-            </div>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Section title="Documents">
-              <div className="mt-4 divide-y divide-border">
-                {employee.data.documents.length ? employee.data.documents.map((document) => (
-                  <div className="flex items-center justify-between gap-3 py-3" key={document.id}>
-                    <div>
-                      <p className="text-sm font-medium text-zinc-950">{document.customTypeLabel ?? document.documentType}</p>
-                      <p className="text-xs text-zinc-500">{document.fileName} - v{document.version}</p>
-                    </div>
-                    <StatusBadge tone={document.status === "ACTIVE" ? "success" : "neutral"}>{document.status}</StatusBadge>
-                  </div>
-                )) : <p className="text-sm text-zinc-600">No document metadata yet.</p>}
-              </div>
-            </Section>
-
-            <Section title="Permissions summary">
-              <div className="mt-4 flex flex-wrap gap-2">
-                {employee.data.permissionsSummary.roles.map((role) => <StatusBadge key={role.code}>{role.name}</StatusBadge>)}
-                {!employee.data.permissionsSummary.roles.length ? <p className="text-sm text-zinc-600">No user access assigned.</p> : null}
-              </div>
-              <p className="mt-4 text-sm text-zinc-600">{employee.data.permissionsSummary.permissions.length} server-side permissions granted.</p>
-            </Section>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Section title="Timeline">
-              <Timeline events={employee.data.timelineEvents} />
-            </Section>
-            <Section title="Status history">
-              <div className="mt-4 grid gap-3">
-                {employee.data.statusHistory.length ? employee.data.statusHistory.map((entry) => (
-                  <div className="rounded-control border border-border p-3" key={entry.id}>
-                    <p className="text-sm font-medium text-zinc-950">{entry.previousStatus} to {entry.newStatus}</p>
-                    <p className="mt-1 text-xs text-zinc-500">{new Date(entry.createdAt).toLocaleString()}</p>
-                    <p className="mt-2 text-sm text-zinc-600">{entry.reason}</p>
-                  </div>
-                )) : <p className="text-sm text-zinc-600">No status transitions yet.</p>}
-              </div>
-            </Section>
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-function InfoPanel({ title, data }: { title: string; data: Record<string, unknown> }) {
-  const entries = Object.entries(data).filter(([, value]) => value);
-  return (
-    <Surface>
-      <h2 className="text-base font-semibold text-zinc-950">{title}</h2>
-      <dl className="mt-4 grid gap-3 text-sm">
-        {entries.length ? entries.map(([label, value]) => (
-          <div key={label}>
-            <dt className="text-zinc-500">{label}</dt>
-            <dd className="break-words text-zinc-950">{String(value)}</dd>
-          </div>
-        )) : <p className="text-sm text-zinc-600">Not provided.</p>}
-      </dl>
-    </Surface>
-  );
-}
-
-function Timeline({ events }: { events: TimelineEvent[] }) {
-  return (
-    <div className="mt-4 grid gap-3">
-      {events.length ? events.map((event) => (
-        <div className="rounded-control border border-border p-3" key={event.id}>
-          <p className="text-sm font-medium text-zinc-950">{event.message}</p>
-          <p className="mt-1 text-xs text-zinc-500">{event.eventType} - {new Date(event.createdAt).toLocaleString()}</p>
+  if (!gate.isAuthorized) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Employee Profile Access Restricted</h2>
+          <p className="text-xs text-foreground-muted">
+            You do not have permission (`employees.read`) to access this employee profile.
+          </p>
         </div>
-      )) : <p className="text-sm text-zinc-600">No activity yet.</p>}
+      </div>
+    );
+  }
+
+  if (isError || !employee) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center mt-12">
+        <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
+          <AlertCircle className="w-8 h-8 text-danger mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Employee Record Unavailable</h2>
+          <p className="text-xs text-foreground-muted">
+            Unable to retrieve the requested employee record.
+          </p>
+          <div className="pt-2 flex justify-center gap-3">
+            <Link
+              href={"/employees" as Route}
+              className="px-3 py-1.5 rounded-control bg-surface-muted hover:bg-muted text-xs font-semibold text-foreground-secondary"
+            >
+              Back to List
+            </Link>
+            <button
+              onClick={() => refetch()}
+              className="px-3 py-1.5 rounded-control bg-primary text-white text-xs font-semibold"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const deptName = typeof employee.department === "string" ? employee.department : employee.department?.name || "—";
+  const desigName = typeof employee.designation === "string" ? employee.designation : employee.designation?.name || "—";
+  const initial = (employee.fullName || "U").charAt(0).toUpperCase();
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
+      {/* 1. Back Navigation */}
+      <div>
+        <Link
+          href={"/employees" as Route}
+          className="inline-flex items-center gap-1 text-xs font-semibold text-foreground-muted hover:text-primary transition"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Back to Workforce Operations</span>
+        </Link>
+      </div>
+
+      {/* 2. Employee Identity Hero Card */}
+      <div className="relative overflow-hidden rounded-card bg-gradient-to-br from-[#E2E0FC] via-[#D3D0F8] to-[#C4C0F4] p-6 sm:p-8 text-zinc-900 shadow-card border border-white/60">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
+          <div className="flex items-center gap-5 min-w-0">
+            <div className="relative w-20 h-20 rounded-panel overflow-hidden border-2 border-white shadow-md bg-white flex items-center justify-center text-primary font-black text-2xl shrink-0">
+              {employee.avatarUrl ? (
+                <img src={employee.avatarUrl} alt={employee.fullName} className="w-full h-full object-cover" />
+              ) : (
+                initial
+              )}
+            </div>
+
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-extrabold text-zinc-950 tracking-tight leading-snug truncate">
+                  {employee.fullName}
+                </h1>
+                {employee.status && (
+                  <span className="px-2.5 py-0.5 rounded-pill bg-success/20 text-green-900 text-[11px] font-bold">
+                    {employee.status}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 text-xs font-semibold text-zinc-700 flex-wrap">
+                <span>{desigName}</span>
+                <span>•</span>
+                <span>{deptName}</span>
+              </div>
+
+              <div className="text-[11px] text-zinc-600 font-mono">
+                Code: <span className="font-bold text-zinc-900">{employee.employeeCode || "—"}</span>
+                {employee.joiningDate && (
+                  <>
+                    <span className="mx-2">•</span>
+                    Joined: {new Date(employee.joiningDate).toLocaleDateString()}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-border-subtle pb-2">
+        <button
+          onClick={() => setActiveTab("overview")}
+          className={`px-4 py-2 rounded-control text-xs font-semibold transition ${
+            activeTab === "overview"
+              ? "bg-primary text-white shadow-sm"
+              : "text-foreground-secondary hover:bg-surface-muted"
+          }`}
+        >
+          Overview
+        </button>
+        <button
+          onClick={() => setActiveTab("org")}
+          className={`px-4 py-2 rounded-control text-xs font-semibold transition ${
+            activeTab === "org"
+              ? "bg-primary text-white shadow-sm"
+              : "text-foreground-secondary hover:bg-surface-muted"
+          }`}
+        >
+          Organization & Reporting
+        </button>
+        <button
+          onClick={() => setActiveTab("documents")}
+          className={`px-4 py-2 rounded-control text-xs font-semibold transition ${
+            activeTab === "documents"
+              ? "bg-primary text-white shadow-sm"
+              : "text-foreground-secondary hover:bg-surface-muted"
+          }`}
+        >
+          Documents
+        </button>
+        <button
+          onClick={() => setActiveTab("timeline")}
+          className={`px-4 py-2 rounded-control text-xs font-semibold transition ${
+            activeTab === "timeline"
+              ? "bg-primary text-white shadow-sm"
+              : "text-foreground-secondary hover:bg-surface-muted"
+          }`}
+        >
+          Timeline
+        </button>
+      </div>
+
+      {/* 4. Tab Surfaces */}
+      {activeTab === "overview" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4">
+            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <Briefcase className="w-4 h-4 text-primary" />
+              Work & Position
+            </h3>
+            <div className="divide-y divide-border-subtle text-xs">
+              <div className="py-2.5 flex justify-between">
+                <span className="text-foreground-muted">Employee Code</span>
+                <span className="font-mono font-semibold text-foreground">{employee.employeeCode || "—"}</span>
+              </div>
+              <div className="py-2.5 flex justify-between">
+                <span className="text-foreground-muted">Department</span>
+                <span className="font-semibold text-foreground">{deptName}</span>
+              </div>
+              <div className="py-2.5 flex justify-between">
+                <span className="text-foreground-muted">Designation</span>
+                <span className="font-semibold text-foreground">{desigName}</span>
+              </div>
+              <div className="py-2.5 flex justify-between">
+                <span className="text-foreground-muted">Employment Type</span>
+                <span className="font-semibold text-foreground">{employee.employmentType || "—"}</span>
+              </div>
+              <div className="py-2.5 flex justify-between">
+                <span className="text-foreground-muted">Reporting Manager</span>
+                <span className="font-semibold text-foreground">{employee.managerName || "—"}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4">
+            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <User className="w-4 h-4 text-primary" />
+              Contact & Profile
+            </h3>
+            <div className="divide-y divide-border-subtle text-xs">
+              <div className="py-2.5 flex justify-between">
+                <span className="text-foreground-muted">Work Email</span>
+                <span className="font-mono font-semibold text-foreground">{employee.email || "—"}</span>
+              </div>
+              <div className="py-2.5 flex justify-between">
+                <span className="text-foreground-muted">Phone Number</span>
+                <span className="font-mono font-semibold text-foreground">{employee.phone || "—"}</span>
+              </div>
+              <div className="py-2.5 flex justify-between">
+                <span className="text-foreground-muted">Joined Date</span>
+                <span className="font-semibold text-foreground">
+                  {employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : "—"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "org" && (
+        <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4 max-w-xl">
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <Building className="w-4 h-4 text-primary" />
+            Reporting Hierarchy
+          </h3>
+          <div className="divide-y divide-border-subtle text-xs">
+            <div className="py-2.5 flex justify-between">
+              <span className="text-foreground-muted">Direct Manager</span>
+              <span className="font-semibold text-foreground">{employee.managerName || "Not assigned"}</span>
+            </div>
+            <div className="py-2.5 flex justify-between">
+              <span className="text-foreground-muted">Department</span>
+              <span className="font-semibold text-foreground">{deptName}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "documents" && (
+        <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4">
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <FileText className="w-4 h-4 text-primary" />
+            Employee Document Records
+          </h3>
+          {documents.length > 0 ? (
+            <div className="divide-y divide-border-subtle">
+              {documents.map((doc) => (
+                <div key={doc.id} className="py-3 flex items-center justify-between text-xs">
+                  <div>
+                    <p className="font-bold text-foreground">{doc.title || doc.fileName}</p>
+                    <p className="text-[10px] text-foreground-muted font-mono">{doc.documentType}</p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-pill bg-surface-muted text-foreground-muted text-[10px] font-bold">
+                    {doc.isVerified ? "VERIFIED" : "PENDING"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-xs text-foreground-muted">
+              No document records attached to this employee profile.
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "timeline" && (
+        <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4">
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <Clock className="w-4 h-4 text-primary" />
+            Lifecycle Events & History
+          </h3>
+          {timeline.length > 0 ? (
+            <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-border-subtle">
+              {timeline.map((ev) => (
+                <div key={ev.id} className="relative text-xs space-y-0.5">
+                  <div className="absolute -left-6 top-0.5 w-3 h-3 rounded-pill bg-primary border-2 border-surface" />
+                  <p className="font-bold text-foreground">{ev.title}</p>
+                  <p className="text-foreground-secondary">{ev.description}</p>
+                  <p className="text-[10px] text-foreground-muted font-mono">
+                    {ev.date ? new Date(ev.date).toLocaleDateString() : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-xs text-foreground-muted">
+              No lifecycle history events recorded.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
-}
-
-function flattenRecord(record?: Record<string, unknown>) {
-  if (!record) return {};
-  return Object.fromEntries(Object.entries(record).map(([key, value]) => [sentenceCase(key), typeof value === "object" ? JSON.stringify(value) : value]));
-}
-
-function sentenceCase(value: string) {
-  return value.replaceAll("_", " ").replace(/[A-Z]/g, (match) => ` ${match}`).replace(/^./, (match) => match.toUpperCase()).trim();
 }
