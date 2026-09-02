@@ -11,10 +11,10 @@ import {
   TrendingUp,
   Sparkles,
   ArrowRight,
-  MapPin,
   Building,
   CreditCard,
-  FolderOpen
+  FolderOpen,
+  CircleUser
 } from "lucide-react";
 import { useSessionStore } from "../../../lib/session-store";
 import {
@@ -91,150 +91,164 @@ export default function AiavroDashboardPage() {
   const employeeCount = employeeCountQuery.data ?? null;
 
   const handlePunch = async () => {
-    try {
-      await punchMutation.mutateAsync({
-        action: canPunchOut ? "check-out" : "check-in"
-      });
-    } catch {}
+    if (typeof window !== "undefined" && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            await punchMutation.mutateAsync({
+              action: canPunchOut ? "check-out" : "check-in",
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude
+            });
+          } catch {}
+        },
+        async () => {
+          // Geolocation unavailable/denied - do not fabricate coordinates
+          try {
+            await punchMutation.mutateAsync({
+              action: canPunchOut ? "check-out" : "check-in"
+            });
+          } catch {}
+        },
+        { timeout: 10000, enableHighAccuracy: true }
+      );
+    } else {
+      try {
+        await punchMutation.mutateAsync({
+          action: canPunchOut ? "check-out" : "check-in"
+        });
+      } catch {}
+    }
   };
 
   const deptName = typeof profile?.department === "string" ? profile.department : profile?.department?.name || "—";
   const desigName = typeof profile?.designation === "string" ? profile.designation : profile?.designation?.title || profile?.designation?.name || "—";
+  const displayName = profile?.fullName || "";
+  const initial = displayName.trim().length > 0 ? displayName.trim().charAt(0).toUpperCase() : null;
 
   return (
     <div className="flex flex-col gap-5 max-w-7xl mx-auto">
-      {/* 1. Metric Cards Grid (Studio Admin Metric Cards Pattern) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      {/* 1. Metric Cards Grid (Exact Studio Admin MetricCards Structure) */}
+      <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs xl:grid-cols-4 dark:*:data-[slot=card]:bg-card">
         {/* Card 1: Active Workforce */}
-        <Card className="border border-border bg-card shadow-xs">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="space-y-1">
-              <CardDescription className="text-xs font-semibold text-muted-foreground">
-                Active Workforce
-              </CardDescription>
-              <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <div className="flex size-7 items-center justify-center rounded-lg border bg-muted text-muted-foreground">
+                <Users className="size-4" />
+              </div>
+            </CardTitle>
+            <CardDescription>Active Workforce</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="font-medium text-3xl tabular-nums leading-none tracking-tight">
                 {employeeCountQuery.isLoading
                   ? "—"
                   : employeeCount !== null
                   ? employeeCount.toLocaleString()
-                  : "Verified"}
+                  : "—"}
               </div>
-            </div>
-            <div className="flex size-8 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground shrink-0">
-              <Users className="size-4" />
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Badge variant="success" className="px-1.5 py-0 text-[10px]">
-                <TrendingUp className="size-3 mr-0.5" />
-                Live Sync
+              <Badge variant="secondary">
+                <TrendingUp className="size-3 mr-1" />
+                Active
               </Badge>
-              <span>VC Organics Tenant</span>
             </div>
+            <p className="text-muted-foreground text-sm">VC Organics Headcount</p>
           </CardContent>
         </Card>
 
-        {/* Card 2: Today's Attendance */}
-        <Card className="border border-border bg-card shadow-xs">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="space-y-1">
-              <CardDescription className="text-xs font-semibold text-muted-foreground">
-                Today's Shift
-              </CardDescription>
-              <div className="text-2xl font-bold tracking-tight text-foreground">
+        {/* Card 2: Today's Shift */}
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <div className="flex size-7 items-center justify-center rounded-lg border bg-muted text-muted-foreground">
+                <Clock className="size-4" />
+              </div>
+            </CardTitle>
+            <CardDescription>Today's Shift</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="font-medium text-3xl leading-none tracking-tight">
                 {attendanceQuery.isLoading
-                  ? "Loading..."
+                  ? "—"
                   : attendanceRecord?.checkInAt && attendanceRecord?.checkOutAt
                   ? "Shift Ended"
                   : canPunchOut
-                  ? "Punched In"
+                  ? "On Duty"
                   : canPunchIn
-                  ? "Ready to Start"
+                  ? "Ready"
                   : attendanceRecord?.status
                   ? attendanceRecord.status.replace(/_/g, " ")
-                  : "Active"}
+                  : "—"}
               </div>
-            </div>
-            <div className="flex size-8 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground shrink-0">
-              <Clock className="size-4" />
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Badge variant={canPunchOut ? "success" : "secondary"} className="px-1.5 py-0 text-[10px]">
-                {canPunchOut ? "On Duty" : "Shift Ready"}
+              <Badge variant={canPunchOut ? "success" : "secondary"}>
+                {canPunchOut ? "Active" : "Shift"}
               </Badge>
-              <span>{attendance?.shift?.name || "Standard Office Shift"}</span>
             </div>
+            <p className="text-muted-foreground text-sm">{attendance?.shift?.name || "Standard Schedule"}</p>
           </CardContent>
         </Card>
 
         {/* Card 3: Leave Balances */}
-        <Card className="border border-border bg-card shadow-xs">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="space-y-1">
-              <CardDescription className="text-xs font-semibold text-muted-foreground">
-                Leave Balance
-              </CardDescription>
-              <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <div className="flex size-7 items-center justify-center rounded-lg border bg-muted text-muted-foreground">
+                <Calendar className="size-4" />
+              </div>
+            </CardTitle>
+            <CardDescription>Available Leave</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="font-medium text-3xl tabular-nums leading-none tracking-tight">
                 {leaveBalancesQuery.isLoading
                   ? "—"
                   : totalLeaveDays !== null
-                  ? `${totalLeaveDays} Days`
-                  : "0 Days"}
+                  ? `${totalLeaveDays} d`
+                  : "0 d"}
               </div>
+              <Badge variant="outline">Accrued</Badge>
             </div>
-            <div className="flex size-8 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground shrink-0">
-              <Calendar className="size-4" />
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
-                Accrued
-              </Badge>
-              <span>Annual, Casual & Sick</span>
-            </div>
+            <p className="text-muted-foreground text-sm">Annual, Casual & Sick balance</p>
           </CardContent>
         </Card>
 
         {/* Card 4: Pending Requests */}
-        <Card className="border border-border bg-card shadow-xs">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="space-y-1">
-              <CardDescription className="text-xs font-semibold text-muted-foreground">
-                Pending Requests
-              </CardDescription>
-              <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <div className="flex size-7 items-center justify-center rounded-lg border bg-muted text-muted-foreground">
+                <CheckCircle2 className="size-4" />
+              </div>
+            </CardTitle>
+            <CardDescription>Pending Requests</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="font-medium text-3xl tabular-nums leading-none tracking-tight">
                 {requestsQuery.isLoading
                   ? "—"
                   : pendingRequestsCount !== null
                   ? pendingRequestsCount
                   : 0}
               </div>
-            </div>
-            <div className="flex size-8 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground shrink-0">
-              <CheckCircle2 className="size-4" />
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Badge
                 variant={pendingRequestsCount && pendingRequestsCount > 0 ? "warning" : "secondary"}
-                className="px-1.5 py-0 text-[10px]"
               >
-                {pendingRequestsCount && pendingRequestsCount > 0 ? "Pending Review" : "Up to date"}
+                {pendingRequestsCount && pendingRequestsCount > 0 ? "Pending Action" : "Reviewed"}
               </Badge>
-              <span>Service desk & approvals</span>
             </div>
+            <p className="text-muted-foreground text-sm">Service desk & approvals</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* 2. Middle Section: Attendance Punch Card + Profile Overview Card */}
+      {/* 2. Middle Section: Attendance Terminal + Profile Card */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
-        {/* Left 2 Cols: Attendance & Real-Time Punch */}
+        {/* Left 2 Cols: Attendance & Punch */}
         <Card className="lg:col-span-2 border border-border bg-card shadow-xs">
           <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-4">
             <div>
@@ -243,7 +257,7 @@ export default function AiavroDashboardPage() {
                 Work Time & Punch Terminal
               </CardTitle>
               <CardDescription>
-                Geofenced attendance logging for VC Organics Bangalore HQ
+                Live attendance recording with authenticated timestamp
               </CardDescription>
             </div>
             <div className="text-right">
@@ -276,15 +290,14 @@ export default function AiavroDashboardPage() {
               <div className="p-3 rounded-lg bg-muted/40 border border-border/60">
                 <p className="text-[11px] text-muted-foreground font-medium">Shift Assignment</p>
                 <p className="text-sm font-semibold text-foreground mt-0.5">
-                  {attendance?.shift?.name || "General Shift (09:00 - 18:00)"}
+                  {attendance?.shift?.name || "—"}
                 </p>
               </div>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <MapPin className="size-3.5 text-primary" />
-                <span>Location: Bangalore HQ (100m Radius Verified)</span>
+              <div className="text-xs text-muted-foreground">
+                <span>{attendance?.shift ? `Shift: ${attendance.shift.name}` : "Workplace Terminal"}</span>
               </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -325,7 +338,7 @@ export default function AiavroDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Right 1 Col: Employee Profile & Quick Shortcuts */}
+        {/* Right 1 Col: Employee Profile */}
         <Card className="border border-border bg-card shadow-xs">
           <CardHeader className="border-b border-border pb-4">
             <CardTitle className="text-sm font-bold flex items-center gap-2">
@@ -338,12 +351,14 @@ export default function AiavroDashboardPage() {
           <CardContent className="pt-4 space-y-4">
             <div className="flex items-center gap-3">
               <Avatar className="h-10 w-10">
-                {profile?.avatarUrl ? <AvatarImage src={profile.avatarUrl} alt={profile.fullName || "User"} /> : null}
-                <AvatarFallback>{profile?.fullName ? profile.fullName.charAt(0).toUpperCase() : "U"}</AvatarFallback>
+                {profile?.avatarUrl ? <AvatarImage src={profile.avatarUrl} alt={displayName} /> : null}
+                <AvatarFallback>
+                  {initial || <CircleUser className="size-5 text-muted-foreground" />}
+                </AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-foreground truncate">{profile?.fullName || "—"}</p>
-                <p className="text-[11px] text-muted-foreground truncate">{profile?.email || profile?.workEmail || "—"}</p>
+                <p className="text-xs font-bold text-foreground truncate">{displayName || "—"}</p>
+                <p className="text-[11px] text-muted-foreground truncate">{profile?.workEmail || profile?.email || "—"}</p>
                 <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
                   Code: <span className="font-semibold text-foreground">{profile?.employeeCode || "—"}</span>
                 </p>
@@ -361,7 +376,7 @@ export default function AiavroDashboardPage() {
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-muted-foreground">Manager</span>
-                <span className="font-medium text-foreground">{profile?.managerName || "Direct Leadership"}</span>
+                <span className="font-medium text-foreground">{profile?.managerName || "—"}</span>
               </div>
             </div>
 
@@ -395,7 +410,7 @@ export default function AiavroDashboardPage() {
         </Card>
       </div>
 
-      {/* 3. Bottom Section: Company Announcements & Activity Table (Studio Admin Table Pattern) */}
+      {/* 3. Bottom Section: Company Announcements Table */}
       <Card className="border border-border bg-card shadow-xs">
         <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-4">
           <div>
@@ -437,7 +452,7 @@ export default function AiavroDashboardPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-[10px]">
-                        {ann.priority || "NORMAL"}
+                        {ann.priority || "—"}
                       </Badge>
                     </TableCell>
                     <TableCell className="font-mono text-muted-foreground">

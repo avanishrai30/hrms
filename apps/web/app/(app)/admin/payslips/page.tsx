@@ -303,7 +303,7 @@ export default function AdminPayslipsPage() {
                     <td className="px-4 py-3.5 font-semibold text-slate-900">
                       <div>{p.employee?.fullName}</div>
                       <div className="text-xs text-slate-400 font-normal">
-                        {p.employee?.employeeCode} • {p.employee?.department?.name ?? "General"}
+                        {p.employee?.employeeCode} • {p.employee?.department?.name ?? "—"}
                       </div>
                     </td>
                     <td className="px-4 py-3.5 text-slate-800">

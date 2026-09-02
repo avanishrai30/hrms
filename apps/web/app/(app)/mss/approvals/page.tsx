@@ -164,7 +164,7 @@ export default function ManagerApprovalsPage() {
                         <TableCell>
                           <div className="min-w-0">
                             <p className="font-semibold text-foreground truncate">
-                              {leave.employee?.fullName || "Team Member"}
+                              {leave.employee?.fullName || "—"}
                             </p>
                             <p className="text-[11px] text-muted-foreground font-mono truncate">
                               {leave.employee?.employeeCode || "—"}

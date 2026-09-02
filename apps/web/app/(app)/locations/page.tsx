@@ -7,7 +7,7 @@ import {
   ShieldCheck,
   AlertCircle
 } from "lucide-react";
-import { useLocations, useCreateLocationMutation } from "../../../lib/queries/use-people-queries";
+import { useLocations, useCreateLocationMutation, type CreateLocationInput } from "../../../lib/queries/use-people-queries";
 import { usePermissionGate, useHasPermission } from "../../../lib/session-store";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../../components/ui/card";
 import { Badge } from "../../../components/ui/badge";
@@ -30,18 +30,27 @@ import {
   DialogFooter
 } from "../../../components/ui/dialog";
 
-const LOCATION_TYPES = ["OFFICE", "FACTORY", "WAREHOUSE", "RETAIL_OUTLET", "DISTRIBUTION_CENTER", "CUSTOM"] as const;
+const LOCATION_TYPES: NonNullable<CreateLocationInput["type"]>[] = [
+  "OFFICE",
+  "FACTORY",
+  "WAREHOUSE",
+  "RETAIL_OUTLET",
+  "DISTRIBUTION_CENTER",
+  "CUSTOM"
+];
 
-export default function WorkplaceLocationsPage() {
+export default function WorkLocationsPage() {
   const gate = usePermissionGate(["location.view"]);
   const canCreate = useHasPermission("location.create");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [type, setType] = useState<"FACTORY" | "OFFICE" | "WAREHOUSE" | "RETAIL_OUTLET" | "DISTRIBUTION_CENTER" | "CUSTOM">("OFFICE");
+  const [type, setType] = useState<CreateLocationInput["type"]>("OFFICE");
   const [description, setDescription] = useState("");
-  const [radiusMeters, setRadiusMeters] = useState(100);
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [radiusMeters, setRadiusMeters] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
   const { data: locations = [], isLoading, isError, refetch } = useLocations(undefined, gate.isAuthorized);
@@ -50,27 +59,42 @@ export default function WorkplaceLocationsPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !code.trim()) {
-      setFormError("Please provide both name and code.");
+      setFormError("Please provide location name and code.");
       return;
     }
+
+    const latNum = parseFloat(latitude);
+    const lngNum = parseFloat(longitude);
+
+    if (isNaN(latNum) || isNaN(lngNum)) {
+      setFormError("Valid numeric Latitude and Longitude coordinates are required.");
+      return;
+    }
+
+    if (latNum < -90 || latNum > 90 || lngNum < -180 || lngNum > 180) {
+      setFormError("Latitude must be between -90 and 90, and Longitude between -180 and 180.");
+      return;
+    }
+
     try {
       setFormError(null);
       await createMutation.mutateAsync({
         name: name.trim(),
         code: code.trim().toUpperCase(),
         type,
-        description: description.trim() || undefined,
-        radiusMeters: Number(radiusMeters) || 100,
-        latitude: 12.9716,
-        longitude: 77.5946,
-        maxAccuracyMeters: 100,
-        isActive: true
+        description: description.trim() ? description.trim() : undefined,
+        latitude: latNum,
+        longitude: lngNum,
+        radiusMeters: radiusMeters.trim() ? parseInt(radiusMeters, 10) : undefined
       });
+
       setIsModalOpen(false);
       setName("");
       setCode("");
       setDescription("");
-      setRadiusMeters(100);
+      setLatitude("");
+      setLongitude("");
+      setRadiusMeters("");
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : "Failed to create location.");
     }
@@ -95,7 +119,7 @@ export default function WorkplaceLocationsPage() {
             </div>
             <CardTitle className="text-base">Locations Access Restricted</CardTitle>
             <CardDescription className="text-xs">
-              You do not have permission (<code className="text-[11px] font-mono">location.view</code>) to access location records.
+              You do not have permission (<code className="text-[11px] font-mono">location.view</code>) to view locations.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -108,9 +132,9 @@ export default function WorkplaceLocationsPage() {
       {/* 1. Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground">Workplace Locations</h1>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">Work Locations & Facilities</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Geofenced physical facilities, office hubs, and manufacturing sites.
+            Manage geographical workplace sites, geofences, and biometric terminals.
           </p>
         </div>
 
@@ -137,7 +161,7 @@ export default function WorkplaceLocationsPage() {
         </Card>
       )}
 
-      {/* 3. Locations Table (Studio Admin Table Pattern) */}
+      {/* 3. Table (Studio Admin Table Pattern) */}
       <Card className="border border-border bg-card shadow-xs overflow-hidden">
         <CardContent className="p-0">
           {locations.length > 0 ? (
@@ -146,9 +170,9 @@ export default function WorkplaceLocationsPage() {
                 <TableRow>
                   <TableHead className="w-[30%]">Location Name</TableHead>
                   <TableHead>Code</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Geofence Radius</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Facility Type</TableHead>
+                  <TableHead>Coordinates</TableHead>
+                  <TableHead>Geofence</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -166,13 +190,13 @@ export default function WorkplaceLocationsPage() {
                         {loc.type || "OFFICE"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs font-mono text-muted-foreground">
-                      {loc.radiusMeters ?? 100}m radius
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {typeof loc.latitude === "number" && typeof loc.longitude === "number"
+                        ? `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`
+                        : "—"}
                     </TableCell>
-                    <TableCell>
-                      <Badge variant={loc.isActive ? "success" : "secondary"} className="text-[10px]">
-                        {loc.isActive ? "ACTIVE" : "INACTIVE"}
-                      </Badge>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {loc.radiusMeters ? `${loc.radiusMeters} m` : "Standard"}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -180,18 +204,18 @@ export default function WorkplaceLocationsPage() {
             </Table>
           ) : (
             <div className="py-12 text-center text-xs text-muted-foreground">
-              No workplace locations configured.
+              No work locations configured yet.
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* 4. Add Location Dialog */}
+      {/* 4. Add Location Dialog (Studio Admin Dialog Pattern) */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Workplace Location</DialogTitle>
-            <DialogDescription>Define a geofenced site for punch validation and attendance tracking.</DialogDescription>
+            <DialogTitle>Add Work Location</DialogTitle>
+            <DialogDescription>Define a workplace site with precise geofenced coordinates.</DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleCreate} className="space-y-3 py-2">
@@ -208,7 +232,7 @@ export default function WorkplaceLocationsPage() {
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Bangalore HQ"
+                  placeholder="e.g. Bangalore Campus"
                   required
                 />
               </div>
@@ -229,7 +253,7 @@ export default function WorkplaceLocationsPage() {
                 <label className="text-[11px] font-semibold text-muted-foreground">Facility Type *</label>
                 <select
                   value={type}
-                  onChange={(e) => setType(e.target.value as typeof type)}
+                  onChange={(e) => setType(e.target.value as CreateLocationInput["type"])}
                   className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
                   {LOCATION_TYPES.map((t) => (
@@ -244,19 +268,47 @@ export default function WorkplaceLocationsPage() {
                 <label className="text-[11px] font-semibold text-muted-foreground">Geofence Radius (m)</label>
                 <Input
                   type="number"
+                  min="10"
+                  max="5000"
                   value={radiusMeters}
-                  onChange={(e) => setRadiusMeters(Number(e.target.value))}
-                  placeholder="100"
+                  onChange={(e) => setRadiusMeters(e.target.value)}
+                  placeholder="Default (100)"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground">Latitude *</label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={latitude}
+                  onChange={(e) => setLatitude(e.target.value)}
+                  placeholder="e.g. 12.9716"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground">Longitude *</label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={longitude}
+                  onChange={(e) => setLongitude(e.target.value)}
+                  placeholder="e.g. 77.5946"
+                  required
                 />
               </div>
             </div>
 
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-muted-foreground">Description / Address</label>
+              <label className="text-[11px] font-semibold text-muted-foreground">Description</label>
               <Input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Indiranagar 100ft Road, Bangalore"
+                placeholder="HQ corporate campus & engineering labs"
               />
             </div>
 

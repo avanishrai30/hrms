@@ -241,7 +241,7 @@ export default function AdminLeaveAuditPage() {
                         {r.employee?.fullName}
                       </div>
                       <div className="text-xs text-slate-400">
-                        {r.employee?.employeeCode} • {r.employee?.department?.name ?? "General"}
+                        {r.employee?.employeeCode} • {r.employee?.department?.name ?? "—"}
                       </div>
                     </div>
                     {getStatusBadge(r.status)}

@@ -13,7 +13,8 @@ import {
   Lock,
   Mail,
   Layers,
-  FileCheck
+  FileCheck,
+  CircleUser
 } from "lucide-react";
 import {
   useEmployee,
@@ -113,7 +114,8 @@ export default function EmployeeDetailPage({
 
   const deptName = typeof employee.department === "string" ? employee.department : employee.department?.name || "—";
   const desigName = typeof employee.designation === "string" ? employee.designation : employee.designation?.name || "—";
-  const initial = employee.fullName ? employee.fullName.charAt(0).toUpperCase() : "U";
+  const name = employee.fullName || "";
+  const initial = name.trim().length > 0 ? name.trim().charAt(0).toUpperCase() : null;
 
   return (
     <div className="flex flex-col gap-5 max-w-5xl mx-auto">
@@ -141,14 +143,16 @@ export default function EmployeeDetailPage({
             <div className="flex items-center gap-4">
               <Avatar className="h-14 w-14 border border-border">
                 {employee.avatarUrl || employee.profilePhoto ? (
-                  <AvatarImage src={employee.avatarUrl || employee.profilePhoto || ""} alt={employee.fullName} />
+                  <AvatarImage src={employee.avatarUrl || employee.profilePhoto || ""} alt={name} />
                 ) : null}
-                <AvatarFallback className="text-base">{initial}</AvatarFallback>
+                <AvatarFallback className="text-base">
+                  {initial || <CircleUser className="size-6 text-muted-foreground" />}
+                </AvatarFallback>
               </Avatar>
 
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-lg font-bold tracking-tight text-foreground">{employee.fullName}</h1>
+                  <h1 className="text-lg font-bold tracking-tight text-foreground">{name || "—"}</h1>
                   <Badge variant={employee.status === "ACTIVE" ? "success" : "secondary"}>
                     {formatEmploymentStatus(employee.status)}
                   </Badge>
@@ -202,12 +206,12 @@ export default function EmployeeDetailPage({
                   <span className="font-medium text-foreground">{employee.email || "—"}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-border/40">
-                  <span className="text-muted-foreground">Phone (HR Contact)</span>
+                  <span className="text-muted-foreground">Phone</span>
                   <span className="font-medium text-foreground">{employee.phone || "—"}</span>
                 </div>
                 <div className="flex justify-between py-1">
                   <span className="text-muted-foreground">Location</span>
-                  <span className="font-medium text-foreground">Bangalore HQ</span>
+                  <span className="font-medium text-foreground">—</span>
                 </div>
               </CardContent>
             </Card>
@@ -253,10 +257,10 @@ export default function EmployeeDetailPage({
               <div className="p-4 rounded-lg bg-muted/40 border border-border/60">
                 <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Reports To</p>
                 <p className="text-sm font-bold text-foreground mt-1">
-                  {employee.managerName || "Senior Leadership"}
+                  {employee.managerName || "—"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Manager ID: {employee.managerId || "Direct Tenant Root"}
+                  Manager ID: {employee.managerId || "—"}
                 </p>
               </div>
 

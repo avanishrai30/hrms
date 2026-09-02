@@ -69,7 +69,7 @@ export default function EmployeePayrollDetailPage({
             <Badge tone="neutral">{employeePayroll.employee?.employeeCode}</Badge>
           </div>
           <p className="text-sm text-slate-500">
-            {employeePayroll.employee?.department?.name ?? "General"} •{" "}
+            {employeePayroll.employee?.department?.name ?? "—"} •{" "}
             {employeePayroll.employee?.designation?.name ?? "Staff"}
           </p>
         </div>

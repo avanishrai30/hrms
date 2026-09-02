@@ -331,7 +331,7 @@ export default function PayrollRunWorkbenchPage() {
                     <td className="px-4 py-3.5 font-semibold text-slate-900">
                       <div>{emp.employee?.fullName}</div>
                       <div className="text-xs text-slate-400 font-normal">
-                        {emp.employee?.employeeCode} • {emp.employee?.department?.name ?? "General"}
+                        {emp.employee?.employeeCode} • {emp.employee?.department?.name ?? "—"}
                       </div>
                     </td>
                     <td className="px-4 py-3.5">

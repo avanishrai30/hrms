@@ -9,7 +9,8 @@ import {
   ArrowLeft,
   ArrowRight,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  CircleUser
 } from "lucide-react";
 import { useManagerTeam, formatEmploymentStatus } from "../../../../lib/queries/use-people-queries";
 import { usePermissionGate } from "../../../../lib/session-store";
@@ -90,9 +91,10 @@ export default function ManagerTeamPage() {
       ) : team.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {team.map((member) => {
-            const initial = member.fullName ? member.fullName.charAt(0).toUpperCase() : "U";
-            const desigName = typeof member.designation === "string" ? member.designation : member.designation?.name || "Team Member";
-            const deptName = typeof member.department === "string" ? member.department : member.department?.name || "General";
+            const name = member.fullName || "";
+            const initial = name.trim().length > 0 ? name.trim().charAt(0).toUpperCase() : null;
+            const desigName = typeof member.designation === "string" ? member.designation : member.designation?.name || "—";
+            const deptName = typeof member.department === "string" ? member.department : member.department?.name || "—";
 
             return (
               <Card
@@ -102,16 +104,20 @@ export default function ManagerTeamPage() {
                 <CardHeader className="pb-3">
                   <div className="flex items-start gap-3">
                     <Avatar className="h-10 w-10 border border-border">
-                      {member.avatarUrl ? <AvatarImage src={member.avatarUrl} alt={member.fullName} /> : null}
-                      <AvatarFallback>{initial}</AvatarFallback>
+                      {member.avatarUrl ? <AvatarImage src={member.avatarUrl} alt={name} /> : null}
+                      <AvatarFallback>
+                        {initial || <CircleUser className="size-5 text-muted-foreground" />}
+                      </AvatarFallback>
                     </Avatar>
 
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-xs font-bold text-foreground truncate">{member.fullName}</h3>
+                      <h3 className="text-xs font-bold text-foreground truncate">{name || "—"}</h3>
                       <p className="text-[11px] text-muted-foreground truncate">{desigName}</p>
-                      <Badge variant="outline" className="mt-1 text-[10px] px-1.5 py-0">
-                        {deptName}
-                      </Badge>
+                      {deptName !== "—" && (
+                        <Badge variant="outline" className="mt-1 text-[10px] px-1.5 py-0">
+                          {deptName}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </CardHeader>

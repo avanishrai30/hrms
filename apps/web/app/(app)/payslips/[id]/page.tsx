@@ -137,7 +137,7 @@ export default function PayslipDetailPage({
           <div>
             <span className="text-slate-400 font-semibold uppercase text-[10px]">Department</span>
             <div className="font-bold text-slate-900 mt-0.5">
-              {payslip.employee?.department?.name ?? "General"}
+              {payslip.employee?.department?.name ?? "—"}
             </div>
           </div>
           <div>

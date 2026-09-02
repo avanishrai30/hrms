@@ -12,11 +12,12 @@ import {
   ShieldCheck,
   AlertCircle,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  CircleUser
 } from "lucide-react";
 import { useDirectory, useDepartments, useDebounce } from "../../../lib/queries/use-people-queries";
 import { usePermissionGate } from "../../../lib/session-store";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../../components/ui/card";
+import { Card, CardHeader, CardContent } from "../../../components/ui/card";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -75,10 +76,10 @@ export default function OrganizationDirectoryPage() {
             <div className="flex size-10 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600 mb-2">
               <ShieldCheck className="size-5" />
             </div>
-            <CardTitle className="text-base">Directory Access Restricted</CardTitle>
-            <CardDescription className="text-xs">
+            <h2 className="text-base font-semibold text-foreground">Directory Access Restricted</h2>
+            <p className="text-xs text-muted-foreground mt-1">
               You do not have permission (<code className="text-[11px] font-mono">directory.view</code>) to access the employee directory.
-            </CardDescription>
+            </p>
           </CardHeader>
         </Card>
       </div>
@@ -158,7 +159,8 @@ export default function OrganizationDirectoryPage() {
       {employees.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {employees.map((emp) => {
-            const initial = emp.fullName ? emp.fullName.charAt(0).toUpperCase() : "U";
+            const name = emp.fullName || "";
+            const initial = name.trim().length > 0 ? name.trim().charAt(0).toUpperCase() : null;
 
             return (
               <Card
@@ -168,18 +170,22 @@ export default function OrganizationDirectoryPage() {
                 <CardHeader className="pb-2">
                   <div className="flex items-start gap-3">
                     <Avatar className="h-10 w-10 border border-border">
-                      {emp.profilePhoto ? <AvatarImage src={emp.profilePhoto} alt={emp.fullName} /> : null}
-                      <AvatarFallback>{initial}</AvatarFallback>
+                      {emp.profilePhoto ? <AvatarImage src={emp.profilePhoto} alt={name} /> : null}
+                      <AvatarFallback>
+                        {initial || <CircleUser className="size-5 text-muted-foreground" />}
+                      </AvatarFallback>
                     </Avatar>
 
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-xs font-bold text-foreground truncate">{emp.fullName}</h3>
+                      <h3 className="text-xs font-bold text-foreground truncate">{name || "—"}</h3>
                       <p className="text-[11px] text-muted-foreground truncate font-medium">
-                        {emp.designation || "Team Member"}
+                        {emp.designation || "—"}
                       </p>
-                      <Badge variant="outline" className="mt-1 text-[10px] px-1.5 py-0">
-                        {emp.department || "General"}
-                      </Badge>
+                      {emp.department && (
+                        <Badge variant="outline" className="mt-1 text-[10px] px-1.5 py-0">
+                          {emp.department}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </CardHeader>
@@ -192,7 +198,7 @@ export default function OrganizationDirectoryPage() {
 
                   <div className="flex items-center gap-2 text-muted-foreground truncate">
                     <MapPin className="size-3 shrink-0 text-muted-foreground" />
-                    <span className="truncate text-[11px]">{emp.region || "Bangalore HQ"}</span>
+                    <span className="truncate text-[11px]">{emp.region || "—"}</span>
                   </div>
                 </CardContent>
               </Card>

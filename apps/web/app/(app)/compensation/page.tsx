@@ -304,7 +304,7 @@ export default function CompensationDirectoryPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3.5">
-                      <div className="text-slate-800">{c.employee?.department?.name ?? "General"}</div>
+                      <div className="text-slate-800">{c.employee?.department?.name ?? "—"}</div>
                       <div className="text-xs text-slate-400">{c.employee?.designation?.name ?? "Staff"}</div>
                     </td>
                     <td className="px-4 py-3.5 font-bold text-slate-900">
@@ -372,7 +372,7 @@ export default function CompensationDirectoryPage() {
                 >
                   {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.fullName} ({emp.employeeCode}) — {emp.department?.name ?? "General"}
+                      {emp.fullName} ({emp.employeeCode}) — {emp.department?.name ?? "—"}
                     </option>
                   ))}
                 </select>

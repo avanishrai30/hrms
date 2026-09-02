@@ -149,10 +149,20 @@ export function useAttendanceHistory(startDate?: string, endDate?: string, enabl
 export function usePunchMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ action, notes }: { action: "check-in" | "check-out"; notes?: string | undefined }) => {
+    mutationFn: async ({
+      action,
+      notes,
+      latitude,
+      longitude
+    }: {
+      action: "check-in" | "check-out";
+      notes?: string | undefined;
+      latitude?: number | undefined;
+      longitude?: number | undefined;
+    }) => {
       return apiRequest(`/attendance/${action}`, {
         method: "POST",
-        body: JSON.stringify({ source: "WEB", notes })
+        body: JSON.stringify({ source: "WEB", notes, latitude, longitude })
       });
     },
     onSuccess: () => {

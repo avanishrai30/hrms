@@ -11,7 +11,8 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
-  ArrowRight
+  ArrowRight,
+  CircleUser
 } from "lucide-react";
 import {
   useEmployees,
@@ -295,10 +296,11 @@ export default function EmployeesListPage() {
               </TableHeader>
               <TableBody>
                 {paginatedEmployees.map((emp) => {
-                  const initial = emp.fullName ? emp.fullName.charAt(0).toUpperCase() : "U";
+                  const name = emp.fullName || "";
+                  const initial = name.trim().length > 0 ? name.trim().charAt(0).toUpperCase() : null;
                   const isProbation = emp.status === "PROBATION";
                   const isActive = emp.status === "ACTIVE";
-                  const deptName = typeof emp.department === "string" ? emp.department : emp.department?.name || "General";
+                  const deptName = typeof emp.department === "string" ? emp.department : emp.department?.name || "—";
                   const desigName = typeof emp.designation === "string" ? emp.designation : emp.designation?.name || "—";
 
                   return (
@@ -307,12 +309,14 @@ export default function EmployeesListPage() {
                         <div className="flex items-center gap-3">
                           <Avatar className="h-8 w-8 border border-border">
                             {emp.avatarUrl || emp.profilePhoto ? (
-                              <AvatarImage src={emp.avatarUrl || emp.profilePhoto || ""} alt={emp.fullName} />
+                              <AvatarImage src={emp.avatarUrl || emp.profilePhoto || ""} alt={name} />
                             ) : null}
-                            <AvatarFallback>{initial}</AvatarFallback>
+                            <AvatarFallback>
+                              {initial || <CircleUser className="size-4 text-muted-foreground" />}
+                            </AvatarFallback>
                           </Avatar>
                           <div className="min-w-0">
-                            <p className="font-semibold text-foreground truncate">{emp.fullName}</p>
+                            <p className="font-semibold text-foreground truncate">{name || "—"}</p>
                             <p className="text-[11px] text-muted-foreground truncate">{emp.email || "—"}</p>
                           </div>
                         </div>

@@ -271,7 +271,7 @@ export default function AdminAttendancePage() {
                       {rec.employee.department?.name ?? "—"}
                     </td>
                     <td className="px-4 py-3.5 text-zinc-600">
-                      {rec.shift?.name ?? "General Shift"}
+                      {rec.shift?.name ?? "—"}
                     </td>
                     <td className="px-4 py-3.5 text-zinc-600">
                       {rec.checkInAt ? new Date(rec.checkInAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}

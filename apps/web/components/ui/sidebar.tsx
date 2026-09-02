@@ -235,19 +235,26 @@ export interface SidebarMenuButtonProps
   asChild?: boolean;
   isActive?: boolean;
   tooltip?: string;
+  size?: "default" | "sm" | "lg";
+  variant?: "default" | "outline";
 }
 
 export const SidebarMenuButton = React.forwardRef<
   HTMLButtonElement,
   SidebarMenuButtonProps
->(({ className, isActive, asChild = false, ...props }, ref) => {
+>(({ className, isActive, size = "default", variant = "default", asChild = false, ...props }, ref) => {
   const Comp = asChild ? Slot : "button";
   return (
     <Comp
       ref={ref}
       data-active={isActive}
+      data-size={size}
+      data-variant={variant}
       className={cn(
         "peer/menu-button flex w-full items-center gap-2.5 overflow-hidden rounded-md p-2 text-left text-xs font-medium outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
+        size === "lg" && "h-12 text-sm p-2 gap-3",
+        size === "sm" && "h-7 text-xs p-1.5 gap-2",
+        variant === "outline" && "border border-sidebar-border bg-background shadow-xs hover:bg-sidebar-accent",
         isActive && "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-xs",
         className
       )}

@@ -198,7 +198,7 @@ export default function ComplianceSnapshotsPage() {
                     <td className="px-4 py-3.5 font-semibold text-slate-900">
                       <div>{s.employee?.fullName}</div>
                       <div className="text-xs text-slate-400 font-normal">
-                        {s.employee?.employeeCode} • {s.employee?.department?.name ?? "General"}
+                        {s.employee?.employeeCode} • {s.employee?.department?.name ?? "—"}
                       </div>
                     </td>
                     <td className="px-4 py-3.5 font-medium text-slate-800">

@@ -5,7 +5,8 @@ import {
   Download,
   RotateCw,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  User
 } from "lucide-react";
 import { useIdCard } from "../../../lib/queries/use-ess-queries";
 import { usePermissionGate } from "../../../lib/session-store";
@@ -74,7 +75,7 @@ export default function DigitalIdCardPage() {
     );
   }
 
-  const initial = (card.fullName || "U").charAt(0).toUpperCase();
+  const initial = card.fullName?.trim() ? card.fullName.trim().charAt(0).toUpperCase() : null;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6 flex flex-col items-center animate-in fade-in duration-300">
@@ -122,7 +123,7 @@ export default function DigitalIdCardPage() {
                 {card.profilePhoto ? (
                   <img src={card.profilePhoto} alt={card.fullName} className="w-full h-full object-cover" />
                 ) : (
-                  initial
+                  initial || <User className="w-10 h-10 text-white/70" />
                 )}
               </div>
 

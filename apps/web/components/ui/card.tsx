@@ -24,7 +24,10 @@ export function CardHeader({ className, ...props }: React.ComponentProps<"div">)
   return (
     <div
       data-slot="card-header"
-      className={cn("flex flex-col gap-1.5", className)}
+      className={cn(
+        "flex flex-col gap-1.5 has-data-[slot=card-action]:grid has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-action]:items-start",
+        className
+      )}
       {...props}
     />
   );
@@ -45,6 +48,16 @@ export function CardDescription({ className, ...props }: React.ComponentProps<"d
     <div
       data-slot="card-description"
       className={cn("text-xs text-muted-foreground", className)}
+      {...props}
+    />
+  );
+}
+
+export function CardAction({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="card-action"
+      className={cn("col-start-2 row-span-2 row-start-1 self-start justify-self-end", className)}
       {...props}
     />
   );

@@ -78,7 +78,11 @@ export default function EmployeeProfilePage() {
       ? designationObj
       : designationObj?.title || designationObj?.name;
   const displayName = profile.fullName || `${profile.firstName || ""} ${profile.lastName || ""}`.trim();
-  const initial = (profile.firstName?.charAt(0) || profile.fullName?.charAt(0) || "U").toUpperCase();
+  const initial = profile.firstName?.trim()
+    ? profile.firstName.trim().charAt(0).toUpperCase()
+    : profile.fullName?.trim()
+    ? profile.fullName.trim().charAt(0).toUpperCase()
+    : null;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -93,7 +97,7 @@ export default function EmployeeProfilePage() {
                 <img src={profile.avatarUrl} alt={displayName || "Profile"} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-primary/10 to-primary/30 flex items-center justify-center font-extrabold text-2xl text-primary">
-                  {initial}
+                  {initial || <User className="w-8 h-8 text-primary" />}
                 </div>
               )}
               {profile.status && (

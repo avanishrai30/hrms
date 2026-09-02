@@ -22,8 +22,8 @@ import {
   Sun,
   Moon,
   LogOut,
-  User as UserIcon,
-  ChevronUp
+  CircleUser,
+  EllipsisVertical
 } from "lucide-react";
 import type { PermissionCode } from "@vc-wms/shared-types";
 import { useSessionStore } from "../lib/session-store";
@@ -41,7 +41,8 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarTrigger,
-  SidebarInset
+  SidebarInset,
+  useSidebar
 } from "./ui/sidebar";
 import { Separator } from "./ui/separator";
 import { SearchDialog } from "./search-dialog";
@@ -52,7 +53,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator
+  DropdownMenuSeparator,
+  DropdownMenuGroup
 } from "./ui/dropdown-menu";
 import { Button } from "./ui/button";
 
@@ -100,7 +102,7 @@ const navSections: NavSection[] = [
   {
     title: "Employee Self Service",
     items: [
-      { href: "/profile" as Route, label: "My Profile", icon: UserIcon },
+      { href: "/profile" as Route, label: "My Profile", icon: CircleUser },
       { href: "/payslips" as Route, label: "My Payslips", icon: CreditCard },
       { href: "/documents" as Route, label: "My Documents", icon: FolderOpen },
       { href: "/requests" as Route, label: "Service Requests", icon: CheckCircle2 },
@@ -127,10 +129,93 @@ const navSections: NavSection[] = [
   }
 ];
 
+function NavUserSection() {
+  const router = useRouter();
+  const { isMobile } = useSidebar();
+  const { clear } = useSessionStore();
+  const { data: profile } = useEmployeeProfile();
+
+  const handleLogout = () => {
+    clear();
+    router.push("/login" as Route);
+  };
+
+  const name = profile?.fullName || "";
+  const email = profile?.workEmail || profile?.email || "";
+  const initial = name.trim().length > 0 ? name.trim().charAt(0).toUpperCase() : null;
+
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <SidebarMenuButton
+              size="lg"
+              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+            >
+              <Avatar className="h-8 w-8 rounded-lg grayscale">
+                {profile?.avatarUrl ? <AvatarImage src={profile.avatarUrl} alt={name} /> : null}
+                <AvatarFallback className="rounded-lg">
+                  {initial || <CircleUser className="size-4 text-muted-foreground" />}
+                </AvatarFallback>
+              </Avatar>
+              <div className="grid flex-1 text-left text-sm leading-tight">
+                <span className="truncate font-medium">{name || "—"}</span>
+                <span className="truncate text-muted-foreground text-xs">{email || "—"}</span>
+              </div>
+              <EllipsisVertical className="ml-auto size-4" />
+            </SidebarMenuButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            side={isMobile ? "bottom" : "right"}
+            align="end"
+            sideOffset={4}
+          >
+            <DropdownMenuLabel className="p-0 font-normal">
+              <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+                <Avatar className="h-8 w-8 rounded-lg">
+                  {profile?.avatarUrl ? <AvatarImage src={profile.avatarUrl} alt={name} /> : null}
+                  <AvatarFallback className="rounded-lg">
+                    {initial || <CircleUser className="size-4 text-muted-foreground" />}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-medium">{name || "—"}</span>
+                  <span className="truncate text-muted-foreground text-xs">{email || "—"}</span>
+                </div>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem asChild>
+                <Link href={"/profile" as Route} className="cursor-pointer">
+                  <CircleUser className="size-4 mr-2" />
+                  <span>My Profile</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={"/id-card" as Route} className="cursor-pointer">
+                  <ShieldCheck className="size-4 mr-2" />
+                  <span>Digital ID Card</span>
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
+              <LogOut className="size-4 mr-2" />
+              <span>Log out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const { permissions, clear } = useSessionStore();
+  const { permissions } = useSessionStore();
   const { data: profile } = useEmployeeProfile();
   const [isDark, setIsDark] = useState(false);
 
@@ -143,14 +228,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const handleLogout = () => {
-    clear();
-    router.push("/login" as Route);
-  };
-
-  const displayName = profile?.fullName || "User";
-  const userRole = typeof profile?.designation === "string" ? profile.designation : profile?.designation?.name || "Employee";
-  const initial = displayName.charAt(0).toUpperCase();
+  const name = profile?.fullName || "";
+  const initial = name.trim().length > 0 ? name.trim().charAt(0).toUpperCase() : null;
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -212,51 +291,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </SidebarContent>
 
-        {/* 3. Sidebar Footer / NavUser */}
+        {/* 3. Sidebar Footer with Exact NavUser */}
         <SidebarFooter>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left text-xs hover:bg-sidebar-accent transition outline-none group-data-[collapsible=icon]/sidebar-wrapper:justify-center">
-                <Avatar className="h-7 w-7 shrink-0">
-                  {profile?.avatarUrl ? (
-                    <AvatarImage src={profile.avatarUrl} alt={displayName} />
-                  ) : null}
-                  <AvatarFallback>{initial}</AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col min-w-0 group-data-[collapsible=icon]/sidebar-wrapper:hidden flex-1">
-                  <span className="font-semibold text-foreground truncate">{displayName}</span>
-                  <span className="text-[10px] text-muted-foreground truncate">{userRole}</span>
-                </div>
-                <ChevronUp className="h-3.5 w-3.5 text-muted-foreground ml-auto group-data-[collapsible=icon]/sidebar-wrapper:hidden" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="top" align="start" className="w-56">
-              <DropdownMenuLabel>
-                <div className="flex flex-col space-y-1">
-                  <p className="text-xs font-semibold leading-none">{displayName}</p>
-                  <p className="text-[11px] leading-none text-muted-foreground">{profile?.email || profile?.workEmail || "user@vcorganics.com"}</p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href={"/profile" as Route} className="cursor-pointer">
-                  <UserIcon className="mr-2 h-3.5 w-3.5" />
-                  <span>My Profile</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href={"/id-card" as Route} className="cursor-pointer">
-                  <ShieldCheck className="mr-2 h-3.5 w-3.5" />
-                  <span>Digital ID Card</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
-                <LogOut className="mr-2 h-3.5 w-3.5" />
-                <span>Log Out</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <NavUserSection />
         </SidebarFooter>
       </Sidebar>
 
@@ -295,13 +332,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-2 pl-1">
               <Avatar className="h-7 w-7">
                 {profile?.avatarUrl ? (
-                  <AvatarImage src={profile.avatarUrl} alt={displayName} />
+                  <AvatarImage src={profile.avatarUrl} alt={name} />
                 ) : null}
-                <AvatarFallback>{initial}</AvatarFallback>
+                <AvatarFallback>
+                  {initial || <CircleUser className="size-3.5 text-muted-foreground" />}
+                </AvatarFallback>
               </Avatar>
               <div className="hidden sm:flex flex-col text-left">
-                <span className="text-xs font-semibold leading-tight text-foreground">{displayName}</span>
-                <span className="text-[10px] text-muted-foreground leading-none">{userRole}</span>
+                <span className="text-xs font-semibold leading-tight text-foreground">{name || "—"}</span>
+                <span className="text-[10px] text-muted-foreground leading-none">
+                  {typeof profile?.designation === "string" ? profile.designation : profile?.designation?.name || "—"}
+                </span>
               </div>
             </div>
           </div>

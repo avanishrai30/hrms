@@ -164,7 +164,7 @@ export default function TeamsManagementPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-[10px]">
-                        {team.department?.name || "Cross-Functional"}
+                        {team.department?.name || "—"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">

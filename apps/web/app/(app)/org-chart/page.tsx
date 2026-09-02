@@ -7,9 +7,9 @@ import {
   Network,
   ChevronDown,
   ChevronRight,
-  User,
   ShieldCheck,
-  Users
+  Users,
+  CircleUser
 } from "lucide-react";
 import { useOrgTree, useOrgChart, type OrgNodeView } from "../../../lib/queries/use-people-queries";
 import { usePermissionGate } from "../../../lib/session-store";
@@ -21,7 +21,8 @@ import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
 function OrgTreeNode({ node, level = 0 }: { node: OrgNodeView; level?: number }) {
   const [isExpanded, setIsExpanded] = useState(true);
   const hasChildren = Boolean(node.children && node.children.length > 0);
-  const initial = (node.name || "U").charAt(0).toUpperCase();
+  const name = node.name || "";
+  const initial = name.trim().length > 0 ? name.trim().charAt(0).toUpperCase() : null;
 
   return (
     <div className="space-y-2">
@@ -41,12 +42,14 @@ function OrgTreeNode({ node, level = 0 }: { node: OrgNodeView; level?: number })
             </button>
           ) : (
             <div className="size-6 flex items-center justify-center text-muted-foreground/40">
-              <User className="size-3" />
+              <CircleUser className="size-3.5" />
             </div>
           )}
 
           <Avatar className="h-8 w-8 border border-border">
-            <AvatarFallback>{initial}</AvatarFallback>
+            <AvatarFallback>
+              {initial || <CircleUser className="size-4 text-muted-foreground" />}
+            </AvatarFallback>
           </Avatar>
 
           <div className="min-w-0">
@@ -54,7 +57,7 @@ function OrgTreeNode({ node, level = 0 }: { node: OrgNodeView; level?: number })
               href={node.id ? (`/employees/${node.id}` as Route) : ("#" as Route)}
               className="text-xs font-semibold text-foreground hover:underline truncate block"
             >
-              {node.name}
+              {name || "—"}
             </Link>
             <p className="text-[11px] text-muted-foreground truncate">
               {node.title || node.designation || "—"} {node.department ? `• ${node.department}` : ""}

@@ -16,8 +16,8 @@ export default function NewLocationPage() {
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState("OFFICE");
-  const [latitude, setLatitude] = useState(12.9716);
-  const [longitude, setLongitude] = useState(77.5946);
+  const [latitude, setLatitude] = useState<number | "">("");
+  const [longitude, setLongitude] = useState<number | "">("");
   const [radiusMeters, setRadiusMeters] = useState(100);
   const [maxAccuracyMeters, setMaxAccuracyMeters] = useState(50);
   const [isActive, setIsActive] = useState(true);
@@ -171,7 +171,7 @@ export default function NewLocationPage() {
                   type="number"
                   step="any"
                   value={latitude}
-                  onChange={(e) => setLatitude(Number(e.target.value))}
+                  onChange={(e) => setLatitude(e.target.value ? Number(e.target.value) : "")}
                 />
               </Field>
               <Field label="Longitude">
@@ -179,7 +179,7 @@ export default function NewLocationPage() {
                   type="number"
                   step="any"
                   value={longitude}
-                  onChange={(e) => setLongitude(Number(e.target.value))}
+                  onChange={(e) => setLongitude(e.target.value ? Number(e.target.value) : "")}
                 />
               </Field>
             </div>

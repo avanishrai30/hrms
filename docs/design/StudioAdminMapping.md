@@ -1,91 +1,104 @@
-# AIavro Studio Admin Exact Visual Convergence Mapping Document
+# AIavro Studio Admin Exact Visual Convergence & Source Transplant Mapping Document
 
-This document records the component, layout, and visual system mappings between the **Studio Admin** design system ([next-shadcn-admin-dashboard](https://github.com/arhamkhnz/next-shadcn-admin-dashboard), MIT License) and **AIavro HRMS**.
+This document records the exact source transplant, component composition, and visual integrity mappings between upstream **Studio Admin** ([next-shadcn-admin-dashboard](https://github.com/arhamkhnz/next-shadcn-admin-dashboard)) and **AIavro HRMS** for Task 03.6.
 
 ---
 
-## 1. Design System & Shell Primitives
+## 1. Upstream Source Repository & License Information
 
-| Component / Layer | Studio Admin Reference | AIavro Implementation | Differences Intentionally Retained |
+- **Repository**: `https://github.com/arhamkhnz/next-shadcn-admin-dashboard.git`
+- **Upstream Release Version**: `2.2.0`
+- **Upstream Commit SHA**: `f0db53ce2f40059a43018b44f6d5da4f0b2e3b6e`
+- **License**: MIT License
+- **Copyright**: `Copyright (c) 2024 Arham Khan`
+- **License Notice**:
+  ```text
+  MIT License
+
+  Copyright (c) 2024 Arham Khan
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+  ```
+
+---
+
+## 2. Design System & Shell Primitives
+
+| Component / Layer | Upstream Reference Path | AIavro Implementation Path | Structure & Parity |
 |---|---|---|---|
-| **Shell & Layout** | `SidebarProvider`, `SidebarInset`, `h-12` header | `apps/web/components/ui/sidebar.tsx`, `apps/web/components/app-shell.tsx` | AIavro multi-tenant branding, role permissions filter on nav groups |
-| **Command Palette** | `SearchDialog` (`cmdk` with `Cmd+K`) | `apps/web/components/search-dialog.tsx` | Search targets live AIavro routes filtered by active RBAC permissions |
-| **Header Bar** | Sticky `h-12` with trigger, search bar, theme toggle, user menu | `apps/web/components/app-shell.tsx` header | Integrated with VC Organics session store & employee profile |
-| **Color Tokens** | Neutral shadcn theme (`oklch` / `hsl` neutral palette) | `apps/web/app/globals.css`, `apps/web/tailwind.config.ts` | Retains restrained AIavro primary indigo accent (`hsl(240 5.9% 10%)` / `hsl(243 75% 59%)`) |
-| **Typography & Geometry** | Geist / Inter sans font stack, `--radius: 0.625rem` (10px) | `apps/web/app/globals.css` | Exact font stack, tabular numerals (`tabular-nums`) on metric counters |
-| **Card Primitive** | `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent` | `apps/web/components/ui/card.tsx` | 100% parity with standard shadcn Card grammar |
-| **Table Primitive** | `Table`, `TableHeader`, `TableRow`, `TableHead`, `TableCell` | `apps/web/components/ui/table.tsx` | Dense enterprise padding, uppercase column headers |
-| **Badge Primitive** | `Badge` (default, secondary, destructive, success, warning, outline) | `apps/web/components/ui/badge.tsx` | Standard shadcn variants with status mappings |
-| **Dialog Primitive** | `Dialog`, `DialogContent`, `DialogHeader`, `DialogFooter` | `apps/web/components/ui/dialog.tsx` | Radix Dialog with backdrop blur and animated zoom transitions |
+| **App Shell & Inset** | `src/app/(main)/layout.tsx` | `apps/web/components/app-shell.tsx` | Exact `SidebarProvider`, collapsible `Sidebar` (`variant="sidebar"`), `h-12` sticky header, backdrop blur |
+| **NavUser Footer** | `src/app/(main)/dashboard/_components/sidebar/nav-user.tsx` | `apps/web/components/app-shell.tsx` (`NavUserSection`) | `SidebarMenuButton size="lg"`, `Avatar className="h-8 w-8 rounded-lg"`, `EllipsisVertical`, responsive dropdown placement |
+| **Command Palette** | `src/app/(main)/dashboard/_components/header/search-dialog.tsx` | `apps/web/components/search-dialog.tsx` | Exact `cmdk` `SearchDialog` (`Cmd+K`), filtered dynamically by active RBAC permissions |
+| **Header Bar** | `src/app/(main)/dashboard/_components/header/` | `apps/web/components/app-shell.tsx` | Sticky `h-12` header with `SidebarTrigger`, `Separator orientation="vertical"`, `SearchDialog`, theme switcher, notifications, user avatar |
+| **Theme Tokens** | `src/app/globals.css`, `components.json` (`baseColor: neutral`) | `apps/web/app/globals.css`, `apps/web/tailwind.config.ts` | Neutral CSS tokens (`--card`, `--popover`, `--primary`, `--muted`, `--border`, `--radius: 0.625rem`) |
+| **Card Primitive** | `src/components/ui/card.tsx` | `apps/web/components/ui/card.tsx` | `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardAction`, `CardContent`, `CardFooter`, `data-slot="card"` |
+| **Table Primitive** | `src/components/ui/table.tsx` | `apps/web/components/ui/table.tsx` | Enterprise table grammar with `TableHeader`, `TableBody`, `TableHead`, `TableRow`, `TableCell` |
+| **Badge Primitive** | `src/components/ui/badge.tsx` | `apps/web/components/ui/badge.tsx` | `default`, `secondary`, `destructive`, `outline`, `success`, `warning` |
+| **Dialog Primitive** | `src/components/ui/dialog.tsx` | `apps/web/components/ui/dialog.tsx` | Radix Dialog with animated backdrop blur and zoom transitions |
+| **Tabs Primitive** | `src/components/ui/tabs.tsx` | `apps/web/components/ui/tabs.tsx` | Radix Tabs with pill-style trigger indicators |
 
 ---
 
-## 2. Route-by-Route Component & Data Mapping
+## 3. Data Integrity & Recovery Contract (14 Points)
+
+| # | Integrity Assertion | Implementation Rule & Status |
+|---|---|---|
+| **1** | Punch never silently uses hardcoded coordinates | Uses real browser `navigator.geolocation.getCurrentPosition`; omits coordinates if unavailable or permission denied. Hardcoded coordinates (`12.9716, 77.5946`) deleted. |
+| **2** | Failed geolocation does not fall back to Bangalore | If geolocation fails or times out, coordinates remain `undefined` without fabricating location. |
+| **3** | New location does not use hardcoded coordinates | Explicit numeric inputs required for `latitude` and `longitude` in location creation form. |
+| **4** | Missing designation does not render Team Member | Defaults to `—` or empty; synthetic "Team Member" role deleted. |
+| **5** | Missing department does not render General | Defaults to `—` or empty; synthetic "General" department deleted. |
+| **6** | Missing location does not render Bangalore HQ | Defaults to `—` or empty; synthetic "Bangalore HQ" location deleted. |
+| **7** | Missing identity does not render U | Returns neutral `CircleUser` icon fallback; synthetic "U" string initial deleted. |
+| **8** | Unavailable employee count does not render Verified | Shows `—` when loading or unavailable; synthetic "Verified" label deleted. |
+| **9** | Non-realtime data does not claim Live Sync | Omitted unproven sync claims; honest status displayed. |
+| **10** | Missing announcement category does not become General | Defaults to `—` or empty. |
+| **11** | Privacy gates remain intact (fail closed) | Unauthorized tabs and fields block queries and display restricted state. |
+| **12** | Employee creation defaults remain backend-owned | Required deliberate `employmentType`; frontend does not inject synthetic status/salary defaults. |
+| **13** | Wrong-manager leave approval remains blocked | Backend enforces direct report relationship and fails non-reports with 403 Forbidden. |
+| **14** | Command-palette results remain permission aware | Filters accessible routes according to user's assigned permissions. |
+
+---
+
+## 4. Route Visual Parity & Architecture Mapping
 
 ### 1. `/dashboard`
-- **Studio Admin Reference**: `/dashboard/default` (`MetricCards`, `PerformanceOverview`, `SubscriberOverview` data table)
-- **Component Reused / Adapted**: Metric Cards 4-column grid, Attendance / Punch terminal card, Profile / Shortcuts card, Announcements data table.
-- **AIavro Data Source**: `GET /api/v1/dashboard/summary`, `GET /api/v1/attendance/today`, `GET /api/v1/leaves/balances`, `GET /api/v1/requests`, `GET /api/v1/announcements`.
-- **Permission Boundary**: `ess.read`, `dashboard.view` (broad role access).
-- **Differences Intentionally Retained**: ZERO fake revenue, sales, or customer growth data. All metrics represent real workforce headcount, punch status, leave balance days, and open service requests.
-
----
+- **Upstream Pattern**: `/dashboard/default` (`MetricCards`, `PerformanceOverview`, `SubscriberOverview` table)
+- **Geometry**: `grid grid-cols-1 xl:grid-cols-4 gap-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs`
+- **Data Integrations**: Real live API queries (`attendance`, `leaveBalances`, `requests`, `announcements`, `employeeCount`).
+- **Integrity**: Real GPS punch recording with fail-closed prompt; honest shift naming.
 
 ### 2. `/directory`
-- **Studio Admin Reference**: Table / Filter pattern with responsive cards and pagination controls.
-- **Component Reused / Adapted**: Search toolbar with debounced `Input` and department selector, Employee card grid with `Avatar`, role badge, email, and location.
-- **AIavro Data Source**: `GET /api/v1/employees/directory?search=&departmentId=&limit=24&offset=`.
-- **Permission Boundary**: Gated on `directory.view` or `employees.read`.
-- **Differences Intentionally Retained**: Real server-side offset pagination, 300ms debounced search, Work Email directory-safe classification.
-
----
+- **Upstream Pattern**: Toolbar with search input, department filter, responsive card grid, and server pagination footer (`Showing X to Y results`, `Previous` / `Next` buttons).
+- **Integrity**: 300ms debounced queries; zero "Bangalore HQ", "Team Member", "General", or "U" fallbacks.
 
 ### 3. `/employees`
-- **Studio Admin Reference**: Data table layout (`UsersTable` / `/dashboard/users`) with search toolbar, status filters, and pagination.
-- **Component Reused / Adapted**: Dense `Table` with Employee avatar, employee code, department/designation, employment type, status badge, and Manage action.
-- **AIavro Data Source**: `GET /api/v1/employees?q=&departmentId=&status=`.
-- **Permission Boundary**: Gated on `employees.read`; creation gated on `employees.create`.
-- **Differences Intentionally Retained**: Deliberate required `employmentType` dropdown in Add Employee `Dialog`, backend-owned `status: "DRAFT"` and `salaryType: "MONTHLY"` defaults (omitted from frontend mutation payload).
-
----
+- **Upstream Pattern**: Data table roster with search, department selector, status dropdown, deliberate Add Employee dialog, and server pagination.
+- **Integrity**: Deliberate `employmentType` input; backend-owned lifecycle status.
 
 ### 4. `/employees/[id]`
-- **Studio Admin Reference**: Detail page surface with breadcrumb, header metadata card, and tabs.
-- **Component Reused / Adapted**: `Breadcrumb`, `Avatar`, `Badge`, `Tabs` (`Overview`, `Hierarchy`, `Documents`, `Timeline`).
-- **AIavro Data Source**: `GET /api/v1/employees/:id`, `GET /api/v1/employees/:id/timeline`, `GET /api/v1/employees/:id/documents`.
-- **Permission Boundary**: Gated on `employees.read`. Timeline query enabled only when tab active. Documents query gated on `documents.read`.
-- **Differences Intentionally Retained**: Strict privacy gates (unauthorized tabs show restricted banner without executing backend queries). Phone classified as restricted HR contact.
+- **Upstream Pattern**: Breadcrumb trail, profile header card with avatar, and 4 detail tabs (`Overview`, `Hierarchy`, `Documents`, `Timeline`).
+- **Integrity**: Strict privacy gates on Documents and Timeline; no leak of unassigned data.
 
----
+### 5. `/locations`
+- **Upstream Pattern**: Facility management table with geofence badges and Add Location dialog.
+- **Integrity**: Explicit numeric coordinate inputs; no synthetic Bangalore defaults.
 
-### 5. `/organization`
-- **Studio Admin Reference**: Multi-tab entity management with metric strip and action modals.
-- **Component Reused / Adapted**: Top 4-card metric strip (`Departments`, `Designations`, `Business Units`, `Teams`), `Tabs`, `Table`, `Dialog` for creating departments and designations.
-- **AIavro Data Source**: `GET /api/v1/departments`, `GET /api/v1/designations`, `GET /api/v1/business-units`, `GET /api/v1/teams`.
-- **Permission Boundary**: Gated on `organization.view` / `departments.read`.
-
----
-
-### 6. `/locations`
-- **Studio Admin Reference**: Entity list with facility type badges and creation dialog.
-- **Component Reused / Adapted**: `Table`, `Badge`, `Button`, `Dialog` with facility type select and geofence radius.
-- **AIavro Data Source**: `GET /api/v1/locations`.
-- **Permission Boundary**: Gated on `location.view`; creation on `location.create`.
-- **Differences Intentionally Retained**: 100m default geofence ownership.
-
----
+### 6. `/organization`, `/organization/business-units`, `/organization/teams`, `/org-chart`
+- **Upstream Pattern**: Metric cards, tabbed entity tables, expandable organizational tree.
+- **Integrity**: Clean hierarchy relations without synthetic fallbacks.
 
 ### 7. `/mss`, `/mss/team`, `/mss/approvals`
-- **Studio Admin Reference**: Management overview with KPI strip, team grid, and approval list.
-- **Component Reused / Adapted**: KPI strip (`Direct Reports`, `On Leave Today`, `Pending Approvals`), `Table`, `Tabs`, `Dialog` for rejection reason.
-- **AIavro Data Source**: `GET /api/v1/mss/dashboard`, `GET /api/v1/mss/team`, `GET /api/v1/leaves/approvals`, `POST /api/v1/leaves/:id/review`.
-- **Permission Boundary**: Gated on `mss.read` and `leave.approve`. Same-tenant manager authorization rejects non-direct reports with `ForbiddenException` (403).
-- **Differences Intentionally Retained**: Eliminated `window.prompt()` for leave rejection in favor of a clean shadcn `Dialog`. Truthful copy describing leave approvals vs. service desk monitoring.
+- **Upstream Pattern**: Manager KPI cards, direct reports grid, approval tables with dedicated shadcn rejection reason dialog.
+- **Integrity**: Same-tenant manager authorization gates.
 
----
-
-### 8. Employee Self Service (`/profile`, `/attendance`, `/leave`, `/payslips`, `/documents`, `/id-card`)
-- **Studio Admin Reference**: Cards, badges, action buttons, and standard tables.
-- **Component Reused / Adapted**: Inherits all Studio Admin CSS variables, `--radius: 0.625rem`, dense padding, and neutral contrast tokens.
-- **AIavro Data Source**: Existing authenticated ESS endpoints.
-- **Permission Boundary**: Unchanged.
+### 8. ESS Retrofits (`/profile`, `/attendance`, `/leave`, `/payslips`, `/documents`, `/id-card`)
+- **Upstream Pattern**: Converted to shadcn cards, badges, and tables; eradicated legacy CSS tokens (`bg-surface`, `rounded-card`, `rounded-panel`, `shadow-card`).

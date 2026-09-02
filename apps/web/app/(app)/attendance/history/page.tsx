@@ -143,7 +143,7 @@ export default function AttendanceHistoryPage() {
                     <td className="px-4 py-3.5 font-medium text-zinc-950">
                       {new Date(rec.date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}
                     </td>
-                    <td className="px-4 py-3.5 text-zinc-600">{rec.shift?.name ?? "General Shift"}</td>
+                    <td className="px-4 py-3.5 text-zinc-600">{rec.shift?.name ?? "—"}</td>
                     <td className="px-4 py-3.5 text-zinc-600">
                       {rec.checkInAt ? new Date(rec.checkInAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
                       {rec.lateMinutes > 0 && <span className="ml-1 text-xs text-amber-600">({rec.lateMinutes}m late)</span>}

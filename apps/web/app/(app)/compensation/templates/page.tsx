@@ -209,7 +209,7 @@ export default function CompensationTemplatesPage() {
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
                     <h2 className="text-base font-bold text-slate-900">{selectedTemplate.name}</h2>
-                    <p className="text-xs text-slate-500">Job Role: {selectedTemplate.jobRole ?? "General"}</p>
+                    <p className="text-xs text-slate-500">Job Role: {selectedTemplate.jobRole ?? "—"}</p>
                   </div>
                   <Badge tone="success">Active Template</Badge>
                 </div>

@@ -40,8 +40,8 @@ export default function LocationDetailPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState("OFFICE");
-  const [latitude, setLatitude] = useState(12.9716);
-  const [longitude, setLongitude] = useState(77.5946);
+  const [latitude, setLatitude] = useState<number | "">("");
+  const [longitude, setLongitude] = useState<number | "">("");
   const [radiusMeters, setRadiusMeters] = useState(100);
   const [maxAccuracyMeters, setMaxAccuracyMeters] = useState(50);
   const [isActive, setIsActive] = useState(true);

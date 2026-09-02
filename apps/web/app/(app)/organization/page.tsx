@@ -325,7 +325,7 @@ export default function OrganizationManagementPage() {
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-[10px]">
-                            {desig.department?.name || "General"}
+                            {desig.department?.name || "—"}
                           </Badge>
                         </TableCell>
                       </TableRow>
