@@ -72,6 +72,7 @@ function LoginContent() {
         </div>
         <form className="grid gap-4" onSubmit={form.handleSubmit((values) => login.mutate(values))}>
           <input {...form.register("tenantSlug")} type="hidden" />
+          <input {...form.register("deviceFingerprint")} type="hidden" />
           <div className="rounded-panel border border-zinc-200 bg-zinc-50 px-3 py-2">
             <p className="text-xs font-medium text-zinc-500">Workspace detected</p>
             <p className="mt-0.5 text-sm font-semibold text-zinc-900">VC Organics</p>
