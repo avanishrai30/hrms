@@ -243,10 +243,13 @@ export class TenantsService {
           isSystemRole: true
         }
       });
-      const rolePermissions = ROLE_PERMISSIONS[roleCode]
-        .map((code) => byCode.get(code))
+      const permissionsForRole = ROLE_PERMISSIONS[roleCode as keyof typeof ROLE_PERMISSIONS] || [];
+
+      const rolePermissions = permissionsForRole
+        .map((code: string) => byCode.get(code))
         .filter((permissionId): permissionId is string => Boolean(permissionId))
-        .map((permissionId) => ({ tenantId, roleId: role.id, permissionId }));
+        .map((permissionId: string) => ({ tenantId, roleId: role.id, permissionId }));
+
       if (rolePermissions.length > 0) {
         await tx.tenantRolePermission.createMany({ data: rolePermissions, skipDuplicates: true });
       }

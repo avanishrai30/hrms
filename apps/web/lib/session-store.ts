@@ -68,3 +68,18 @@ export function usePermissionGate(requiredPermissions: PermissionCode | Permissi
     permissions
   };
 }
+
+/**
+ * Action-level permission check hook.
+ * Returns true only if session is hydrated, has a valid token, and contains the required permission.
+ * Fails closed on unhydrated / missing permission.
+ */
+export function useHasPermission(requiredPermissions: PermissionCode | PermissionCode[]): boolean {
+  const isHydrated = useSessionStore((state) => state.isHydrated);
+  const permissions = useSessionStore((state) => state.permissions);
+  const accessToken = useSessionStore((state) => state.accessToken);
+
+  if (!isHydrated || !accessToken) return false;
+  const required = Array.isArray(requiredPermissions) ? requiredPermissions : [requiredPermissions];
+  return required.some((p) => permissions.includes(p));
+}

@@ -78,7 +78,7 @@ export default function ManagerTeamPage() {
       ) : team.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {team.map((member) => {
-            const initial = (member.fullName || "U").charAt(0).toUpperCase();
+            const initial = member.fullName ? member.fullName.charAt(0).toUpperCase() : "";
             const desigName = typeof member.designation === "string" ? member.designation : member.designation?.name || "—";
             const deptName = typeof member.department === "string" ? member.department : member.department?.name || "—";
 
@@ -90,10 +90,12 @@ export default function ManagerTeamPage() {
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="w-11 h-11 rounded-panel bg-primary-soft text-primary font-bold flex items-center justify-center text-sm shrink-0 border border-border-subtle">
-                      {member.avatarUrl ? (
-                        <img src={member.avatarUrl} alt={member.fullName} className="w-full h-full object-cover rounded-panel" />
-                      ) : (
+                      {member.avatarUrl || member.profilePhoto ? (
+                        <img src={member.avatarUrl || member.profilePhoto || ""} alt={member.fullName || "Avatar"} className="w-full h-full object-cover rounded-panel" />
+                      ) : initial ? (
                         initial
+                      ) : (
+                        <User className="w-5 h-5 text-foreground-muted" />
                       )}
                     </div>
                     {member.employeeCode && (
@@ -104,9 +106,11 @@ export default function ManagerTeamPage() {
                   </div>
 
                   <div>
-                    <h3 className="text-sm font-bold text-foreground line-clamp-1">{member.fullName}</h3>
-                    <p className="text-xs text-foreground-secondary font-medium line-clamp-1">{desigName}</p>
-                    <p className="text-[11px] text-foreground-muted font-medium mt-0.5">{deptName}</p>
+                    <h3 className="text-sm font-bold text-foreground line-clamp-1">{member.fullName || "—"}</h3>
+                    <p className="text-xs text-foreground-secondary font-medium mt-0.5 line-clamp-1">
+                      {desigName}
+                    </p>
+                    <p className="text-[11px] text-foreground-muted mt-0.5">{deptName}</p>
                   </div>
                 </div>
 
@@ -114,19 +118,18 @@ export default function ManagerTeamPage() {
                   {member.email ? (
                     <a
                       href={`mailto:${member.email}`}
-                      className="text-foreground-muted hover:text-primary transition flex items-center gap-1.5 truncate max-w-[180px]"
+                      className="text-[11px] text-foreground-muted hover:text-primary transition flex items-center gap-1.5 truncate"
                     >
                       <Mail className="w-3.5 h-3.5 shrink-0" />
                       <span className="truncate">{member.email}</span>
                     </a>
                   ) : (
-                    <span className="text-[10px] text-foreground-muted">No email</span>
+                    <span className="text-[11px] text-foreground-muted">—</span>
                   )}
 
                   <Link
                     href={`/employees/${member.id}` as Route}
-                    className="p-1.5 rounded-control hover:bg-surface-muted text-foreground-secondary hover:text-primary transition"
-                    title="View Profile"
+                    className="p-1 rounded-control text-foreground-muted hover:text-primary hover:bg-surface-muted transition"
                   >
                     <User className="w-4 h-4" />
                   </Link>
@@ -138,9 +141,9 @@ export default function ManagerTeamPage() {
       ) : (
         <div className="py-16 text-center rounded-card bg-surface-raised border border-border-subtle flex flex-col items-center justify-center text-foreground-muted">
           <Users className="w-8 h-8 mb-2 opacity-50" />
-          <p className="text-xs font-bold text-foreground">No direct reports found</p>
+          <p className="text-xs font-bold text-foreground">No direct reports assigned</p>
           <p className="text-[11px] text-foreground-muted mt-0.5">
-            Employees reporting to your profile will appear in this roster.
+            You do not currently have any direct reporting employees in this workspace.
           </p>
         </div>
       )}

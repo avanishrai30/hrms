@@ -56,8 +56,9 @@ export const createEmployeeSchema = z.object({
   managerEmployeeId: z.string().uuid().optional(),
   joiningDate: z.coerce.date(),
   employmentType: z.enum(["FULL_TIME", "PART_TIME", "CONTRACT", "TEMPORARY"]),
-  salaryType: z.enum(["MONTHLY", "DAILY", "HOURLY"]),
+  salaryType: z.enum(["MONTHLY", "DAILY", "HOURLY"]).default("MONTHLY"),
   status: employmentStatusSchema.default("DRAFT"),
+
   profilePhotoObjectKey: z.string().optional(),
   currentAddress: jsonRecordSchema.optional(),
   permanentAddress: jsonRecordSchema.optional(),

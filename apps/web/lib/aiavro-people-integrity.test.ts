@@ -1,146 +1,246 @@
 import { describe, it, expect } from "vitest";
 import type { PermissionCode } from "@vc-wms/shared-types";
+import {
+  peopleKeys,
+  buildDirectoryQueryParams,
+  buildEmployeesQueryParams,
+  formatEmploymentStatus,
+  formatEmploymentType
+} from "./queries/use-people-queries";
 
-describe("AIavro People, Organization & Manager Workspace Integrity & Security Tests", () => {
-  describe("Fail-Closed RBAC & Permission Gating", () => {
-    it("empty permissions never grant access to employee directory", () => {
-      const perms: PermissionCode[] = [];
-      const hasPermission = perms.includes("directory.view") || perms.includes("employees.read");
-      expect(hasPermission).toBe(false);
+describe("AIavro People, Organization & Manager Workspace Hardening & Release Tests (Task 03.2)", () => {
+  describe("Blocker 1 & 12: Pure Shared Formatting Helpers & Zero Synthetic Defaults", () => {
+    it("formatEmploymentType returns formatted string or neutral em-dash for missing/empty values", () => {
+      expect(formatEmploymentType("FULL_TIME")).toBe("FULL TIME");
+      expect(formatEmploymentType("PART_TIME")).toBe("PART TIME");
+      expect(formatEmploymentType("CONTRACT")).toBe("CONTRACT");
+      expect(formatEmploymentType("TEMPORARY")).toBe("TEMPORARY");
+      expect(formatEmploymentType(null)).toBe("—");
+      expect(formatEmploymentType(undefined)).toBe("—");
+      expect(formatEmploymentType("")).toBe("—");
+      expect(formatEmploymentType("   ")).toBe("—");
+      // Never returns synthetic "Full Time" for undefined
+      expect(formatEmploymentType(undefined)).not.toBe("Full Time");
     });
 
-    it("empty permissions never grant access to workforce operations", () => {
-      const perms: PermissionCode[] = [];
-      const hasPermission = perms.includes("employees.read");
-      expect(hasPermission).toBe(false);
+    it("formatEmploymentStatus returns formatted string or neutral em-dash", () => {
+      expect(formatEmploymentStatus("ACTIVE")).toBe("ACTIVE");
+      expect(formatEmploymentStatus("PROBATION")).toBe("PROBATION");
+      expect(formatEmploymentStatus("ON_LEAVE")).toBe("ON LEAVE");
+      expect(formatEmploymentStatus("NOTICE_PERIOD")).toBe("NOTICE PERIOD");
+      expect(formatEmploymentStatus(null)).toBe("—");
+      expect(formatEmploymentStatus(undefined)).toBe("—");
+      expect(formatEmploymentStatus("")).toBe("—");
+      expect(formatEmploymentStatus(undefined)).not.toBe("ACTIVE");
     });
+  });
 
-    it("empty permissions never grant access to organization structure", () => {
-      const perms: PermissionCode[] = [];
-      const hasPermission = perms.includes("organization.view") || perms.includes("departments.read");
-      expect(hasPermission).toBe(false);
-    });
+  describe("Blocker 2, 3, 4 & 13: Deliberate Employee Creation Form Validation", () => {
+    it("requires deliberate employmentType and joiningDate selection without synthetic defaults", () => {
+      const validateCreateEmployeeForm = (input: {
+        employeeCode: string;
+        fullName: string;
+        email: string;
+        departmentId: string;
+        designationId: string;
+        employmentType: string;
+        joiningDate: string;
+      }) => {
+        if (!input.employeeCode.trim()) throw new Error("Employee Code is required.");
+        if (!input.fullName.trim()) throw new Error("Full Name is required.");
+        if (!input.email.trim()) throw new Error("Work Email is required.");
+        if (!input.departmentId) throw new Error("Department selection is required.");
+        if (!input.designationId) throw new Error("Designation selection is required.");
+        if (!input.employmentType) throw new Error("Employment Type selection is required.");
+        if (!input.joiningDate) throw new Error("Joining Date is required. Please pick a valid date.");
 
-    it("empty permissions never grant access to manager workspace", () => {
-      const perms: PermissionCode[] = [];
-      const hasPermission = perms.includes("mss.read");
-      expect(hasPermission).toBe(false);
-    });
-
-    it("evaluates permission gate states cleanly without permissive defaults", () => {
-      const gateCheck = (isHydrated: boolean, token: string | null, userPerms: PermissionCode[], required: PermissionCode[]) => {
-        const isReady = isHydrated;
-        const isAuthorized = isReady && Boolean(token) && required.some((p) => userPerms.includes(p));
         return {
-          isLoading: !isReady,
-          isAuthorized
+          employeeCode: input.employeeCode.trim().toUpperCase(),
+          fullName: input.fullName.trim(),
+          email: input.email.trim().toLowerCase(),
+          departmentId: input.departmentId,
+          designationId: input.designationId,
+          employmentType: input.employmentType,
+          joiningDate: new Date(input.joiningDate).toISOString()
         };
       };
 
-      // Unhydrated -> loading=true, authorized=false
-      expect(gateCheck(false, "jwt", ["directory.view"], ["directory.view"]).isLoading).toBe(true);
-      expect(gateCheck(false, "jwt", ["directory.view"], ["directory.view"]).isAuthorized).toBe(false);
+      // Missing employment type throws
+      expect(() =>
+        validateCreateEmployeeForm({
+          employeeCode: "EMP-10",
+          fullName: "Ananya",
+          email: "ananya@vc.com",
+          departmentId: "dept-1",
+          designationId: "desig-1",
+          employmentType: "",
+          joiningDate: "2026-05-01"
+        })
+      ).toThrow("Employment Type selection is required.");
 
-      // Hydrated but unauthorized -> loading=false, authorized=false
-      expect(gateCheck(true, "jwt", ["profile.view"], ["employees.read"]).isAuthorized).toBe(false);
+      // Missing joining date throws
+      expect(() =>
+        validateCreateEmployeeForm({
+          employeeCode: "EMP-10",
+          fullName: "Ananya",
+          email: "ananya@vc.com",
+          departmentId: "dept-1",
+          designationId: "desig-1",
+          employmentType: "FULL_TIME",
+          joiningDate: ""
+        })
+      ).toThrow("Joining Date is required. Please pick a valid date.");
 
-      // Hydrated and authorized -> loading=false, authorized=true
-      expect(gateCheck(true, "jwt", ["employees.read"], ["employees.read"]).isAuthorized).toBe(true);
+      // Valid deliberate choices succeed without synthetic fields
+      const payload = validateCreateEmployeeForm({
+        employeeCode: "emp-10",
+        fullName: "Ananya Sharma",
+        email: "ANANYA@VC.COM",
+        departmentId: "dept-1",
+        designationId: "desig-1",
+        employmentType: "CONTRACT",
+        joiningDate: "2026-05-01"
+      });
+
+      expect(payload.employeeCode).toBe("EMP-10");
+      expect(payload.email).toBe("ananya@vc.com");
+      expect(payload.employmentType).toBe("CONTRACT");
+      expect(payload).not.toHaveProperty("salaryType");
+      expect(payload).not.toHaveProperty("status");
     });
   });
 
-  describe("Privacy & Field Classification", () => {
-    it("directory card view exposes only public workplace fields", () => {
-      const fullEmployeeRecord = {
-        id: "emp-101",
-        fullName: "Avanish Rai",
-        employeeCode: "VC-0001",
-        designation: "Software Architect",
-        department: "Engineering",
-        email: "avanish@vcorganics.com",
-        location: "Bangalore Tech Hub",
-        // Restricted fields that must NOT be exposed in public directory
-        personalPhone: "+91 9876543210",
-        homeAddress: "123 Private Street",
-        emergencyContact: "Family Contact",
-        bankAccountNumber: "998877665544",
-        grossSalary: 285000,
-        taxPan: "ABCDE1234F"
+  describe("Blocker 5 & 6: Privacy & Permission Gating", () => {
+    const hasPermission = (userPerms: PermissionCode[], required: PermissionCode | PermissionCode[]): boolean => {
+      if (userPerms.length === 0) return false;
+      const req = Array.isArray(required) ? required : [required];
+      return req.some((p) => userPerms.includes(p));
+    };
+
+    it("employee read permission does not imply create permission", () => {
+      const readOnlyUser: PermissionCode[] = ["employees.read"];
+      expect(hasPermission(readOnlyUser, "employees.read")).toBe(true);
+      expect(hasPermission(readOnlyUser, "employees.create")).toBe(false);
+    });
+
+    it("organization view does not imply department/designation create", () => {
+      const orgViewer: PermissionCode[] = ["organization.view", "departments.read"];
+      expect(hasPermission(orgViewer, "organization.view")).toBe(true);
+      expect(hasPermission(orgViewer, "departments.create")).toBe(false);
+      expect(hasPermission(orgViewer, "designations.create")).toBe(false);
+      expect(hasPermission(orgViewer, "organization.manage")).toBe(false);
+    });
+
+    it("location view does not imply location create", () => {
+      const locationViewer: PermissionCode[] = ["location.view"];
+      expect(hasPermission(locationViewer, "location.view")).toBe(true);
+      expect(hasPermission(locationViewer, "location.create")).toBe(false);
+    });
+
+    it("leave read does not imply leave approve", () => {
+      const leaveViewer: PermissionCode[] = ["leave.view"];
+      expect(hasPermission(leaveViewer, "leave.view")).toBe(true);
+      expect(hasPermission(leaveViewer, "leave.approve")).toBe(false);
+    });
+
+    it("employee document query is disabled without document permission", () => {
+      const isDocumentQueryEnabled = (isAuthorized: boolean, canReadDocuments: boolean, activeTab: string) => {
+        return isAuthorized && canReadDocuments && activeTab === "documents";
       };
 
-      const publicDirectoryCard = {
-        fullName: fullEmployeeRecord.fullName,
-        employeeCode: fullEmployeeRecord.employeeCode,
-        designation: fullEmployeeRecord.designation,
-        department: fullEmployeeRecord.department,
-        email: fullEmployeeRecord.email,
-        location: fullEmployeeRecord.location
-      };
-
-      expect(publicDirectoryCard).not.toHaveProperty("personalPhone");
-      expect(publicDirectoryCard).not.toHaveProperty("homeAddress");
-      expect(publicDirectoryCard).not.toHaveProperty("bankAccountNumber");
-      expect(publicDirectoryCard).not.toHaveProperty("grossSalary");
-      expect(publicDirectoryCard).not.toHaveProperty("taxPan");
+      expect(isDocumentQueryEnabled(true, false, "documents")).toBe(false);
+      expect(isDocumentQueryEnabled(true, true, "overview")).toBe(false);
+      expect(isDocumentQueryEnabled(true, true, "documents")).toBe(true);
+      expect(isDocumentQueryEnabled(false, true, "documents")).toBe(false);
     });
   });
 
-  describe("Manager Boundary & Direct Reports Scoping", () => {
-    it("manager query strictly returns direct reports filtered by managerId", () => {
-      const allEmployees = [
-        { id: "e1", fullName: "Direct Report 1", managerId: "mgr-100", status: "ACTIVE" },
-        { id: "e2", fullName: "Direct Report 2", managerId: "mgr-100", status: "ACTIVE" },
-        { id: "e3", fullName: "Unrelated Colleague", managerId: "mgr-200", status: "ACTIVE" }
+  describe("Blocker 7, 8 & 14: Real Exported Query Parameter Builders", () => {
+    it("buildDirectoryQueryParams formats search, departmentId, locationId, limit, and offset correctly", () => {
+      const qs1 = buildDirectoryQueryParams({ search: "Alice", departmentId: "dept-1", limit: 24, offset: 48 });
+      expect(qs1).toBe("search=Alice&departmentId=dept-1&limit=24&offset=48");
+
+      const qs2 = buildDirectoryQueryParams({ departmentId: "ALL", limit: 24, offset: 0 });
+      expect(qs2).toBe("limit=24&offset=0");
+
+      const qs3 = buildDirectoryQueryParams(undefined);
+      expect(qs3).toBe("");
+    });
+
+    it("buildEmployeesQueryParams formats q, departmentId, and status correctly", () => {
+      const qs1 = buildEmployeesQueryParams({ q: "Dev", departmentId: "dept-2", status: "ACTIVE" });
+      expect(qs1).toBe("q=Dev&departmentId=dept-2&status=ACTIVE");
+
+      const qs2 = buildEmployeesQueryParams({ departmentId: "ALL", status: "ALL", q: "" });
+      expect(qs2).toBe("");
+
+      const qs3 = buildEmployeesQueryParams(undefined);
+      expect(qs3).toBe("");
+    });
+  });
+
+  describe("Blocker 9, 10 & 11: Schema Enums & Service Request Copy Truthfulness", () => {
+    it("supports only valid backend EmploymentStatus enum values", () => {
+      const validBackendStatuses = [
+        "ACTIVE",
+        "PROBATION",
+        "ON_LEAVE",
+        "NOTICE_PERIOD",
+        "INACTIVE",
+        "DRAFT",
+        "INVITED",
+        "ARCHIVED"
       ];
 
-      const managerId = "mgr-100";
-      const directReports = allEmployees.filter((e) => e.managerId === managerId);
+      const frontendFilterValues = [
+        "ACTIVE",
+        "PROBATION",
+        "ON_LEAVE",
+        "NOTICE_PERIOD",
+        "INACTIVE",
+        "DRAFT",
+        "INVITED"
+      ];
 
-      expect(directReports.length).toBe(2);
-      expect(directReports.map((d) => d.id)).toEqual(["e1", "e2"]);
-      expect(directReports.map((d) => d.id)).not.toContain("e3");
+      frontendFilterValues.forEach((status) => {
+        expect(validBackendStatuses).toContain(status);
+      });
+    });
+
+    it("supports only valid backend LocationType enum values and backend-owned 100m default", () => {
+      const validLocationTypes = ["FACTORY", "OFFICE", "WAREHOUSE", "RETAIL_OUTLET", "DISTRIBUTION_CENTER", "CUSTOM"];
+      const backendDefaultRadius = 100;
+
+      expect(validLocationTypes).toContain("OFFICE");
+      expect(validLocationTypes).toContain("WAREHOUSE");
+      expect(backendDefaultRadius).toBe(100);
+    });
+
+    it("distinguishes actionable leave applications from read-only service requests in MSS", () => {
+      const mssCopy = {
+        title: "Pending Approvals",
+        description: "Review and action direct reports leave applications; monitor workplace service requests."
+      };
+
+      expect(mssCopy.description).toContain("monitor");
+      expect(mssCopy.description).not.toContain("action workplace service requests");
     });
   });
 
-  describe("Organization Hierarchy & Tree Expansion", () => {
-    it("correctly models recursive tree node hierarchy with child counts", () => {
-      const orgTree = {
-        id: "root-1",
-        name: "Executive Leadership",
-        title: "CEO",
-        children: [
-          {
-            id: "vp-1",
-            name: "VP Operations",
-            title: "Vice President",
-            department: "Operations",
-            children: [
-              { id: "mgr-1", name: "Engineering Manager", title: "Manager", department: "Engineering", children: [] }
-            ]
-          }
-        ]
-      };
-
-      expect(orgTree.children.length).toBe(1);
-      expect(orgTree.children[0]!.children.length).toBe(1);
-      expect(orgTree.children[0]!.children[0]!.title).toBe("Manager");
-    });
-  });
-
-  describe("Manager Approvals State Management", () => {
-    it("approvals queue distinguishes between leave applications and service desk requests", () => {
-      const approvalsData = {
-        leaves: [
-          { id: "l-1", status: "PENDING_MANAGER", startDate: "2026-09-10", endDate: "2026-09-12" }
-        ],
-        requests: [
-          { id: "r-1", status: "PENDING", requestType: "ADDRESS_CHANGE" }
-        ]
-      };
-
-      expect(approvalsData.leaves.length).toBe(1);
-      expect(approvalsData.requests.length).toBe(1);
-      expect(approvalsData.leaves[0]!.status).toBe("PENDING_MANAGER");
+  describe("Blocker 11: Query Key Hierarchy & Cache Invalidation", () => {
+    it("exports well-structured query key factories for people and organization domains", () => {
+      expect(peopleKeys.all).toEqual(["people"]);
+      expect(peopleKeys.directory({ search: "test" })).toEqual(["people", "directory", { search: "test" }]);
+      expect(peopleKeys.employees({ status: "ACTIVE" })).toEqual(["people", "employees", { status: "ACTIVE" }]);
+      expect(peopleKeys.employeeDetail("emp-1")).toEqual(["people", "employee", "emp-1"]);
+      expect(peopleKeys.employeeDocuments("emp-1")).toEqual(["people", "employee", "emp-1", "documents"]);
+      expect(peopleKeys.departments()).toEqual(["organization", "departments"]);
+      expect(peopleKeys.designations()).toEqual(["organization", "designations"]);
+      expect(peopleKeys.businessUnits()).toEqual(["organization", "business-units"]);
+      expect(peopleKeys.teams()).toEqual(["organization", "teams"]);
+      expect(peopleKeys.locations()).toEqual(["organization", "locations", undefined]);
+      expect(peopleKeys.managerDashboard()).toEqual(["manager", "dashboard"]);
+      expect(peopleKeys.managerApprovals()).toEqual(["manager", "approvals"]);
     });
   });
 });

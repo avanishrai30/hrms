@@ -10,18 +10,20 @@ import {
   Calendar,
   FileText,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Info
 } from "lucide-react";
 import {
   useManagerApprovals,
   useApproveLeaveMutation,
   useRejectLeaveMutation
 } from "../../../../lib/queries/use-people-queries";
-import { usePermissionGate } from "../../../../lib/session-store";
+import { usePermissionGate, useHasPermission } from "../../../../lib/session-store";
 import { SkeletonLoader } from "../../../../components/aiavro/feedback/aiavro-states";
 
 export default function ManagerApprovalsPage() {
   const gate = usePermissionGate(["mss.read"]);
+  const canApproveLeave = useHasPermission("leave.approve");
 
   const [activeTab, setActiveTab] = useState<"leaves" | "requests">("leaves");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -93,13 +95,15 @@ export default function ManagerApprovalsPage() {
           </Link>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Pending Approvals</h1>
           <p className="text-xs text-foreground-muted">
-            Review and action direct reports leave applications and workplace service requests.
+            Review and action direct reports leave applications; monitor workplace service requests.
           </p>
+
+
         </div>
       </div>
 
       {actionError && (
-        <div className="p-3 rounded-control bg-danger/10 border border-danger/20 text-danger text-xs flex items-center gap-2">
+        <div className="p-3 rounded-control bg-danger-soft border border-danger/20 text-danger text-xs flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{actionError}</span>
         </div>
@@ -149,7 +153,7 @@ export default function ManagerApprovalsPage() {
                 <div className="space-y-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-foreground">
-                      {l.employee?.fullName || "Team Member"}
+                      {l.employee?.fullName || "—"}
                     </span>
                     <span className="px-2 py-0.5 rounded-pill bg-primary-soft text-primary text-[10px] font-bold">
                       {l.leaveType?.name || "Leave"}
@@ -163,24 +167,30 @@ export default function ManagerApprovalsPage() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                  <button
-                    onClick={() => handleRejectLeave(l.id)}
-                    disabled={rejectLeave.isPending}
-                    className="px-3 py-1.5 rounded-control bg-danger/10 hover:bg-danger/20 text-danger text-xs font-semibold transition inline-flex items-center gap-1 disabled:opacity-50"
-                  >
-                    <XCircle className="w-3.5 h-3.5" />
-                    <span>Reject</span>
-                  </button>
-                  <button
-                    onClick={() => handleApproveLeave(l.id)}
-                    disabled={approveLeave.isPending}
-                    className="px-4 py-1.5 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition shadow-sm inline-flex items-center gap-1 disabled:opacity-50"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Approve</span>
-                  </button>
-                </div>
+                {canApproveLeave ? (
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                    <button
+                      onClick={() => handleRejectLeave(l.id)}
+                      disabled={rejectLeave.isPending}
+                      className="px-3 py-1.5 rounded-control bg-danger-soft hover:bg-danger/20 text-danger text-xs font-semibold transition inline-flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      <span>Reject</span>
+                    </button>
+                    <button
+                      onClick={() => handleApproveLeave(l.id)}
+                      disabled={approveLeave.isPending}
+                      className="px-4 py-1.5 rounded-control bg-primary hover:bg-primary/90 text-white text-xs font-semibold transition shadow-sm inline-flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Approve</span>
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-[11px] text-foreground-muted italic self-end sm:self-auto">
+                    View only (Requires `leave.approve`)
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -193,6 +203,10 @@ export default function ManagerApprovalsPage() {
         )
       ) : requests.length > 0 ? (
         <div className="space-y-3">
+          <div className="p-3 rounded-control bg-surface-muted/50 border border-border-subtle text-[11px] text-foreground-muted flex items-center gap-2">
+            <Info className="w-4 h-4 text-primary shrink-0" />
+            <span>Service desk requests from your direct reports are processed by HR and operations administration.</span>
+          </div>
           {requests.map((r) => (
             <div
               key={r.id}
@@ -201,10 +215,10 @@ export default function ManagerApprovalsPage() {
               <div className="space-y-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-foreground">
-                    {r.employee?.fullName || "Team Member"}
+                    {r.employee?.fullName || "—"}
                   </span>
-                  <span className="px-2 py-0.5 rounded-pill bg-warning/20 text-warning text-[10px] font-bold">
-                    {r.requestType || "REQUEST"}
+                  <span className="px-2 py-0.5 rounded-pill bg-warning-soft text-warning text-[10px] font-bold">
+                    {r.requestType ? r.requestType.replace(/_/g, " ") : "—"}
                   </span>
                 </div>
                 <p className="text-xs text-foreground-secondary line-clamp-1">{r.reason}</p>
@@ -212,6 +226,9 @@ export default function ManagerApprovalsPage() {
                   Submitted: {new Date(r.createdAt).toLocaleDateString()}
                 </p>
               </div>
+              <span className="px-2.5 py-1 rounded-pill bg-surface-muted text-foreground-muted text-[10px] font-semibold self-start sm:self-auto">
+                {r.status || "PENDING"}
+              </span>
             </div>
           ))}
         </div>

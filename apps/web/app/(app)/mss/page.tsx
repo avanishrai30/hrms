@@ -157,8 +157,9 @@ export default function ManagerWorkspaceOverviewPage() {
                   Manager Approvals
                 </h3>
                 <p className="text-xs text-foreground-muted">
-                  Approve or reject leave applications and service desk requests.
+                  Review team leave applications and monitor workplace service requests.
                 </p>
+
               </div>
               <div className="w-10 h-10 rounded-pill bg-surface-muted group-hover:bg-primary-soft group-hover:text-primary transition flex items-center justify-center text-foreground-muted">
                 <CheckCircle2 className="w-4 h-4" />

@@ -11,14 +11,18 @@ import {
   Clock,
   ArrowLeft,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Lock
 } from "lucide-react";
 import {
   useEmployee,
   useEmployeeTimeline,
-  useEmployeeDocuments
+  useEmployeeDocuments,
+  formatEmploymentType,
+  formatEmploymentStatus
 } from "../../../../lib/queries/use-people-queries";
-import { usePermissionGate } from "../../../../lib/session-store";
+
+import { usePermissionGate, useHasPermission } from "../../../../lib/session-store";
 
 export default function EmployeeDetailPage({
   params
@@ -27,11 +31,12 @@ export default function EmployeeDetailPage({
 }) {
   const { id } = use(params);
   const gate = usePermissionGate(["employees.read"]);
+  const canReadDocuments = useHasPermission(["documents.read", "documents.view"]);
   const [activeTab, setActiveTab] = useState<"overview" | "org" | "documents" | "timeline">("overview");
 
   const { data: employee, isLoading, isError, refetch } = useEmployee(id, gate.isAuthorized);
   const { data: timeline = [] } = useEmployeeTimeline(id, gate.isAuthorized && activeTab === "timeline");
-  const { data: documents = [] } = useEmployeeDocuments(id, gate.isAuthorized && activeTab === "documents");
+  const { data: documents = [] } = useEmployeeDocuments(id, gate.isAuthorized && canReadDocuments && activeTab === "documents");
 
   if (gate.isLoading || (gate.isAuthorized && isLoading)) {
     return (
@@ -87,7 +92,7 @@ export default function EmployeeDetailPage({
 
   const deptName = typeof employee.department === "string" ? employee.department : employee.department?.name || "—";
   const desigName = typeof employee.designation === "string" ? employee.designation : employee.designation?.name || "—";
-  const initial = (employee.fullName || "U").charAt(0).toUpperCase();
+  const initial = employee.fullName ? employee.fullName.charAt(0).toUpperCase() : "";
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -107,23 +112,26 @@ export default function EmployeeDetailPage({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
           <div className="flex items-center gap-5 min-w-0">
             <div className="relative w-20 h-20 rounded-panel overflow-hidden border-2 border-white shadow-md bg-white flex items-center justify-center text-primary font-black text-2xl shrink-0">
-              {employee.avatarUrl ? (
-                <img src={employee.avatarUrl} alt={employee.fullName} className="w-full h-full object-cover" />
-              ) : (
+              {employee.avatarUrl || employee.profilePhoto ? (
+                <img src={employee.avatarUrl || employee.profilePhoto || ""} alt={employee.fullName || "Avatar"} className="w-full h-full object-cover" />
+              ) : initial ? (
                 initial
+              ) : (
+                <User className="w-8 h-8 text-foreground-muted" />
               )}
             </div>
 
             <div className="min-w-0 space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl sm:text-2xl font-extrabold text-zinc-950 tracking-tight leading-snug truncate">
-                  {employee.fullName}
+                  {employee.fullName || "—"}
                 </h1>
                 {employee.status && (
                   <span className="px-2.5 py-0.5 rounded-pill bg-success/20 text-green-900 text-[11px] font-bold">
-                    {employee.status}
+                    {formatEmploymentStatus(employee.status)}
                   </span>
                 )}
+
               </div>
 
               <div className="flex items-center gap-2 text-xs font-semibold text-zinc-700 flex-wrap">
@@ -213,7 +221,10 @@ export default function EmployeeDetailPage({
               </div>
               <div className="py-2.5 flex justify-between">
                 <span className="text-foreground-muted">Employment Type</span>
-                <span className="font-semibold text-foreground">{employee.employmentType || "—"}</span>
+                <span className="font-semibold text-foreground">
+                  {formatEmploymentType(employee.employmentType)}
+                </span>
+
               </div>
               <div className="py-2.5 flex justify-between">
                 <span className="text-foreground-muted">Reporting Manager</span>
@@ -272,17 +283,24 @@ export default function EmployeeDetailPage({
             <FileText className="w-4 h-4 text-primary" />
             Employee Document Records
           </h3>
-          {documents.length > 0 ? (
+          {!canReadDocuments ? (
+            <div className="py-8 text-center text-xs text-foreground-muted space-y-2">
+              <Lock className="w-6 h-6 text-warning mx-auto" />
+              <p className="font-semibold text-foreground">Document Access Restricted</p>
+              <p>You require `documents.read` permission to view confidential employee document records.</p>
+            </div>
+          ) : documents.length > 0 ? (
             <div className="divide-y divide-border-subtle">
               {documents.map((doc) => (
                 <div key={doc.id} className="py-3 flex items-center justify-between text-xs">
                   <div>
-                    <p className="font-bold text-foreground">{doc.title || doc.fileName}</p>
-                    <p className="text-[10px] text-foreground-muted font-mono">{doc.documentType}</p>
+                    <p className="font-bold text-foreground">{doc.title || doc.fileName || "—"}</p>
+                    <p className="text-[10px] text-foreground-muted font-mono">{doc.documentType || "—"}</p>
                   </div>
                   <span className="px-2 py-0.5 rounded-pill bg-surface-muted text-foreground-muted text-[10px] font-bold">
                     {doc.isVerified ? "VERIFIED" : "PENDING"}
                   </span>
+
                 </div>
               ))}
             </div>
@@ -305,8 +323,8 @@ export default function EmployeeDetailPage({
               {timeline.map((ev) => (
                 <div key={ev.id} className="relative text-xs space-y-0.5">
                   <div className="absolute -left-6 top-0.5 w-3 h-3 rounded-pill bg-primary border-2 border-surface" />
-                  <p className="font-bold text-foreground">{ev.title}</p>
-                  <p className="text-foreground-secondary">{ev.description}</p>
+                  <p className="font-bold text-foreground">{ev.title || "—"}</p>
+                  <p className="text-foreground-secondary">{ev.description || "—"}</p>
                   <p className="text-[10px] text-foreground-muted font-mono">
                     {ev.date ? new Date(ev.date).toLocaleDateString() : ""}
                   </p>

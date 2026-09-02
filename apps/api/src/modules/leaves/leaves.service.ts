@@ -1,9 +1,11 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException
 } from "@nestjs/common";
+
 import {
   AttendanceStatus,
   LeaveRequestStatus,
@@ -420,10 +422,21 @@ export class LeavesService {
       throw new NotFoundException("Leave request not found.");
     }
 
+    if (approverRole === "MANAGER") {
+      const reviewerMembership = await this.prisma.tenantMembership.findFirst({
+        where: { tenantId, userId: actorUserId },
+        select: { employeeId: true }
+      });
+      if (reviewerMembership?.employeeId && request.employee.managerEmployeeId !== reviewerMembership.employeeId) {
+        throw new ForbiddenException("You can only review leave requests for your direct reports.");
+      }
+    }
+
     if (
       request.status !== LeaveRequestStatus.PENDING_MANAGER &&
       request.status !== LeaveRequestStatus.PENDING_HR
     ) {
+
       throw new BadRequestException(`Leave request is already ${request.status}.`);
     }
 

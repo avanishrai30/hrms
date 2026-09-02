@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "../api";
 import type {
@@ -11,61 +12,123 @@ import type {
   EmployeeDocumentView
 } from "@vc-wms/shared-types";
 
+// ==================== DEBOUNCE HOOK ====================
+
+export function useDebounce<T>(value: T, delay: number = 300): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
+// ==================== QUERY PARAMETER & FORMATTING HELPERS ====================
+
+export interface DirectoryFilterParams {
+  search?: string | undefined;
+  departmentId?: string | undefined;
+  locationId?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+}
+
+export function buildDirectoryQueryParams(filter?: DirectoryFilterParams | undefined): string {
+  const queryParams = new URLSearchParams();
+  if (filter?.search) queryParams.set("search", filter.search);
+  if (filter?.departmentId && filter.departmentId !== "ALL") queryParams.set("departmentId", filter.departmentId);
+  if (filter?.locationId) queryParams.set("locationId", filter.locationId);
+  if (filter?.limit !== undefined && filter?.limit !== null) queryParams.set("limit", String(filter.limit));
+  if (filter?.offset !== undefined && filter?.offset !== null) queryParams.set("offset", String(filter.offset));
+  return queryParams.toString();
+}
+
+export function buildEmployeesQueryParams(filter?: Record<string, unknown> | undefined): string {
+  const queryParams = new URLSearchParams();
+  if (filter) {
+    Object.entries(filter).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "" && v !== "ALL") {
+        queryParams.set(k, String(v));
+      }
+    });
+  }
+  return queryParams.toString();
+}
+
+export function formatEmploymentStatus(status?: string | null | undefined): string {
+  if (!status || !status.trim()) return "—";
+  return status.replace(/_/g, " ");
+}
+
+export function formatEmploymentType(type?: string | null | undefined): string {
+  if (!type || !type.trim()) return "—";
+  return type.replace(/_/g, " ");
+}
+
+// ==================== DOMAIN INTERFACES ====================
+
 export interface EmployeeRecordView {
   id: string;
-  tenantId?: string;
-  employeeCode?: string;
-  firstName?: string;
-  lastName?: string | null;
+  tenantId?: string | undefined;
+  employeeCode?: string | undefined;
+  firstName?: string | undefined;
+  lastName?: string | null | undefined;
   fullName: string;
-  email?: string;
-  phone?: string | null;
-  status?: string;
-  employmentType?: string;
-  joiningDate?: string;
-  avatarUrl?: string | null;
-  profilePhoto?: string | null;
-  departmentId?: string;
-  department?: { id: string; name: string; code?: string } | string | null;
-  designationId?: string;
-  designation?: { id: string; name: string; code?: string } | string | null;
-  managerId?: string | null;
-  managerName?: string | null;
-  profileCompletionScore?: number;
+  email?: string | undefined;
+  phone?: string | null | undefined;
+  status?: string | undefined;
+  employmentType?: string | undefined;
+  joiningDate?: string | undefined;
+  avatarUrl?: string | null | undefined;
+  profilePhoto?: string | null | undefined;
+  departmentId?: string | undefined;
+  department?: { id: string; name: string; code?: string | undefined } | string | null | undefined;
+  designationId?: string | undefined;
+  designation?: { id: string; name: string; code?: string | undefined } | string | null | undefined;
+  managerId?: string | null | undefined;
+  managerName?: string | null | undefined;
+  profileCompletionScore?: number | undefined;
 }
 
 export interface DepartmentRecordView {
   id: string;
-  tenantId?: string;
+  tenantId?: string | undefined;
   name: string;
   code: string;
-  description?: string | null;
+  description?: string | null | undefined;
 }
 
 export interface DesignationRecordView {
   id: string;
-  tenantId?: string;
+  tenantId?: string | undefined;
   name: string;
   code: string;
-  departmentId?: string;
-  department?: { id: string; name: string } | null;
+  departmentId?: string | undefined;
+  department?: { id: string; name: string } | null | undefined;
 }
 
 export interface OrgNodeView {
   id: string;
   name: string;
-  title?: string;
-  designation?: string;
-  department?: string;
-  children?: OrgNodeView[];
+  title?: string | undefined;
+  designation?: string | undefined;
+  department?: string | undefined;
+  children?: OrgNodeView[] | undefined;
 }
 
 export interface EmployeeTimelineView {
   id: string;
-  date?: string;
+  date?: string | undefined;
   title: string;
   description: string;
-  eventType?: string;
+  eventType?: string | undefined;
 }
 
 export interface MssEmployeeRequestItem {
@@ -78,14 +141,74 @@ export interface MssEmployeeRequestItem {
   employee?: {
     id: string;
     fullName: string;
-    department?: { name: string } | string | null;
-  };
+    department?: { name: string } | string | null | undefined;
+  } | undefined;
 }
+
+// ==================== TYPED CREATION PAYLOADS ====================
+
+export interface CreateEmployeeInput {
+  employeeCode: string;
+  fullName: string;
+  email: string;
+  departmentId: string;
+  designationId: string;
+  joiningDate: string; // ISO date string required by backend
+  employmentType: "FULL_TIME" | "PART_TIME" | "CONTRACT" | "TEMPORARY";
+  phone?: string | undefined;
+  preferredName?: string | undefined;
+  managerEmployeeId?: string | undefined;
+  salaryType?: ("MONTHLY" | "DAILY" | "HOURLY") | undefined;
+  status?: ("DRAFT" | "INVITED" | "ACTIVE" | "PROBATION") | undefined;
+}
+
+export interface CreateDepartmentInput {
+  name: string;
+  code: string;
+  description?: string | undefined;
+  status?: string | undefined;
+}
+
+export interface CreateDesignationInput {
+  departmentId: string;
+  name: string;
+  code: string;
+  description?: string | undefined;
+  status?: string | undefined;
+}
+
+export interface CreateBusinessUnitInput {
+  name: string;
+  code: string;
+  description?: string | undefined;
+}
+
+export interface CreateTeamInput {
+  name: string;
+  code: string;
+  departmentId?: string | undefined;
+  description?: string | undefined;
+}
+
+export interface CreateLocationInput {
+  name: string;
+  code: string;
+  type?: ("FACTORY" | "OFFICE" | "WAREHOUSE" | "RETAIL_OUTLET" | "DISTRIBUTION_CENTER" | "CUSTOM") | undefined;
+  description?: string | undefined;
+  latitude: number;
+  longitude: number;
+  radiusMeters?: number | undefined;
+  maxAccuracyMeters?: number | undefined;
+  isActive?: boolean | undefined;
+}
+
+// ==================== QUERY KEYS ====================
 
 export const peopleKeys = {
   all: ["people"] as const,
-  directory: (filters?: Record<string, unknown>) => ["people", "directory", filters] as const,
-  employees: (filters?: Record<string, unknown>) => ["people", "employees", filters] as const,
+  directory: (filters?: DirectoryFilterParams | Record<string, unknown> | undefined) => ["people", "directory", filters] as const,
+  employees: (filters?: Record<string, unknown> | undefined) => ["people", "employees", filters] as const,
+
   employeeDetail: (id: string) => ["people", "employee", id] as const,
   employeeDocuments: (id: string) => ["people", "employee", id, "documents"] as const,
   employeeTimeline: (id: string) => ["people", "employee", id, "timeline"] as const,
@@ -97,7 +220,7 @@ export const peopleKeys = {
   orgTree: () => ["organization", "tree"] as const,
   orgChart: () => ["organization", "chart"] as const,
   reportingChain: (id: string) => ["organization", "reporting-chain", id] as const,
-  locations: (filters?: Record<string, unknown>) => ["organization", "locations", filters] as const,
+  locations: (filters?: Record<string, unknown> | undefined) => ["organization", "locations", filters] as const,
   managerDashboard: () => ["manager", "dashboard"] as const,
   managerTeam: () => ["manager", "team"] as const,
   managerApprovals: () => ["manager", "approvals"] as const
@@ -106,17 +229,11 @@ export const peopleKeys = {
 // ==================== DIRECTORY QUERIES ====================
 
 export function useDirectory(
-  filter?: { search?: string | undefined; departmentId?: string | undefined; locationId?: string | undefined; limit?: number | undefined; offset?: number | undefined } | undefined,
+  filter?: DirectoryFilterParams | undefined,
   enabled: boolean = true
 ) {
-  const queryParams = new URLSearchParams();
-  if (filter?.search) queryParams.set("search", filter.search);
-  if (filter?.departmentId && filter.departmentId !== "ALL") queryParams.set("departmentId", filter.departmentId);
-  if (filter?.locationId) queryParams.set("locationId", filter.locationId);
-  if (filter?.limit) queryParams.set("limit", String(filter.limit));
-  if (filter?.offset) queryParams.set("offset", String(filter.offset));
-
-  const path = `/directory${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
+  const qs = buildDirectoryQueryParams(filter);
+  const path = `/directory${qs ? `?${qs}` : ""}`;
   return useQuery({
     queryKey: peopleKeys.directory(filter),
     queryFn: () => apiRequest<DirectoryEmployeeView[]>(path),
@@ -128,16 +245,8 @@ export function useDirectory(
 // ==================== EMPLOYEES QUERIES ====================
 
 export function useEmployees(filter?: Record<string, unknown> | undefined, enabled: boolean = true) {
-  const queryParams = new URLSearchParams();
-  if (filter) {
-    Object.entries(filter).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== "" && v !== "ALL") {
-        queryParams.set(k, String(v));
-      }
-    });
-  }
-
-  const path = `/employees${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
+  const qs = buildEmployeesQueryParams(filter);
+  const path = `/employees${qs ? `?${qs}` : ""}`;
   return useQuery({
     queryKey: peopleKeys.employees(filter),
     queryFn: () => apiRequest<EmployeeRecordView[]>(path),
@@ -250,17 +359,17 @@ export function useLocations(filter?: Record<string, unknown> | undefined, enabl
 // ==================== MANAGER (MSS) QUERIES ====================
 
 export interface MssDashboardData {
-  teamSize?: number;
-  directReportsCount?: number;
-  onLeaveTodayCount?: number;
-  pendingApprovalsCount?: number;
+  teamSize?: number | undefined;
+  directReportsCount?: number | undefined;
+  onLeaveTodayCount?: number | undefined;
+  pendingApprovalsCount?: number | undefined;
   teamMembers?: Array<{
     id: string;
     fullName: string;
     employeeCode: string;
-    designation?: { name: string };
-    department?: { name: string };
-  }>;
+    designation?: { name: string } | undefined;
+    department?: { name: string } | undefined;
+  }> | undefined;
 }
 
 export function useManagerDashboard(enabled: boolean = true) {
@@ -295,18 +404,20 @@ export function useManagerApprovals(enabled: boolean = true) {
   });
 }
 
-// ==================== MUTATIONS ====================
+// ==================== MUTATIONS WITH PRECISE INVALIDATION ====================
 
 export function useCreateEmployeeMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
+    mutationFn: (data: CreateEmployeeInput) =>
       apiRequest<EmployeeRecordView>("/employees", {
         method: "POST",
         body: JSON.stringify(data)
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["people", "employees"] });
+      queryClient.invalidateQueries({ queryKey: ["people", "directory"] });
+      queryClient.invalidateQueries({ queryKey: ["organization"] });
     }
   });
 }
@@ -314,14 +425,15 @@ export function useCreateEmployeeMutation() {
 export function useUpdateEmployeeMutation(employeeId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
+    mutationFn: (data: Partial<CreateEmployeeInput>) =>
       apiRequest<EmployeeRecordView>(`/employees/${employeeId}`, {
         method: "PATCH",
         body: JSON.stringify(data)
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDetail(employeeId) });
-      queryClient.invalidateQueries({ queryKey: peopleKeys.employees() });
+      queryClient.invalidateQueries({ queryKey: ["people", "employees"] });
+      queryClient.invalidateQueries({ queryKey: ["people", "directory"] });
     }
   });
 }
@@ -329,14 +441,15 @@ export function useUpdateEmployeeMutation(employeeId: string) {
 export function useCreateDepartmentMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; code: string; description?: string | undefined }) =>
+    mutationFn: (data: CreateDepartmentInput) =>
       apiRequest<DepartmentRecordView>("/departments", {
         method: "POST",
         body: JSON.stringify(data)
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: peopleKeys.departments() });
-      queryClient.invalidateQueries({ queryKey: peopleKeys.orgTree() });
+      queryClient.invalidateQueries({ queryKey: ["organization", "departments"] });
+      queryClient.invalidateQueries({ queryKey: ["organization", "tree"] });
+      queryClient.invalidateQueries({ queryKey: ["organization", "chart"] });
     }
   });
 }
@@ -344,13 +457,13 @@ export function useCreateDepartmentMutation() {
 export function useCreateDesignationMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; code: string; departmentId: string; description?: string | undefined }) =>
+    mutationFn: (data: CreateDesignationInput) =>
       apiRequest<DesignationRecordView>("/designations", {
         method: "POST",
         body: JSON.stringify(data)
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: peopleKeys.designations() });
+      queryClient.invalidateQueries({ queryKey: ["organization", "designations"] });
     }
   });
 }
@@ -358,13 +471,13 @@ export function useCreateDesignationMutation() {
 export function useCreateBusinessUnitMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; code: string; description?: string | undefined }) =>
+    mutationFn: (data: CreateBusinessUnitInput) =>
       apiRequest<BusinessUnitView>("/organization/business-units", {
         method: "POST",
         body: JSON.stringify(data)
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: peopleKeys.businessUnits() });
+      queryClient.invalidateQueries({ queryKey: ["organization", "business-units"] });
     }
   });
 }
@@ -372,13 +485,13 @@ export function useCreateBusinessUnitMutation() {
 export function useCreateTeamMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; code: string; departmentId?: string | undefined; description?: string | undefined }) =>
+    mutationFn: (data: CreateTeamInput) =>
       apiRequest<TeamView>("/organization/teams", {
         method: "POST",
         body: JSON.stringify(data)
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: peopleKeys.teams() });
+      queryClient.invalidateQueries({ queryKey: ["organization", "teams"] });
     }
   });
 }
@@ -386,13 +499,13 @@ export function useCreateTeamMutation() {
 export function useCreateLocationMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
+    mutationFn: (data: CreateLocationInput) =>
       apiRequest<LocationView>("/locations", {
         method: "POST",
         body: JSON.stringify(data)
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: peopleKeys.locations() });
+      queryClient.invalidateQueries({ queryKey: ["organization", "locations"] });
     }
   });
 }
@@ -406,8 +519,8 @@ export function useApproveLeaveMutation() {
         body: JSON.stringify({ comments })
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: peopleKeys.managerApprovals() });
-      queryClient.invalidateQueries({ queryKey: peopleKeys.managerDashboard() });
+      queryClient.invalidateQueries({ queryKey: ["manager", "approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["manager", "dashboard"] });
     }
   });
 }
@@ -421,8 +534,8 @@ export function useRejectLeaveMutation() {
         body: JSON.stringify({ reason })
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: peopleKeys.managerApprovals() });
-      queryClient.invalidateQueries({ queryKey: peopleKeys.managerDashboard() });
+      queryClient.invalidateQueries({ queryKey: ["manager", "approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["manager", "dashboard"] });
     }
   });
 }

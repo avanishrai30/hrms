@@ -12,7 +12,8 @@ import {
   ShieldCheck,
   AlertCircle,
   X,
-  Send
+  Send,
+  Building
 } from "lucide-react";
 import {
   useDepartments,
@@ -22,11 +23,13 @@ import {
   useCreateDepartmentMutation,
   useCreateDesignationMutation
 } from "../../../lib/queries/use-people-queries";
-import { usePermissionGate } from "../../../lib/session-store";
+import { usePermissionGate, useHasPermission } from "../../../lib/session-store";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
 export default function OrganizationManagementPage() {
   const gate = usePermissionGate(["organization.view", "departments.read"]);
+  const canCreateDept = useHasPermission("departments.create");
+  const canCreateDesig = useHasPermission("designations.create");
 
   const [activeTab, setActiveTab] = useState<"departments" | "designations">("departments");
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
@@ -82,7 +85,7 @@ export default function OrganizationManagementPage() {
   const handleCreateDesig = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!desigName.trim() || !desigCode.trim() || !desigDeptId) {
-      setDesigError("Please fill in name, code, and select a department.");
+      setDesigError("Please provide designation name, code, and department.");
       return;
     }
     try {
@@ -95,12 +98,13 @@ export default function OrganizationManagementPage() {
       setIsDesigModalOpen(false);
       setDesigName("");
       setDesigCode("");
+      setDesigDeptId("");
     } catch (err: unknown) {
       setDesigError(err instanceof Error ? err.message : "Failed to create designation");
     }
   };
 
-  if (gate.isLoading || (gate.isAuthorized && deptsQuery.isLoading)) {
+  if (gate.isLoading || (gate.isAuthorized && (deptsQuery.isLoading || desigsQuery.isLoading))) {
     return (
       <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-pulse">
         <div className="h-8 w-64 rounded-control bg-surface-muted/60" />
@@ -119,9 +123,9 @@ export default function OrganizationManagementPage() {
       <div className="p-8 max-w-lg mx-auto text-center mt-12">
         <div className="p-8 rounded-card bg-surface-raised border border-border-subtle shadow-card space-y-3">
           <ShieldCheck className="w-8 h-8 text-warning mx-auto" />
-          <h2 className="text-base font-bold text-foreground">Organization Management Access Restricted</h2>
+          <h2 className="text-base font-bold text-foreground">Organization Access Restricted</h2>
           <p className="text-xs text-foreground-muted">
-            You do not have permission (`organization.view`) to view organization structures.
+            You do not have permission (`organization.view` or `departments.read`) to view organizational structures.
           </p>
         </div>
       </div>
@@ -135,11 +139,11 @@ export default function OrganizationManagementPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Organization Architecture</h1>
           <p className="text-xs text-foreground-muted mt-0.5">
-            Configure departments, designations, business units, and reporting hierarchies.
+            Structure your departments, designations, business units, and team divisions.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 flex-wrap">
           <Link
             href={"/org-chart" as Route}
             className="px-3.5 py-2 rounded-control bg-surface-raised border border-border-subtle hover:bg-surface-muted text-xs font-semibold text-foreground transition inline-flex items-center gap-1.5 shadow-sm"
@@ -147,74 +151,79 @@ export default function OrganizationManagementPage() {
             <Network className="w-4 h-4 text-primary" />
             <span>Org Chart</span>
           </Link>
-          <button
-            onClick={() => {
-              if (activeTab === "departments") setIsDeptModalOpen(true);
-              else {
-                setDesigDeptId(departments[0]?.id || "");
-                setIsDesigModalOpen(true);
-              }
-            }}
-            className="px-4 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition shadow-sm inline-flex items-center gap-1.5"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{activeTab === "departments" ? "Add Department" : "Add Designation"}</span>
-          </button>
+
+          {activeTab === "departments" && canCreateDept && (
+            <button
+              onClick={() => setIsDeptModalOpen(true)}
+              className="px-3.5 py-2 rounded-control bg-primary hover:bg-primary/90 text-white text-xs font-semibold shadow-sm transition inline-flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Department</span>
+            </button>
+          )}
+
+          {activeTab === "designations" && canCreateDesig && (
+            <button
+              onClick={() => setIsDesigModalOpen(true)}
+              className="px-3.5 py-2 rounded-control bg-primary hover:bg-primary/90 text-white text-xs font-semibold shadow-sm transition inline-flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Designation</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* 2. Real Metrics Strip */}
+      {/* 2. Top Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-card bg-surface-raised border border-border-subtle shadow-card flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-semibold text-foreground-muted uppercase tracking-wider">Departments</p>
-            <p className="text-2xl font-extrabold font-mono text-foreground tabular-nums mt-1">
-              {deptsQuery.isSuccess ? departments.length : "—"}
-            </p>
+        <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-foreground-muted">Departments</span>
+            <div className="p-2 rounded-control bg-primary-soft text-primary">
+              <Building2 className="w-4 h-4" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-pill bg-primary-soft text-primary flex items-center justify-center">
-            <Building2 className="w-5 h-5" />
-          </div>
+          <p className="text-2xl font-black text-foreground">{departments.length}</p>
         </div>
 
-        <div className="p-4 rounded-card bg-surface-raised border border-border-subtle shadow-card flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-semibold text-foreground-muted uppercase tracking-wider">Designations</p>
-            <p className="text-2xl font-extrabold font-mono text-foreground tabular-nums mt-1">
-              {desigsQuery.isSuccess ? designations.length : "—"}
-            </p>
+        <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-foreground-muted">Designations</span>
+            <div className="p-2 rounded-control bg-primary-soft text-primary">
+              <Briefcase className="w-4 h-4" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-pill bg-primary-soft text-primary flex items-center justify-center">
-            <Briefcase className="w-5 h-5" />
-          </div>
+          <p className="text-2xl font-black text-foreground">{designations.length}</p>
         </div>
 
-        <div className="p-4 rounded-card bg-surface-raised border border-border-subtle shadow-card flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-semibold text-foreground-muted uppercase tracking-wider">Business Units</p>
-            <p className="text-2xl font-extrabold font-mono text-foreground tabular-nums mt-1">
-              {buQuery.isSuccess ? businessUnits.length : "—"}
-            </p>
+        <Link
+          href={"/organization/business-units" as Route}
+          className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-2 hover:border-primary/40 transition group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-foreground-muted group-hover:text-primary transition">Business Units</span>
+            <div className="p-2 rounded-control bg-primary-soft text-primary">
+              <Building className="w-4 h-4" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-pill bg-primary-soft text-primary flex items-center justify-center">
-            <Network className="w-5 h-5" />
-          </div>
-        </div>
+          <p className="text-2xl font-black text-foreground">{businessUnits.length}</p>
+        </Link>
 
-        <div className="p-4 rounded-card bg-surface-raised border border-border-subtle shadow-card flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-semibold text-foreground-muted uppercase tracking-wider">Teams</p>
-            <p className="text-2xl font-extrabold font-mono text-foreground tabular-nums mt-1">
-              {teamsQuery.isSuccess ? teams.length : "—"}
-            </p>
+        <Link
+          href={"/organization/teams" as Route}
+          className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-2 hover:border-primary/40 transition group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-foreground-muted group-hover:text-primary transition">Teams & Squads</span>
+            <div className="p-2 rounded-control bg-primary-soft text-primary">
+              <Users className="w-4 h-4" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-pill bg-primary-soft text-primary flex items-center justify-center">
-            <Users className="w-5 h-5" />
-          </div>
-        </div>
+          <p className="text-2xl font-black text-foreground">{teams.length}</p>
+        </Link>
       </div>
 
-      {/* 3. Navigation Tabs */}
+      {/* 3. Tab Switcher */}
       <div className="flex items-center gap-2 border-b border-border-subtle pb-2">
         <button
           onClick={() => setActiveTab("departments")}
@@ -224,7 +233,7 @@ export default function OrganizationManagementPage() {
               : "text-foreground-secondary hover:bg-surface-muted"
           }`}
         >
-          Departments
+          Departments ({departments.length})
         </button>
         <button
           onClick={() => setActiveTab("designations")}
@@ -234,145 +243,161 @@ export default function OrganizationManagementPage() {
               : "text-foreground-secondary hover:bg-surface-muted"
           }`}
         >
-          Designations
+          Designations ({designations.length})
         </button>
       </div>
 
-      {/* 4. Tab Tables */}
-      {activeTab === "departments" && (
-        <div className="rounded-card bg-surface-raised border border-border-subtle shadow-card overflow-hidden">
-          {departments.length > 0 ? (
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-border-subtle text-foreground-muted bg-surface-muted/30">
-                  <th className="py-3 px-4 font-semibold">Department</th>
-                  <th className="py-3 px-4 font-semibold">Code</th>
-                  <th className="py-3 px-4 font-semibold">Description</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-subtle">
-                {departments.map((d) => (
-                  <tr key={d.id} className="hover:bg-surface-muted/30 transition">
-                    <td className="py-3 px-4 font-bold text-foreground">{d.name}</td>
-                    <td className="py-3 px-4 font-mono text-primary font-semibold">{d.code}</td>
-                    <td className="py-3 px-4 text-foreground-secondary">{d.description || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="py-12 text-center text-xs text-foreground-muted">
-              No departments configured yet.
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === "designations" && (
-        <div className="rounded-card bg-surface-raised border border-border-subtle shadow-card overflow-hidden">
-          {designations.length > 0 ? (
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-border-subtle text-foreground-muted bg-surface-muted/30">
-                  <th className="py-3 px-4 font-semibold">Designation Title</th>
-                  <th className="py-3 px-4 font-semibold">Code</th>
-                  <th className="py-3 px-4 font-semibold">Department</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-subtle">
-                {designations.map((d) => (
-                  <tr key={d.id} className="hover:bg-surface-muted/30 transition">
-                    <td className="py-3 px-4 font-bold text-foreground">{d.name}</td>
-                    <td className="py-3 px-4 font-mono text-primary font-semibold">{d.code}</td>
-                    <td className="py-3 px-4 text-foreground-secondary">{d.department?.name || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="py-12 text-center text-xs text-foreground-muted">
-              No designations configured yet.
-            </div>
-          )}
-        </div>
+      {/* 4. Tab Content */}
+      {activeTab === "departments" ? (
+        departments.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {departments.map((dept) => (
+              <div
+                key={dept.id}
+                className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">{dept.name}</h3>
+                    <p className="text-xs font-mono font-semibold text-primary mt-0.5">{dept.code}</p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-pill bg-success-soft text-success text-[10px] font-bold">
+                    ACTIVE
+                  </span>
+                </div>
+                {dept.description && (
+                  <p className="text-xs text-foreground-secondary line-clamp-2">{dept.description}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-16 text-center rounded-card bg-surface-raised border border-border-subtle flex flex-col items-center justify-center text-foreground-muted">
+            <Building2 className="w-8 h-8 mb-2 opacity-50" />
+            <p className="text-xs font-bold text-foreground">No departments configured</p>
+            <p className="text-[11px] text-foreground-muted mt-0.5">
+              {canCreateDept ? "Create your organization's first department." : "No departments currently exist in this tenant."}
+            </p>
+          </div>
+        )
+      ) : (
+        designations.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {designations.map((desig) => {
+              const deptObj = departments.find((d) => d.id === desig.departmentId);
+              return (
+                <div
+                  key={desig.id}
+                  className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-foreground">{desig.name}</h3>
+                      <p className="text-xs font-mono font-semibold text-primary mt-0.5">{desig.code}</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-pill bg-success-soft text-success text-[10px] font-bold">
+                      ACTIVE
+                    </span>
+                  </div>
+                  <div className="pt-2 border-t border-border-subtle text-xs text-foreground-muted">
+                    Department: <span className="font-semibold text-foreground">{deptObj?.name || desig.department?.name || "—"}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="py-16 text-center rounded-card bg-surface-raised border border-border-subtle flex flex-col items-center justify-center text-foreground-muted">
+            <Briefcase className="w-8 h-8 mb-2 opacity-50" />
+            <p className="text-xs font-bold text-foreground">No designations configured</p>
+            <p className="text-[11px] text-foreground-muted mt-0.5">
+              {canCreateDesig ? "Create designations linked to your departments." : "No designations currently exist in this tenant."}
+            </p>
+          </div>
+        )
       )}
 
       {/* 5. Add Department Modal */}
-      {isDeptModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-panel bg-surface-raised border border-border-subtle p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
-              <h3 className="text-sm font-bold text-foreground">Add Department</h3>
+      {isDeptModalOpen && canCreateDept && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
+          <div className="bg-surface-raised rounded-card border border-border-subtle shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-border-subtle flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-foreground">Add Department</h3>
+                <p className="text-[11px] text-foreground-muted">Create a business functional unit</p>
+              </div>
               <button
                 onClick={() => setIsDeptModalOpen(false)}
-                className="w-7 h-7 rounded-pill hover:bg-surface-muted flex items-center justify-center text-foreground-muted"
+                className="p-1 rounded-control text-foreground-muted hover:text-foreground hover:bg-surface-muted transition"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateDept} className="space-y-4 text-xs">
+            <form onSubmit={handleCreateDept} className="p-5 space-y-4">
               {deptError && (
-                <div className="p-3 rounded-control bg-danger/10 border border-danger/20 text-danger flex items-center gap-2">
+                <div className="p-3 rounded-control bg-danger-soft border border-danger/20 text-danger text-xs flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{deptError}</span>
                 </div>
               )}
 
-              <div className="space-y-1">
-                <label className="font-bold text-foreground">Department Name *</label>
+              <div>
+                <label className="block text-[11px] font-semibold text-foreground-secondary mb-1">
+                  Department Name <span className="text-danger">*</span>
+                </label>
                 <input
                   type="text"
+                  required
                   value={deptName}
                   onChange={(e) => setDeptName(e.target.value)}
                   placeholder="e.g. Engineering"
-                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  required
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="font-bold text-foreground">Department Code *</label>
+              <div>
+                <label className="block text-[11px] font-semibold text-foreground-secondary mb-1">
+                  Department Code <span className="text-danger">*</span>
+                </label>
                 <input
                   type="text"
+                  required
                   value={deptCode}
                   onChange={(e) => setDeptCode(e.target.value)}
                   placeholder="e.g. ENG"
-                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  required
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono uppercase"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="font-bold text-foreground">Description</label>
+              <div>
+                <label className="block text-[11px] font-semibold text-foreground-secondary mb-1">
+                  Description (Optional)
+                </label>
                 <textarea
-                  rows={2}
+                  rows={3}
                   value={deptDesc}
                   onChange={(e) => setDeptDesc(e.target.value)}
-                  placeholder="Optional notes..."
-                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder="Brief description of department scope..."
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
 
-              <div className="pt-3 border-t border-border-subtle flex justify-end gap-2.5">
+              <div className="pt-3 border-t border-border-subtle flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsDeptModalOpen(false)}
-                  className="px-4 py-2 rounded-control bg-surface-muted hover:bg-muted font-semibold text-foreground-secondary"
+                  className="px-3.5 py-2 rounded-control border border-border-subtle bg-surface text-xs font-semibold text-foreground-secondary hover:bg-surface-muted transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={createDeptMutation.isPending}
-                  className="px-5 py-2 rounded-control bg-primary hover:bg-primary-hover text-white font-bold transition shadow-sm inline-flex items-center gap-1.5 disabled:opacity-50"
+                  className="px-4 py-2 rounded-control bg-primary hover:bg-primary/90 text-white text-xs font-semibold shadow-sm transition inline-flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  {createDeptMutation.isPending ? "Creating..." : (
-                    <>
-                      <Send className="w-3.5 h-3.5" />
-                      Save Department
-                    </>
-                  )}
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{createDeptMutation.isPending ? "Creating..." : "Save Department"}</span>
                 </button>
               </div>
             </form>
@@ -381,59 +406,41 @@ export default function OrganizationManagementPage() {
       )}
 
       {/* 6. Add Designation Modal */}
-      {isDesigModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-panel bg-surface-raised border border-border-subtle p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
-              <h3 className="text-sm font-bold text-foreground">Add Designation</h3>
+      {isDesigModalOpen && canCreateDesig && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
+          <div className="bg-surface-raised rounded-card border border-border-subtle shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-border-subtle flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-foreground">Add Designation</h3>
+                <p className="text-[11px] text-foreground-muted">Create a job title role definition</p>
+              </div>
               <button
                 onClick={() => setIsDesigModalOpen(false)}
-                className="w-7 h-7 rounded-pill hover:bg-surface-muted flex items-center justify-center text-foreground-muted"
+                className="p-1 rounded-control text-foreground-muted hover:text-foreground hover:bg-surface-muted transition"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateDesig} className="space-y-4 text-xs">
+            <form onSubmit={handleCreateDesig} className="p-5 space-y-4">
               {desigError && (
-                <div className="p-3 rounded-control bg-danger/10 border border-danger/20 text-danger flex items-center gap-2">
+                <div className="p-3 rounded-control bg-danger-soft border border-danger/20 text-danger text-xs flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{desigError}</span>
                 </div>
               )}
 
-              <div className="space-y-1">
-                <label className="font-bold text-foreground">Designation Title *</label>
-                <input
-                  type="text"
-                  value={desigName}
-                  onChange={(e) => setDesigName(e.target.value)}
-                  placeholder="e.g. Senior Software Engineer"
-                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-foreground">Code *</label>
-                <input
-                  type="text"
-                  value={desigCode}
-                  onChange={(e) => setDesigCode(e.target.value)}
-                  placeholder="e.g. SSE"
-                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-foreground">Department *</label>
+              <div>
+                <label className="block text-[11px] font-semibold text-foreground-secondary mb-1">
+                  Department <span className="text-danger">*</span>
+                </label>
                 <select
+                  required
                   value={desigDeptId}
                   onChange={(e) => setDesigDeptId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  required
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
+                  <option value="">Select Department</option>
                   {departments.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name}
@@ -442,25 +449,49 @@ export default function OrganizationManagementPage() {
                 </select>
               </div>
 
-              <div className="pt-3 border-t border-border-subtle flex justify-end gap-2.5">
+              <div>
+                <label className="block text-[11px] font-semibold text-foreground-secondary mb-1">
+                  Designation Name <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={desigName}
+                  onChange={(e) => setDesigName(e.target.value)}
+                  placeholder="e.g. Senior Software Engineer"
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-foreground-secondary mb-1">
+                  Designation Code <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={desigCode}
+                  onChange={(e) => setDesigCode(e.target.value)}
+                  placeholder="e.g. SSE"
+                  className="w-full px-3 py-2 rounded-control bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono uppercase"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-border-subtle flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsDesigModalOpen(false)}
-                  className="px-4 py-2 rounded-control bg-surface-muted hover:bg-muted font-semibold text-foreground-secondary"
+                  className="px-3.5 py-2 rounded-control border border-border-subtle bg-surface text-xs font-semibold text-foreground-secondary hover:bg-surface-muted transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={createDesigMutation.isPending}
-                  className="px-5 py-2 rounded-control bg-primary hover:bg-primary-hover text-white font-bold transition shadow-sm inline-flex items-center gap-1.5 disabled:opacity-50"
+                  className="px-4 py-2 rounded-control bg-primary hover:bg-primary/90 text-white text-xs font-semibold shadow-sm transition inline-flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  {createDesigMutation.isPending ? "Creating..." : (
-                    <>
-                      <Send className="w-3.5 h-3.5" />
-                      Save Designation
-                    </>
-                  )}
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{createDesigMutation.isPending ? "Creating..." : "Save Designation"}</span>
                 </button>
               </div>
             </form>
