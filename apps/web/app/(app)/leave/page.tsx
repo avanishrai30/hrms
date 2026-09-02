@@ -80,7 +80,7 @@ export default function EmployeeLeavePage() {
               {typeof totalAvailable === "number" ? `${totalAvailable}d` : "—"}
             </span>
           </div>
-          <span className="text-[10px] text-zinc-700 font-medium">Accumulated paid & casual balance</span>
+          <span className="text-[10px] text-zinc-700 font-medium">Available leave balance</span>
         </div>
 
         {/* Dynamic Balance Types */}
@@ -98,20 +98,20 @@ export default function EmployeeLeavePage() {
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-foreground truncate max-w-[120px]">
-                  {b.leaveType?.name || b.leaveType?.code || "Leave"}
+                  {b.leaveType?.name || b.leaveType?.code || "Leave Type"}
                 </span>
                 <span className="px-2 py-0.5 rounded-pill bg-primary-soft text-primary font-mono text-[10px] font-bold">
-                  {b.leaveType?.code || "LEAVE"}
+                  {b.leaveType?.code || "—"}
                 </span>
               </div>
               <div className="my-1.5">
                 <span className="text-2xl font-extrabold font-mono text-foreground tabular-nums">
-                  {b.availableDays}d
+                  {typeof b.availableDays === "number" ? `${b.availableDays}d` : "—"}
                 </span>
               </div>
               <div className="text-[10px] text-foreground-muted flex justify-between">
-                <span>Allocated: {b.allocatedDays ?? 0}d</span>
-                <span>Used: {b.consumedDays ?? 0}d</span>
+                <span>Allocated: {typeof b.allocatedDays === "number" ? `${b.allocatedDays}d` : "—"}</span>
+                <span>Used: {typeof b.consumedDays === "number" ? `${b.consumedDays}d` : "—"}</span>
               </div>
             </div>
           ))

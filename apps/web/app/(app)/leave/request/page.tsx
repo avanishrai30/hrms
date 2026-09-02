@@ -18,24 +18,25 @@ export default function ApplyLeavePage() {
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
   const [isHalfDay, setIsHalfDay] = useState(false);
+  const [halfDaySession, setHalfDaySession] = useState<"FIRST_HALF" | "SECOND_HALF">("FIRST_HALF");
   const [formError, setFormError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leaveTypeId) {
-      setFormError("Please select a leave type.");
+      setFormError("Please select a leave category.");
       return;
     }
     if (!startDate || !endDate) {
       setFormError("Please select both start and end dates.");
       return;
     }
-    if (new Date(startDate) > new Date(endDate)) {
+    if (startDate > endDate) {
       setFormError("Start date cannot be after end date.");
       return;
     }
-    if (!reason.trim()) {
-      setFormError("Please provide a reason for the leave request.");
+    if (reason.trim().length < 4) {
+      setFormError("Reason must be at least 4 characters long.");
       return;
     }
 
@@ -43,10 +44,11 @@ export default function ApplyLeavePage() {
       setFormError(null);
       await submitMutation.mutateAsync({
         leaveTypeId,
-        startDate: new Date(startDate).toISOString(),
-        endDate: new Date(endDate).toISOString(),
+        startDate, // Exact YYYY-MM-DD format
+        endDate,   // Exact YYYY-MM-DD format
         reason: reason.trim(),
-        isHalfDay
+        isHalfDay,
+        halfDaySession: isHalfDay ? halfDaySession : undefined
       });
       router.push("/leave" as Route);
     } catch (err: unknown) {
@@ -99,7 +101,10 @@ export default function ApplyLeavePage() {
             </select>
             {selectedBalance && (
               <p className="text-[11px] text-foreground-muted font-medium">
-                Available balance for category: <span className="font-bold text-primary">{selectedBalance.availableDays} days</span>
+                Available balance for category:{" "}
+                <span className="font-bold text-primary">
+                  {typeof selectedBalance.availableDays === "number" ? `${selectedBalance.availableDays} days` : "—"}
+                </span>
               </p>
             )}
           </div>
@@ -129,18 +134,47 @@ export default function ApplyLeavePage() {
             </div>
           </div>
 
-          {/* Half Day Toggle */}
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="checkbox"
-              id="halfDayToggle"
-              checked={isHalfDay}
-              onChange={(e) => setIsHalfDay(e.target.checked)}
-              className="w-4 h-4 rounded text-primary focus:ring-primary border-border"
-            />
-            <label htmlFor="halfDayToggle" className="text-xs font-semibold text-foreground cursor-pointer">
-              Apply as half-day leave
-            </label>
+          {/* Half Day Option */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="halfDayToggle"
+                checked={isHalfDay}
+                onChange={(e) => setIsHalfDay(e.target.checked)}
+                className="w-4 h-4 rounded text-primary focus:ring-primary border-border"
+              />
+              <label htmlFor="halfDayToggle" className="text-xs font-semibold text-foreground cursor-pointer">
+                Apply as half-day leave
+              </label>
+            </div>
+
+            {isHalfDay && (
+              <div className="pl-6 flex items-center gap-4">
+                <label className="flex items-center gap-1.5 text-xs text-foreground cursor-pointer">
+                  <input
+                    type="radio"
+                    name="halfDaySession"
+                    value="FIRST_HALF"
+                    checked={halfDaySession === "FIRST_HALF"}
+                    onChange={() => setHalfDaySession("FIRST_HALF")}
+                    className="text-primary focus:ring-primary"
+                  />
+                  <span>First Half (Morning)</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-foreground cursor-pointer">
+                  <input
+                    type="radio"
+                    name="halfDaySession"
+                    value="SECOND_HALF"
+                    checked={halfDaySession === "SECOND_HALF"}
+                    onChange={() => setHalfDaySession("SECOND_HALF")}
+                    className="text-primary focus:ring-primary"
+                  />
+                  <span>Second Half (Afternoon)</span>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Reason Textarea */}
@@ -150,7 +184,7 @@ export default function ApplyLeavePage() {
               rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Provide context for manager approval..."
+              placeholder="Provide reason for time off (minimum 4 characters)..."
               className="w-full px-3 py-2 rounded-control bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
               required
             />

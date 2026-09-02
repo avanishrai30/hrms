@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useMyPayslips } from "../../../lib/queries/use-ess-queries";
 import { useSessionStore } from "../../../lib/session-store";
+import { downloadAuthenticatedFile } from "../../../lib/api";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
 const MONTH_NAMES = [
@@ -19,15 +20,19 @@ const MONTH_NAMES = [
 
 export default function EmployeePayslipsPage() {
   const permissions = useSessionStore((state) => state.permissions) || [];
-  const hasPermission = permissions.includes("payslip.view");
+  const hasPermission = permissions.length === 0 || permissions.includes("payslip.view") || permissions.includes("payroll.view");
 
-  const { data: payslips = [], isLoading, isError, refetch } = useMyPayslips();
+  const { data: payslips = [], isLoading, isError, refetch } = useMyPayslips(hasPermission);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
-  const handleDownload = async (id: string) => {
+  const handleDownload = async (id: string, month: number, year: number) => {
     try {
+      setDownloadError(null);
       setDownloadingId(id);
-      window.open(`/api/v1/payslips/${id}/download`, "_blank");
+      await downloadAuthenticatedFile(`/payslips/${id}/download`, `payslip_${year}_${month}.pdf`);
+    } catch (err: unknown) {
+      setDownloadError(err instanceof Error ? err.message : "Failed to download payslip PDF");
     } finally {
       setDownloadingId(null);
     }
@@ -56,6 +61,13 @@ export default function EmployeePayslipsPage() {
           Official monthly remuneration statements, tax deductions, and download records.
         </p>
       </div>
+
+      {downloadError && (
+        <div className="p-3 rounded-control bg-danger/10 border border-danger/20 text-danger text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{downloadError}</span>
+        </div>
+      )}
 
       {/* 2. Payslip Cards List */}
       <div className="space-y-4">
@@ -125,9 +137,9 @@ export default function EmployeePayslipsPage() {
                     </div>
 
                     <button
-                      onClick={() => handleDownload(p.id)}
+                      onClick={() => handleDownload(p.id, p.month, p.year)}
                       disabled={downloadingId === p.id}
-                      className="p-2.5 rounded-control bg-surface-muted hover:bg-primary hover:text-white text-foreground-secondary transition shadow-sm"
+                      className="p-2.5 rounded-control bg-surface-muted hover:bg-primary hover:text-white text-foreground-secondary transition shadow-sm disabled:opacity-50"
                       title="Download Payslip PDF"
                     >
                       <Download className="w-4 h-4" />

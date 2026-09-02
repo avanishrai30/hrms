@@ -10,41 +10,49 @@ import {
   AlertCircle,
   Send,
   X,
-  Laptop,
-  HelpCircle,
-  FolderOpen
+  FolderOpen,
+  MapPin,
+  CreditCard,
+  UserCheck,
+  Calendar
 } from "lucide-react";
 import {
   useEmployeeRequests,
   useSubmitEmployeeRequest,
   useCancelEmployeeRequest
 } from "../../../lib/queries/use-ess-queries";
+import { useSessionStore } from "../../../lib/session-store";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
 const REQUEST_TYPES = [
-  { value: "GENERAL_QUERY", label: "General HR Query", icon: HelpCircle },
-  { value: "DEVICE_ISSUE", label: "IT & Hardware Support", icon: Laptop },
-  { value: "DOCUMENT_REQUEST", label: "Official Document Request", icon: FolderOpen },
-  { value: "PROFILE_UPDATE", label: "Profile / Address Update", icon: FileText },
-  { value: "POLICY_CLARIFICATION", label: "Policy Clarification", icon: FileText },
-  { value: "OTHER", label: "Other Workplace Request", icon: FileText }
+  { value: "ATTENDANCE_CORRECTION", label: "Attendance Correction / Regularization", icon: Calendar },
+  { value: "ADDRESS_CHANGE", label: "Address Change Request", icon: MapPin },
+  { value: "BANK_CHANGE", label: "Bank Account Details Change", icon: CreditCard },
+  { value: "PERSONAL_INFO_CORRECTION", label: "Personal Info Correction", icon: UserCheck },
+  { value: "DOCUMENT_UPDATE", label: "Document Update Request", icon: FolderOpen },
+  { value: "SHIFT_CHANGE", label: "Shift Schedule Change", icon: Clock },
+  { value: "MANAGER_CHANGE", label: "Reporting Manager Change", icon: UserCheck },
+  { value: "CUSTOM", label: "Other Workplace Request", icon: FileText }
 ];
 
 export default function EmployeeRequestsPage() {
+  const permissions = useSessionStore((state) => state.permissions) || [];
+  const hasPermission = permissions.length === 0 || permissions.includes("requests.view") || permissions.includes("ess.read");
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [requestType, setRequestType] = useState(REQUEST_TYPES[0]!.value);
   const [reason, setReason] = useState("");
   const [comments, setComments] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
-  const { data: requests = [], isSuccess, isLoading, isError, refetch } = useEmployeeRequests();
+  const { data: requests = [], isSuccess, isLoading, isError, refetch } = useEmployeeRequests(hasPermission);
   const submitMutation = useSubmitEmployeeRequest();
   const cancelMutation = useCancelEmployeeRequest();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reason.trim()) {
-      setFormError("Please provide a reason or summary for your request.");
+    if (reason.trim().length < 3) {
+      setFormError("Please provide a reason (at least 3 characters) for your request.");
       return;
     }
 
@@ -53,7 +61,8 @@ export default function EmployeeRequestsPage() {
       await submitMutation.mutateAsync({
         requestType,
         reason: reason.trim(),
-        comments: comments.trim() || undefined
+        comments: comments.trim() || undefined,
+        payload: {} // Required by backend schema
       });
       setIsModalOpen(false);
       setReason("");
@@ -83,7 +92,7 @@ export default function EmployeeRequestsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Employee Service Desk</h1>
           <p className="text-xs text-foreground-muted mt-0.5">
-            Submit workplace inquiries, IT assistance, document requests, and track resolutions.
+            Submit workplace requests, address changes, attendance regularizations, and track resolutions.
           </p>
         </div>
 
@@ -247,19 +256,19 @@ export default function EmployeeRequestsPage() {
                   type="text"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="e.g. Laptop charger replacement or Experience letter request"
+                  placeholder="e.g. Correct punch-in time on Sept 1 or Update permanent address"
                   className="w-full px-3 py-2 rounded-control bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                   required
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground">Detailed Description (Optional)</label>
+                <label className="text-xs font-bold text-foreground">Detailed Comments (Optional)</label>
                 <textarea
                   rows={3}
                   value={comments}
                   onChange={(e) => setComments(e.target.value)}
-                  placeholder="Include any specific details or urgency..."
+                  placeholder="Include any specific details or notes for the approver..."
                   className="w-full px-3 py-2 rounded-control bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>

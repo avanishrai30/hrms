@@ -11,10 +11,14 @@ import {
   useAnnouncements,
   useAcknowledgeAnnouncementMutation
 } from "../../../lib/queries/use-ess-queries";
+import { useSessionStore } from "../../../lib/session-store";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
 export default function TenantAnnouncementsPage() {
-  const { data: announcements = [], isLoading, isError, refetch } = useAnnouncements();
+  const permissions = useSessionStore((state) => state.permissions) || [];
+  const hasPermission = permissions.length === 0 || permissions.includes("announcements.view") || permissions.includes("ess.read");
+
+  const { data: announcements = [], isLoading, isError, refetch } = useAnnouncements(hasPermission);
   const ackMutation = useAcknowledgeAnnouncementMutation();
 
   const handleAcknowledge = async (id: string) => {
@@ -34,7 +38,7 @@ export default function TenantAnnouncementsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Announcements & Notices</h1>
         <p className="text-xs text-foreground-muted mt-0.5">
-          Official company broadcasts, policy revisions, and workplace communications.
+          Official organization broadcasts, policy revisions, and workplace communications.
         </p>
       </div>
 
@@ -86,14 +90,21 @@ export default function TenantAnnouncementsPage() {
                   Author: {a.author?.email || "Organization Admin"}
                 </span>
 
-                <button
-                  onClick={() => handleAcknowledge(a.id)}
-                  disabled={ackMutation.isPending}
-                  className="px-3 py-1.5 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition inline-flex items-center gap-1.5 shadow-sm"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Acknowledge</span>
-                </button>
+                {a.isAcknowledged ? (
+                  <span className="px-2.5 py-1 rounded-pill bg-success/20 text-green-900 text-[11px] font-bold inline-flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                    Acknowledged
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => handleAcknowledge(a.id)}
+                    disabled={ackMutation.isPending}
+                    className="px-3 py-1.5 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition inline-flex items-center gap-1.5 shadow-sm"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Acknowledge</span>
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -123,14 +134,21 @@ export default function TenantAnnouncementsPage() {
                   Author: {a.author?.email || "Administration"}
                 </span>
 
-                <button
-                  onClick={() => handleAcknowledge(a.id)}
-                  disabled={ackMutation.isPending}
-                  className="px-3 py-1 rounded-control bg-surface-muted hover:bg-muted text-foreground text-xs font-semibold transition inline-flex items-center gap-1.5"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-                  <span>Acknowledge</span>
-                </button>
+                {a.isAcknowledged ? (
+                  <span className="px-2.5 py-1 rounded-pill bg-success/20 text-success text-[11px] font-bold inline-flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                    Acknowledged
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => handleAcknowledge(a.id)}
+                    disabled={ackMutation.isPending}
+                    className="px-3 py-1 rounded-control bg-surface-muted hover:bg-muted text-foreground text-xs font-semibold transition inline-flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                    <span>Acknowledge</span>
+                  </button>
+                )}
               </div>
             </div>
           ))}

@@ -95,3 +95,53 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   }
   return response.json() as Promise<T>;
 }
+
+export function getApiUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${API_BASE_URL}${normalizedPath}`;
+}
+
+export async function downloadAuthenticatedFile(path: string, defaultFilename: string = "download.pdf"): Promise<void> {
+  const token = getAccessToken();
+  let response = await fetch(getApiUrl(path), {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    credentials: "include"
+  });
+
+  if (response.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      response = await fetch(getApiUrl(path), {
+        headers: {
+          Authorization: `Bearer ${refreshed}`
+        },
+        credentials: "include"
+      });
+    }
+  }
+
+  if (!response.ok) {
+    throw new ApiClientError("Failed to download file.", response.status);
+  }
+
+  const contentDisposition = response.headers.get("Content-Disposition");
+  let filename = defaultFilename;
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename=["']?([^"';]+)["']?/);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}

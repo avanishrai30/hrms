@@ -66,6 +66,14 @@ export default function EmployeeAttendancePage() {
 
   const historyRecords = historyQuery.data ?? [];
 
+  const renderPolicyRule = (value: boolean | undefined | null, trueText = "Required", falseText = "Not required") => {
+    if (value === true) return trueText;
+    if (value === false) return falseText;
+    return "Not configured";
+  };
+
+  const shiftLabel = shift?.name || (shift?.workHours ? `${shift.workHours}h Shift` : "Shift not assigned");
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
       {/* 1. Header Title */}
@@ -84,7 +92,7 @@ export default function EmployeeAttendancePage() {
             <div>
               <span className="text-xs font-bold text-foreground">Live Workstation</span>
               <p className="text-[11px] text-foreground-muted font-medium">
-                {shift?.name || (shift?.workHours ? `${shift.workHours}h Shift` : "Standard Shift")}
+                {shiftLabel}
               </p>
             </div>
             <span
@@ -201,26 +209,26 @@ export default function EmployeeAttendancePage() {
               <div className="flex justify-between py-1 border-b border-white/10">
                 <span>Self Check-in</span>
                 <span className="font-semibold text-white">
-                  {todayData?.rules?.allowSelfCheckIn !== false ? "Enabled" : "Restricted"}
+                  {renderPolicyRule(todayData?.rules?.allowSelfCheckIn, "Enabled", "Restricted")}
                 </span>
               </div>
               <div className="flex justify-between py-1 border-b border-white/10">
                 <span>Geofencing</span>
                 <span className="font-semibold text-white">
-                  {todayData?.rules?.requireGeofence ? "Required" : "Optional"}
+                  {renderPolicyRule(todayData?.rules?.requireGeofence, "Required", "Not required")}
                 </span>
               </div>
               <div className="flex justify-between py-1 border-b border-white/10">
                 <span>Biometric / Face</span>
                 <span className="font-semibold text-white">
-                  {todayData?.rules?.requireFace ? "Required" : "Optional"}
+                  {renderPolicyRule(todayData?.rules?.requireFace, "Required", "Not required")}
                 </span>
               </div>
             </div>
           </div>
 
           <div className="pt-4 border-t border-white/10 text-[11px] text-purple-300/70">
-            Attendance records synchronize directly with the payroll and leave engines.
+            Attendance status is recorded against assigned work schedules.
           </div>
         </div>
       </div>

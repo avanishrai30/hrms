@@ -50,10 +50,11 @@ export const profileKeys = {
   me: () => [...profileKeys.all, "me"] as const
 };
 
-export function useProfile() {
+export function useProfile(enabled: boolean = true) {
   return useQuery({
     queryKey: profileKeys.me(),
     queryFn: () => apiRequest<EmployeeProfileData>("/profile"),
+    enabled,
     retry: 1,
     staleTime: 60000
   });
@@ -114,16 +115,17 @@ export const attendanceKeys = {
     [...attendanceKeys.all, "history", { startDate, endDate }] as const
 };
 
-export function useAttendanceToday() {
+export function useAttendanceToday(enabled: boolean = true) {
   return useQuery({
     queryKey: attendanceKeys.today(),
     queryFn: () => apiRequest<TodayAttendanceData>("/attendance/me/today"),
+    enabled,
     retry: 1,
     staleTime: 15000
   });
 }
 
-export function useAttendanceHistory(startDate?: string, endDate?: string) {
+export function useAttendanceHistory(startDate?: string, endDate?: string, enabled: boolean = true) {
   return useQuery({
     queryKey: attendanceKeys.history(startDate, endDate),
     queryFn: async () => {
@@ -138,6 +140,7 @@ export function useAttendanceHistory(startDate?: string, endDate?: string) {
       if (res && "records" in res && Array.isArray(res.records)) return res.records;
       return [];
     },
+    enabled,
     retry: 1,
     staleTime: 60000
   });
@@ -163,9 +166,9 @@ export function usePunchMutation() {
 export interface LeaveBalanceData {
   id: string;
   availableDays: number;
-  allocatedDays?: number;
-  consumedDays?: number;
-  accruedDays?: number;
+  allocatedDays?: number | null;
+  consumedDays?: number | null;
+  accruedDays?: number | null;
   leaveType?: {
     id: string;
     name: string;
@@ -212,28 +215,30 @@ export const leaveKeys = {
   holidays: (year?: number) => [...leaveKeys.all, "holidays", { year }] as const
 };
 
-export function useLeaveBalances() {
+export function useLeaveBalances(enabled: boolean = true) {
   return useQuery({
     queryKey: leaveKeys.balances(),
     queryFn: () => apiRequest<LeaveBalanceData[]>("/leaves/balances/me"),
+    enabled,
     retry: 1,
     staleTime: 60000
   });
 }
 
-export function useLeaveTypes() {
+export function useLeaveTypes(enabled: boolean = true) {
   return useQuery({
     queryKey: leaveKeys.types(),
     queryFn: async () => {
       const res = await apiRequest<LeaveTypeItem[]>("/leaves/types");
       return Array.isArray(res) ? res : [];
     },
+    enabled,
     retry: 1,
     staleTime: 300000
   });
 }
 
-export function useLeaveRequests() {
+export function useLeaveRequests(enabled: boolean = true) {
   return useQuery({
     queryKey: leaveKeys.requests(),
     queryFn: async () => {
@@ -242,15 +247,17 @@ export function useLeaveRequests() {
       if (res && "requests" in res && Array.isArray(res.requests)) return res.requests;
       return [];
     },
+    enabled,
     retry: 1,
     staleTime: 30000
   });
 }
 
-export function useHolidays(year?: number) {
+export function useHolidays(year?: number, enabled: boolean = true) {
   return useQuery({
     queryKey: leaveKeys.holidays(year),
     queryFn: () => apiRequest<HolidayData[]>(`/leaves/holidays${year ? `?year=${year}` : ""}`),
+    enabled,
     retry: 1,
     staleTime: 300000
   });
@@ -265,6 +272,7 @@ export function useSubmitLeaveRequest() {
       endDate: string;
       reason: string;
       isHalfDay?: boolean | undefined;
+      halfDaySession?: "FIRST_HALF" | "SECOND_HALF" | undefined;
     }) =>
       apiRequest("/leaves/requests", {
         method: "POST",
@@ -313,7 +321,7 @@ export const requestKeys = {
   list: () => [...requestKeys.all, "list"] as const
 };
 
-export function useEmployeeRequests() {
+export function useEmployeeRequests(enabled: boolean = true) {
   return useQuery({
     queryKey: requestKeys.list(),
     queryFn: async () => {
@@ -324,6 +332,7 @@ export function useEmployeeRequests() {
       if (res && "requests" in res && Array.isArray(res.requests)) return res.requests;
       return [];
     },
+    enabled,
     retry: 1,
     staleTime: 30000
   });
@@ -388,23 +397,24 @@ export const payslipKeys = {
   detail: (id: string) => [...payslipKeys.all, "detail", id] as const
 };
 
-export function useMyPayslips() {
+export function useMyPayslips(enabled: boolean = true) {
   return useQuery({
     queryKey: payslipKeys.mine(),
     queryFn: async () => {
       const res = await apiRequest<PayslipItem[]>("/payslips/me");
       return Array.isArray(res) ? res : [];
     },
+    enabled,
     retry: 1,
     staleTime: 120000
   });
 }
 
-export function usePayslipDetail(id: string) {
+export function usePayslipDetail(id: string, enabled: boolean = true) {
   return useQuery({
     queryKey: payslipKeys.detail(id),
     queryFn: () => apiRequest<PayslipItem>(`/payslips/${id}`),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && enabled,
     retry: 1,
     staleTime: 120000
   });
@@ -414,14 +424,13 @@ export function usePayslipDetail(id: string) {
 
 export interface EmployeeDocumentItem {
   id: string;
-  category: string;
-  documentType?: string;
-  name?: string;
+  documentType: string;
+  title: string;
   fileName: string;
   fileSize?: number;
   mimeType?: string;
   downloadUrl?: string;
-  status?: string;
+  isVerified?: boolean;
   uploadedAt: string;
 }
 
@@ -430,7 +439,7 @@ export const documentKeys = {
   list: () => [...documentKeys.all, "list"] as const
 };
 
-export function useEmployeeDocuments() {
+export function useEmployeeDocuments(enabled: boolean = true) {
   return useQuery({
     queryKey: documentKeys.list(),
     queryFn: async () => {
@@ -439,6 +448,7 @@ export function useEmployeeDocuments() {
       if (res && "documents" in res && Array.isArray(res.documents)) return res.documents;
       return [];
     },
+    enabled,
     retry: 1,
     staleTime: 60000
   });
@@ -448,12 +458,11 @@ export function useUploadDocumentMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: {
-      category: string;
       documentType: string;
+      title: string;
       fileName: string;
-      fileUrl: string;
-      fileSizeBytes?: number;
-      mimeType?: string;
+      fileBase64?: string | undefined;
+      mimeType?: string | undefined;
     }) =>
       apiRequest("/documents", {
         method: "POST",
@@ -487,6 +496,7 @@ export interface AnnouncementData {
   priority?: string;
   isPinned?: boolean;
   publishedAt?: string;
+  isAcknowledged?: boolean;
   author?: {
     email?: string;
   };
@@ -497,13 +507,14 @@ export const announcementKeys = {
   list: () => [...announcementKeys.all, "list"] as const
 };
 
-export function useAnnouncements() {
+export function useAnnouncements(enabled: boolean = true) {
   return useQuery({
     queryKey: announcementKeys.list(),
     queryFn: async () => {
       const res = await apiRequest<AnnouncementData[]>("/announcements");
       return Array.isArray(res) ? res : [];
     },
+    enabled,
     retry: 1,
     staleTime: 60000
   });
@@ -528,15 +539,17 @@ export interface IdCardData {
   employeeId: string;
   employeeCode?: string;
   fullName: string;
-  avatarUrl?: string;
+  preferredName?: string;
+  profilePhoto?: string | null;
   designation?: string;
   department?: string;
-  tenantName: string;
-  tenantLogoUrl?: string;
+  companyName?: string;
+  companyLogoUrl?: string | null;
   joiningDate?: string;
   bloodGroup?: string;
-  emergencyContact?: string;
-  verificationCode?: string;
+  emergencyContactPhone?: string | null;
+  qrCodePayload?: string;
+  primaryColor?: string;
 }
 
 export const idCardKeys = {
@@ -544,10 +557,11 @@ export const idCardKeys = {
   mine: () => [...idCardKeys.all, "mine"] as const
 };
 
-export function useIdCard() {
+export function useIdCard(enabled: boolean = true) {
   return useQuery({
     queryKey: idCardKeys.mine(),
     queryFn: () => apiRequest<IdCardData>("/id-card"),
+    enabled,
     retry: 1,
     staleTime: 300000
   });

@@ -53,11 +53,14 @@ export default function EmployeeProfilePage() {
     );
   }
 
-  const departmentName = typeof profile.department === "string" ? profile.department : profile.department?.name;
+  const departmentObj = profile.department;
+  const departmentName = typeof departmentObj === "string" ? departmentObj : departmentObj?.name;
+  const designationObj = profile.designation;
   const designationName =
-    typeof profile.designation === "string"
-      ? profile.designation
-      : profile.designation?.title || profile.designation?.name;
+    typeof designationObj === "string"
+      ? designationObj
+      : designationObj?.title || designationObj?.name;
+  const displayName = profile.fullName || `${profile.firstName || ""} ${profile.lastName || ""}`.trim();
   const initial = (profile.firstName?.charAt(0) || profile.fullName?.charAt(0) || "U").toUpperCase();
 
   return (
@@ -70,23 +73,27 @@ export default function EmployeeProfilePage() {
           <div className="flex items-center gap-5 min-w-0">
             <div className="relative w-20 h-20 rounded-panel overflow-hidden border-2 border-white shadow-md bg-white flex items-center justify-center text-primary shrink-0">
               {profile.avatarUrl ? (
-                <img src={profile.avatarUrl} alt={profile.fullName || "Profile"} className="w-full h-full object-cover" />
+                <img src={profile.avatarUrl} alt={displayName || "Profile"} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-primary/10 to-primary/30 flex items-center justify-center font-extrabold text-2xl text-primary">
                   {initial}
                 </div>
               )}
-              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-pill bg-success border-2 border-white" />
+              {profile.status && (
+                <div className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-pill bg-success border-2 border-white" />
+              )}
             </div>
 
             <div className="min-w-0 space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl sm:text-2xl font-extrabold text-zinc-950 tracking-tight leading-snug truncate">
-                  {profile.fullName || `${profile.firstName || ""} ${profile.lastName || ""}`.trim() || "Employee"}
+                  {displayName || "—"}
                 </h1>
-                <span className="px-2.5 py-0.5 rounded-pill bg-success/20 text-green-900 text-[11px] font-bold">
-                  {profile.status || "ACTIVE"}
-                </span>
+                {profile.status && (
+                  <span className="px-2.5 py-0.5 rounded-pill bg-success/20 text-green-900 text-[11px] font-bold">
+                    {profile.status}
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-2 text-xs font-semibold text-zinc-700 flex-wrap">

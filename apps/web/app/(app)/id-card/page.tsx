@@ -9,14 +9,30 @@ import {
   AlertCircle
 } from "lucide-react";
 import { useIdCard } from "../../../lib/queries/use-ess-queries";
+import { useSessionStore } from "../../../lib/session-store";
+import { downloadAuthenticatedFile } from "../../../lib/api";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
 export default function DigitalIdCardPage() {
-  const [flipped, setFlipped] = useState(false);
-  const { data: card, isLoading, isError, refetch } = useIdCard();
+  const permissions = useSessionStore((state) => state.permissions) || [];
+  const hasPermission = permissions.length === 0 || permissions.includes("idcard.view") || permissions.includes("ess.read");
 
-  const handleDownload = () => {
-    window.open("/api/v1/id-card/download", "_blank");
+  const [flipped, setFlipped] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const { data: card, isLoading, isError, refetch } = useIdCard(hasPermission);
+
+  const handleDownload = async () => {
+    try {
+      setDownloadError(null);
+      setDownloading(true);
+      await downloadAuthenticatedFile("/id-card/download", "id_badge.pdf");
+    } catch (err: unknown) {
+      setDownloadError(err instanceof Error ? err.message : "Failed to download ID badge PDF");
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (isLoading) {
@@ -45,7 +61,7 @@ export default function DigitalIdCardPage() {
     );
   }
 
-  const initial = card.fullName.charAt(0).toUpperCase();
+  const initial = (card.fullName || "U").charAt(0).toUpperCase();
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6 flex flex-col items-center animate-in fade-in duration-300">
@@ -53,6 +69,13 @@ export default function DigitalIdCardPage() {
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Digital Identity Credential</h1>
         <p className="text-xs text-foreground-muted">Official verified workplace badge with dynamic credential verification</p>
       </div>
+
+      {downloadError && (
+        <div className="p-3 rounded-control bg-danger/10 border border-danger/20 text-danger text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{downloadError}</span>
+        </div>
+      )}
 
       {/* ID Badge Card with Flip Effect */}
       <div
@@ -72,7 +95,7 @@ export default function DigitalIdCardPage() {
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div>
                   <h2 className="text-xs font-black tracking-widest text-white uppercase">
-                    {card.tenantName || "AIavro"}
+                    {card.companyName || "—"}
                   </h2>
                   <p className="text-[9px] text-purple-300/70 font-mono">Workforce OS</p>
                 </div>
@@ -83,8 +106,8 @@ export default function DigitalIdCardPage() {
             {/* Photo & Profile Identity */}
             <div className="flex flex-col items-center text-center space-y-3">
               <div className="w-24 h-24 rounded-panel overflow-hidden border-2 border-purple-300/40 bg-white/10 flex items-center justify-center text-3xl font-black text-white shadow-lg">
-                {card.avatarUrl ? (
-                  <img src={card.avatarUrl} alt={card.fullName} className="w-full h-full object-cover" />
+                {card.profilePhoto ? (
+                  <img src={card.profilePhoto} alt={card.fullName} className="w-full h-full object-cover" />
                 ) : (
                   initial
                 )}
@@ -92,8 +115,8 @@ export default function DigitalIdCardPage() {
 
               <div>
                 <h3 className="text-lg font-bold text-white leading-tight">{card.fullName}</h3>
-                <p className="text-xs font-semibold text-purple-200 mt-0.5">{card.designation || "Staff Member"}</p>
-                <p className="text-[11px] text-purple-300/70">{card.department || "Organization"}</p>
+                <p className="text-xs font-semibold text-purple-200 mt-0.5">{card.designation || "—"}</p>
+                <p className="text-[11px] text-purple-300/70">{card.department || "—"}</p>
               </div>
             </div>
 
@@ -133,16 +156,22 @@ export default function DigitalIdCardPage() {
               </div>
               <div className="flex justify-between py-1 border-b border-white/10">
                 <span className="text-purple-300/70">Emergency Contact</span>
-                <span className="font-semibold text-white font-mono">{card.emergencyContact || "—"}</span>
+                <span className="font-semibold text-white font-mono">{card.emergencyContactPhone || "—"}</span>
               </div>
             </div>
 
-            {/* QR Placeholder & Flip hint */}
+            {/* Verification Block */}
             <div className="text-center pt-3 border-t border-white/10">
-              <div className="w-16 h-16 rounded bg-white text-zinc-950 mx-auto flex items-center justify-center p-1 mb-2">
-                <QrCode className="w-12 h-12" />
-              </div>
-              <p className="text-[10px] text-purple-300/70 font-mono">Tap anywhere to flip card</p>
+              {card.qrCodePayload ? (
+                <div>
+                  <div className="w-16 h-16 rounded bg-white text-zinc-950 mx-auto flex items-center justify-center p-1 mb-2">
+                    <QrCode className="w-12 h-12" />
+                  </div>
+                  <p className="text-[10px] text-purple-300/70 font-mono">Verified Credential Payload</p>
+                </div>
+              ) : (
+                <p className="text-[10px] text-purple-300/70 font-mono py-4">Digital verification not available</p>
+              )}
             </div>
           </div>
         </div>
@@ -160,10 +189,11 @@ export default function DigitalIdCardPage() {
 
         <button
           onClick={handleDownload}
-          className="px-4 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-bold transition inline-flex items-center gap-1.5 shadow-sm"
+          disabled={downloading}
+          className="px-4 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-bold transition inline-flex items-center gap-1.5 shadow-sm disabled:opacity-50"
         >
           <Download className="w-3.5 h-3.5" />
-          <span>Download PDF Badge</span>
+          <span>{downloading ? "Downloading..." : "Download PDF Badge"}</span>
         </button>
       </div>
     </div>
