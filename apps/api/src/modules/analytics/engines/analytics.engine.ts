@@ -1084,7 +1084,7 @@ export class AnalyticsEngine {
         totalPayrollNet += pEmp.netSalary;
         totalPayrollEmployerContrib += pEmp.employerContributions;
 
-        const deptName = pEmp.employee.department?.name || "General";
+        const deptName = pEmp.employee.department?.name || "—";
         const dStat = deptMap.get(deptName) || { grossCost: 0, netCost: 0, count: 0 };
         dStat.grossCost += pEmp.grossSalary;
         dStat.netCost += pEmp.netSalary;

@@ -104,11 +104,11 @@ export class AiService {
           where: { tenantId, employeeId: employee.id, date: { gte: today } },
           include: { shift: true }
         });
-        groundedDataText = `Today's Attendance Status: ${att?.status || "NOT_RECORDED"}. Shift: ${att?.shift?.name || "General Shift"}. Total Worked: ${(att?.workedMinutes ?? 0) / 60} hours.`;
+        groundedDataText = `Today's Attendance Status: ${att?.status || "NOT_RECORDED"}. Shift: ${att?.shift?.name || "—"}. Total Worked: ${(att?.workedMinutes ?? 0) / 60} hours.`;
         dataPayload = {
           type: "ATTENDANCE_STATUS",
           status: att?.status || "NOT_RECORDED",
-          shiftName: att?.shift?.name || "General Day Shift",
+          shiftName: att?.shift?.name || null,
           checkIn: att?.checkInAt?.toISOString() || null
         };
       }
@@ -459,4 +459,3 @@ export class AiService {
     };
   }
 }
-

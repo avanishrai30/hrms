@@ -153,16 +153,18 @@ export function usePunchMutation() {
       action,
       notes,
       latitude,
-      longitude
+      longitude,
+      accuracy
     }: {
       action: "check-in" | "check-out";
       notes?: string | undefined;
       latitude?: number | undefined;
       longitude?: number | undefined;
+      accuracy?: number | undefined;
     }) => {
       return apiRequest(`/attendance/${action}`, {
         method: "POST",
-        body: JSON.stringify({ source: "WEB", notes, latitude, longitude })
+        body: JSON.stringify({ source: "WEB", notes, latitude, longitude, accuracy })
       });
     },
     onSuccess: () => {

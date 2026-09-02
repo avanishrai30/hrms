@@ -6,8 +6,8 @@ import { Badge, Button, Panel } from "../../../../components/ui";
 
 export default function AssetAuditQrPage() {
   const auditScans = [
-    { tag: "AST-LAP-001", name: 'MacBook Pro 16" M3 Max', serial: "C02XYZ12345", verifiedBy: "IT Sec Ops", lastScanned: "Today, 10:15 AM", status: "VERIFIED_PRESENT", location: "Bangalore HQ - Floor 4" },
-    { tag: "AST-LAP-002", name: "Dell XPS 15 9530", serial: "DL987654321", verifiedBy: "IT Sec Ops", lastScanned: "Yesterday, 04:30 PM", status: "VERIFIED_PRESENT", location: "Bangalore HQ - IT Vault" },
+    { tag: "AST-LAP-001", name: 'MacBook Pro 16" M3 Max', serial: "C02XYZ12345", verifiedBy: "IT Sec Ops", lastScanned: "Today, 10:15 AM", status: "VERIFIED_PRESENT", location: "Assigned Office - Floor 4" },
+    { tag: "AST-LAP-002", name: "Dell XPS 15 9530", serial: "DL987654321", verifiedBy: "IT Sec Ops", lastScanned: "Yesterday, 04:30 PM", status: "VERIFIED_PRESENT", location: "Assigned Office - IT Vault" },
     { tag: "AST-MOB-001", name: "iPhone 15 Pro Max", serial: "F2LZ987654", verifiedBy: "Asset Officer", lastScanned: "28 Aug 2026", status: "VERIFIED_REMOTE", location: "Remote - Mumbai" }
   ];
 

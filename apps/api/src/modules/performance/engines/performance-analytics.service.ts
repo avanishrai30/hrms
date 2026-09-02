@@ -78,7 +78,7 @@ export class PerformanceAnalyticsService {
     // 3. Department Comparison
     const deptMap = new Map<string, { totalScore: number; count: number; completedCount: number }>();
     for (const r of reviews) {
-      const deptName = r.employee?.department?.name || "General";
+      const deptName = r.employee?.department?.name || "—";
       const curr = deptMap.get(deptName) || { totalScore: 0, count: 0, completedCount: 0 };
       curr.totalScore += r.finalScore || r.managerScore || 3.5;
       curr.count++;

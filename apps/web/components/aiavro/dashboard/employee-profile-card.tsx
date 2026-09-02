@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { MapPin, Building, ArrowUpRight, ShieldCheck, UserX } from "lucide-react";
+import { MapPin, Building, ArrowUpRight, ShieldCheck, UserX, CircleUser } from "lucide-react";
 import type { EmployeeProfileResponse } from "../../../lib/queries/use-dashboard-queries";
 import { SkeletonLoader } from "../feedback/aiavro-states";
 
@@ -67,7 +67,7 @@ export function EmployeeProfileCard({
   const designationObj = profile.designation;
   const designationName = typeof designationObj === "string" ? designationObj : designationObj?.title || designationObj?.name;
   const locationName = profile.region || profile.businessUnit;
-  const initial = (profile.firstName?.charAt(0) || profile.fullName?.charAt(0) || "U").toUpperCase();
+  const initial = (profile.firstName?.charAt(0) || profile.fullName?.charAt(0) || "").toUpperCase() || null;
 
   return (
     <div className="relative overflow-hidden rounded-card bg-gradient-to-br from-[#E2E0FC] via-[#D3D0F8] to-[#C4C0F4] p-5 text-zinc-900 shadow-card flex flex-col justify-between min-h-[240px] border border-white/50">
@@ -82,7 +82,7 @@ export function EmployeeProfileCard({
               <img src={profile.avatarUrl} alt={profile.fullName} className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-primary/10 to-primary/30 flex items-center justify-center font-extrabold text-lg text-primary">
-                {initial}
+                {initial || <CircleUser className="size-5 text-primary" />}
               </div>
             )}
             <div className="absolute bottom-0 right-0 w-3 h-3 rounded-pill bg-success border-2 border-white" />

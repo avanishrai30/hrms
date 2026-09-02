@@ -14,12 +14,18 @@ import {
 } from "../../../lib/queries/use-ess-queries";
 import { usePermissionGate } from "../../../lib/session-store";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
+import {
+  buildPunchPayload,
+  formatShiftName,
+  getGpsFailureMessageForAttendance
+} from "../../../lib/semantic-state";
 
 export default function EmployeeAttendancePage() {
   const gate = usePermissionGate(["attendance.view", "ess.read"]);
 
   const [punchNote, setPunchNote] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [locationState, setLocationState] = useState<string | null>(null);
 
   const todayQuery = useAttendanceToday(gate.isAuthorized);
   const historyQuery = useAttendanceHistory(undefined, undefined, gate.isAuthorized);
@@ -51,14 +57,71 @@ export default function EmployeeAttendancePage() {
   const duration = computeDuration();
 
   const handlePunch = async () => {
-    try {
-      setActionError(null);
-      const action = canCheckIn ? "check-in" : "check-out";
-      await punchMutation.mutateAsync({ action, notes: punchNote || undefined });
+    const action = canCheckIn ? "check-in" : "check-out";
+    const notes = punchNote || undefined;
+    setActionError(null);
+
+    const submitWithoutCoordinates = async (reason: "denied" | "unavailable" | "timeout" | "unsupported" | "unknown") => {
+      const geofenceMessage = getGpsFailureMessageForAttendance(todayData?.rules, reason);
+      if (geofenceMessage) {
+        setLocationState(geofenceMessage);
+        return;
+      }
+      setLocationState("Location was unavailable. Recording without GPS because geofencing is not required.");
+      await punchMutation.mutateAsync(buildPunchPayload({ action, notes }));
       setPunchNote("");
-    } catch (err: unknown) {
-      setActionError(err instanceof Error ? err.message : "Attendance punch failed");
+    };
+
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
+      try {
+        await submitWithoutCoordinates("unsupported");
+      } catch (err: unknown) {
+        setActionError(err instanceof Error ? err.message : "Attendance punch failed");
+      }
+      return;
     }
+
+    setLocationState("Requesting location...");
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          setLocationState(
+            pos.coords.accuracy > 100
+              ? `Location captured with low accuracy (${Math.round(pos.coords.accuracy)} m).`
+              : "Location captured."
+          );
+          await punchMutation.mutateAsync(
+            buildPunchPayload({
+              action,
+              notes,
+              coords: {
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+                accuracy: pos.coords.accuracy
+              }
+            })
+          );
+          setPunchNote("");
+        } catch (err: unknown) {
+          setActionError(err instanceof Error ? err.message : "Attendance punch failed");
+        }
+      },
+      async (err) => {
+        const reason = err.code === err.PERMISSION_DENIED
+          ? "denied"
+          : err.code === err.TIMEOUT
+          ? "timeout"
+          : err.code === err.POSITION_UNAVAILABLE
+          ? "unavailable"
+          : "unknown";
+        try {
+          await submitWithoutCoordinates(reason);
+        } catch (error: unknown) {
+          setActionError(error instanceof Error ? error.message : "Attendance punch failed");
+        }
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    );
   };
 
   const radius = 54;
@@ -101,7 +164,7 @@ export default function EmployeeAttendancePage() {
     );
   }
 
-  const shiftLabel = shift?.name || (shift?.workHours ? `${shift.workHours}h Shift` : "Shift not assigned");
+  const shiftLabel = formatShiftName(shift, { isSuccess: todayQuery.isSuccess });
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -182,6 +245,10 @@ export default function EmployeeAttendancePage() {
           <div className="space-y-3 pt-3 border-t border-border-subtle">
             {actionError && (
               <p className="text-xs text-danger font-medium text-center">{actionError}</p>
+            )}
+
+            {locationState && (
+              <p className="text-xs text-foreground-muted font-medium text-center">{locationState}</p>
             )}
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

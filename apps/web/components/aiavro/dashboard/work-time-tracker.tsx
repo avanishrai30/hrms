@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Play, Square, ArrowUpRight, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { apiRequest } from "../../../lib/api";
 import { dashboardKeys } from "../../../lib/queries/use-dashboard-queries";
+import { formatShiftName } from "../../../lib/semantic-state";
 import { SkeletonLoader } from "../feedback/aiavro-states";
 
 interface WorkTimeTrackerProps {
@@ -124,6 +125,7 @@ export function WorkTimeTracker({
   const strokeDashoffset = duration.percentage !== null
     ? circumference - (duration.percentage / 100) * circumference
     : circumference * (isCheckedIn ? 0.35 : 1);
+  const shiftLabel = formatShiftName(shiftName ? { name: shiftName } : undefined);
 
   // Precise semantic state label
   const stateLabel = isCheckedIn
@@ -143,7 +145,7 @@ export function WorkTimeTracker({
         <div>
           <h3 className="text-sm font-bold text-foreground">Time Tracker</h3>
           <p className="text-[11px] text-foreground-muted font-medium">
-            {shiftName || (shiftHours ? `${shiftHours}h Shift` : "Standard Shift")}
+            {shiftLabel}
           </p>
         </div>
         <Link

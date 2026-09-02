@@ -76,7 +76,7 @@ const navSections: NavSection[] = [
     title: "Overview",
     items: [
       { href: "/dashboard" as Route, label: "Home Dashboard", icon: Home },
-      { href: "/ai" as Route, label: "AI Copilot", icon: Sparkles, badge: "New" },
+      { href: "/ai" as Route, label: "AI Copilot", icon: Sparkles },
       { href: "/directory" as Route, label: "Workforce Directory", icon: Building2 }
     ]
   },
@@ -215,9 +215,15 @@ function NavUserSection() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { permissions } = useSessionStore();
+  const { permissions, hydrateFromStorage, isHydrated } = useSessionStore();
   const { data: profile } = useEmployeeProfile();
   const [isDark, setIsDark] = useState(false);
+
+  React.useEffect(() => {
+    if (!isHydrated) {
+      hydrateFromStorage();
+    }
+  }, [hydrateFromStorage, isHydrated]);
 
   const toggleTheme = () => {
     setIsDark(!isDark);
@@ -320,11 +326,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground relative"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
               aria-label="Notifications"
             >
               <Bell className="h-4 w-4" />
-              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-primary" />
             </Button>
 
             <Separator orientation="vertical" className="h-4" />

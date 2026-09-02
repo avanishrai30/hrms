@@ -12,18 +12,27 @@ export interface SessionState {
   branding: TenantBrandingView | null;
   isHydrated: boolean;
   setHydrated: () => void;
+  hydrateFromStorage: () => void;
   setSession: (accessToken: string, tenantName: string, permissions: PermissionCode[]) => void;
   setBranding: (branding: TenantBrandingView) => void;
   clear: () => void;
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
-  accessToken: typeof window !== "undefined" ? getAccessToken() : null,
+  accessToken: null,
   tenantName: "VC Organics Workspace",
-  permissions: typeof window !== "undefined" ? decodePermissions(getAccessToken()) : [],
+  permissions: [],
   branding: null,
-  isHydrated: typeof window !== "undefined",
+  isHydrated: false,
   setHydrated: () => set({ isHydrated: true }),
+  hydrateFromStorage: () => {
+    const token = getAccessToken();
+    set({
+      accessToken: token,
+      permissions: decodePermissions(token),
+      isHydrated: true
+    });
+  },
   setSession: (accessToken, tenantName, permissions) => {
     setAccessToken(accessToken);
     set({

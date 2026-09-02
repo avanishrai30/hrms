@@ -143,7 +143,7 @@ export class OnboardingIntegrationService {
         data: {
           tenantId,
           employeeId: employee.id,
-          bio: candidate.summary || "New Team Member",
+          bio: candidate.summary || null,
           addressJson: candidate.currentLocation ? { city: candidate.currentLocation } : undefined
         }
       });

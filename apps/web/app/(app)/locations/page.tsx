@@ -29,6 +29,7 @@ import {
   DialogDescription,
   DialogFooter
 } from "../../../components/ui/dialog";
+import { formatLocationRadius, formatLocationType } from "../../../lib/semantic-state";
 
 const LOCATION_TYPES: NonNullable<CreateLocationInput["type"]>[] = [
   "OFFICE",
@@ -46,7 +47,7 @@ export default function WorkLocationsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [type, setType] = useState<CreateLocationInput["type"]>("OFFICE");
+  const [type, setType] = useState<CreateLocationInput["type"]>(undefined);
   const [description, setDescription] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
@@ -91,6 +92,7 @@ export default function WorkLocationsPage() {
       setIsModalOpen(false);
       setName("");
       setCode("");
+      setType(undefined);
       setDescription("");
       setLatitude("");
       setLongitude("");
@@ -187,7 +189,7 @@ export default function WorkLocationsPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-[10px]">
-                        {loc.type || "OFFICE"}
+                        {formatLocationType(loc.type)}
                       </Badge>
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">
@@ -196,7 +198,7 @@ export default function WorkLocationsPage() {
                         : "—"}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {loc.radiusMeters ? `${loc.radiusMeters} m` : "Standard"}
+                      {formatLocationRadius(loc.radiusMeters)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -250,12 +252,13 @@ export default function WorkLocationsPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Facility Type *</label>
+                <label className="text-[11px] font-semibold text-muted-foreground">Facility Type</label>
                 <select
-                  value={type}
-                  onChange={(e) => setType(e.target.value as CreateLocationInput["type"])}
+                  value={type ?? ""}
+                  onChange={(e) => setType(e.target.value ? e.target.value as CreateLocationInput["type"] : undefined)}
                   className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
+                  <option value="">Backend default: OFFICE</option>
                   {LOCATION_TYPES.map((t) => (
                     <option key={t} value={t}>
                       {t.replace(/_/g, " ")}
@@ -272,7 +275,7 @@ export default function WorkLocationsPage() {
                   max="5000"
                   value={radiusMeters}
                   onChange={(e) => setRadiusMeters(e.target.value)}
-                  placeholder="Default (100)"
+                  placeholder="Backend default: 100 m"
                 />
               </div>
             </div>
@@ -285,7 +288,7 @@ export default function WorkLocationsPage() {
                   step="any"
                   value={latitude}
                   onChange={(e) => setLatitude(e.target.value)}
-                  placeholder="e.g. 12.9716"
+                  placeholder="Enter latitude"
                   required
                 />
               </div>
@@ -297,7 +300,7 @@ export default function WorkLocationsPage() {
                   step="any"
                   value={longitude}
                   onChange={(e) => setLongitude(e.target.value)}
-                  placeholder="e.g. 77.5946"
+                  placeholder="Enter longitude"
                   required
                 />
               </div>

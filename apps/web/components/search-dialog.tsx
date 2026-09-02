@@ -39,7 +39,7 @@ interface RouteItem {
   permission?: PermissionCode;
 }
 
-const COMMAND_ROUTES: RouteItem[] = [
+export const COMMAND_ROUTES: RouteItem[] = [
   // Core
   { title: "Home Dashboard", href: "/dashboard" as Route, icon: Home, section: "Core" },
   { title: "AI Assistant", href: "/ai" as Route, icon: Sparkles, section: "Core" },
@@ -98,11 +98,7 @@ export function SearchDialog() {
     router.push(href);
   };
 
-  const authorizedRoutes = COMMAND_ROUTES.filter((r) => {
-    if (!r.permission) return true;
-    return permissions.includes(r.permission);
-  });
-
+  const authorizedRoutes = getAuthorizedCommandRoutes(permissions);
   const sections = Array.from(new Set(authorizedRoutes.map((r) => r.section)));
 
   return (
@@ -150,4 +146,11 @@ export function SearchDialog() {
       </CommandDialog>
     </>
   );
+}
+
+export function getAuthorizedCommandRoutes(permissions: readonly string[]) {
+  return COMMAND_ROUTES.filter((r) => {
+    if (!r.permission) return true;
+    return permissions.includes(r.permission);
+  });
 }

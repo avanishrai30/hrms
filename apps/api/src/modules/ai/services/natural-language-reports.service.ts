@@ -40,7 +40,7 @@ export class NaturalLanguageReportsService {
         "Department": a.employee.department.name,
         "Status": a.status,
         "Worked Hours": (a.workedMinutes / 60).toFixed(1),
-        "Shift": a.shift?.name || "General Shift"
+        "Shift": a.shift?.name || "—"
       }));
       summaryText = `Compiled attendance records for ${rows.length} employee shifts. Overall on-time punctuality rate is 94.2%.`;
     } else if (queryLower.includes("payroll") || queryLower.includes("cost") || queryLower.includes("salary")) {

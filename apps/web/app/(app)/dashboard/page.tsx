@@ -38,6 +38,14 @@ import {
   TableCell
 } from "../../../components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
+import {
+  buildPunchPayload,
+  formatLeaveDaysMetric,
+  formatPendingRequestsMetric,
+  formatShiftName,
+  getGpsFailureMessageForAttendance,
+  getPendingRequestsBadge
+} from "../../../lib/semantic-state";
 
 export default function AiavroDashboardPage() {
   const permissions = useSessionStore((state) => state.permissions) || [];
@@ -53,6 +61,8 @@ export default function AiavroDashboardPage() {
   const punchMutation = usePunchMutation();
 
   const [currentTime, setCurrentTime] = useState<string>("");
+  const [attendanceActionError, setAttendanceActionError] = useState<string | null>(null);
+  const [locationState, setLocationState] = useState<string | null>(null);
 
   useEffect(() => {
     const update = () => {
@@ -91,35 +101,80 @@ export default function AiavroDashboardPage() {
   const employeeCount = employeeCountQuery.data ?? null;
 
   const handlePunch = async () => {
-    if (typeof window !== "undefined" && "geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          try {
-            await punchMutation.mutateAsync({
-              action: canPunchOut ? "check-out" : "check-in",
-              latitude: pos.coords.latitude,
-              longitude: pos.coords.longitude
-            });
-          } catch {}
-        },
-        async () => {
-          // Geolocation unavailable/denied - do not fabricate coordinates
-          try {
-            await punchMutation.mutateAsync({
-              action: canPunchOut ? "check-out" : "check-in"
-            });
-          } catch {}
-        },
-        { timeout: 10000, enableHighAccuracy: true }
-      );
-    } else {
+    const action = canPunchOut ? "check-out" : "check-in";
+    setAttendanceActionError(null);
+
+    const submitWithoutCoordinates = async (reason: "denied" | "unavailable" | "timeout" | "unsupported" | "unknown") => {
+      const geofenceMessage = getGpsFailureMessageForAttendance(attendance?.rules, reason);
+      if (geofenceMessage) {
+        setLocationState(geofenceMessage);
+        return;
+      }
+      setLocationState("Location was unavailable. Recording without GPS because geofencing is not required.");
+      await punchMutation.mutateAsync(buildPunchPayload({ action }));
+    };
+
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
       try {
-        await punchMutation.mutateAsync({
-          action: canPunchOut ? "check-out" : "check-in"
-        });
-      } catch {}
+        await submitWithoutCoordinates("unsupported");
+      } catch (err: unknown) {
+        setAttendanceActionError(err instanceof Error ? err.message : "Attendance update failed.");
+      }
+      return;
     }
+
+    setLocationState("Requesting location...");
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          setLocationState(
+            pos.coords.accuracy > 100
+              ? `Location captured with low accuracy (${Math.round(pos.coords.accuracy)} m).`
+              : "Location captured."
+          );
+          await punchMutation.mutateAsync(
+            buildPunchPayload({
+              action,
+              coords: {
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+                accuracy: pos.coords.accuracy
+              }
+            })
+          );
+        } catch (err: unknown) {
+          setAttendanceActionError(err instanceof Error ? err.message : "Attendance update failed.");
+        }
+      },
+      async (err) => {
+        const reason = err.code === err.PERMISSION_DENIED
+          ? "denied"
+          : err.code === err.TIMEOUT
+          ? "timeout"
+          : err.code === err.POSITION_UNAVAILABLE
+          ? "unavailable"
+          : "unknown";
+        try {
+          await submitWithoutCoordinates(reason);
+        } catch (error: unknown) {
+          setAttendanceActionError(error instanceof Error ? error.message : "Attendance update failed.");
+        }
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    );
   };
+
+  const shiftLabel = formatShiftName(attendance?.shift, { isSuccess: attendanceQuery.isSuccess });
+  const leaveMetric = formatLeaveDaysMetric(totalLeaveDays, {
+    isLoading: leaveBalancesQuery.isLoading,
+    isSuccess: leaveBalancesQuery.isSuccess
+  });
+  const requestsMetric = formatPendingRequestsMetric(pendingRequestsCount, {
+    isLoading: requestsQuery.isLoading,
+    isSuccess: requestsQuery.isSuccess
+  });
+  const requestsBadge = getPendingRequestsBadge(pendingRequestsCount, { isSuccess: requestsQuery.isSuccess });
+  const requestsBadgeVariant = pendingRequestsCount !== null && pendingRequestsCount > 0 ? "warning" : "secondary";
 
   const deptName = typeof profile?.department === "string" ? profile.department : profile?.department?.name || "—";
   const desigName = typeof profile?.designation === "string" ? profile.designation : profile?.designation?.title || profile?.designation?.name || "—";
@@ -187,7 +242,7 @@ export default function AiavroDashboardPage() {
                 {canPunchOut ? "Active" : "Shift"}
               </Badge>
             </div>
-            <p className="text-muted-foreground text-sm">{attendance?.shift?.name || "Standard Schedule"}</p>
+            <p className="text-muted-foreground text-sm">{shiftLabel}</p>
           </CardContent>
         </Card>
 
@@ -204,15 +259,11 @@ export default function AiavroDashboardPage() {
           <CardContent className="flex flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
               <div className="font-medium text-3xl tabular-nums leading-none tracking-tight">
-                {leaveBalancesQuery.isLoading
-                  ? "—"
-                  : totalLeaveDays !== null
-                  ? `${totalLeaveDays} d`
-                  : "0 d"}
+                {leaveMetric}
               </div>
-              <Badge variant="outline">Accrued</Badge>
+              <Badge variant="outline">Available</Badge>
             </div>
-            <p className="text-muted-foreground text-sm">Annual, Casual & Sick balance</p>
+            <p className="text-muted-foreground text-sm">Current available balance</p>
           </CardContent>
         </Card>
 
@@ -229,17 +280,9 @@ export default function AiavroDashboardPage() {
           <CardContent className="flex flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
               <div className="font-medium text-3xl tabular-nums leading-none tracking-tight">
-                {requestsQuery.isLoading
-                  ? "—"
-                  : pendingRequestsCount !== null
-                  ? pendingRequestsCount
-                  : 0}
+                {requestsMetric}
               </div>
-              <Badge
-                variant={pendingRequestsCount && pendingRequestsCount > 0 ? "warning" : "secondary"}
-              >
-                {pendingRequestsCount && pendingRequestsCount > 0 ? "Pending Action" : "Reviewed"}
-              </Badge>
+              {requestsBadge ? <Badge variant={requestsBadgeVariant}>{requestsBadge}</Badge> : null}
             </div>
             <p className="text-muted-foreground text-sm">Service desk & approvals</p>
           </CardContent>
@@ -290,14 +333,26 @@ export default function AiavroDashboardPage() {
               <div className="p-3 rounded-lg bg-muted/40 border border-border/60">
                 <p className="text-[11px] text-muted-foreground font-medium">Shift Assignment</p>
                 <p className="text-sm font-semibold text-foreground mt-0.5">
-                  {attendance?.shift?.name || "—"}
+                  {shiftLabel}
                 </p>
               </div>
             </div>
 
+            {locationState && (
+              <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                {locationState}
+              </div>
+            )}
+
+            {attendanceActionError && (
+              <div className="rounded-md border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+                {attendanceActionError}
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
               <div className="text-xs text-muted-foreground">
-                <span>{attendance?.shift ? `Shift: ${attendance.shift.name}` : "Workplace Terminal"}</span>
+                <span>{shiftLabel !== "—" ? `Shift: ${shiftLabel}` : "Workplace Terminal"}</span>
               </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">

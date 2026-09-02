@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import QRCode from "qrcode";
 import { getApiUrl } from "./api";
+import { formatShiftName } from "./semantic-state";
 import type { PermissionCode } from "@vc-wms/shared-types";
 
 describe("AIavro Employee Self-Service (ESS) Security, Integrity & Contract Verification", () => {
@@ -146,8 +147,7 @@ describe("AIavro Employee Self-Service (ESS) Security, Integrity & Contract Veri
     });
 
     it("missing shift renders 'Shift not assigned' instead of 'Standard Shift'", () => {
-      const shift = null;
-      const shiftLabel = (shift as { name?: string; workHours?: number } | null)?.name || "Shift not assigned";
+      const shiftLabel = formatShiftName(null, { isSuccess: true });
       expect(shiftLabel).toBe("Shift not assigned");
       expect(shiftLabel).not.toBe("Standard Shift");
     });

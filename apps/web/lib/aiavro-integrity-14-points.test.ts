@@ -1,18 +1,10 @@
 import { describe, it, expect } from "vitest";
+import { buildPunchPayload, formatOptionalLabel } from "./semantic-state";
 
 describe("AIavro 14-Point Data Integrity Verification Suite (Task 03.6)", () => {
   // Point 1: Punch never silently uses hardcoded coordinates
   it("Point 1: Punch payload does not inject hardcoded coordinates when geolocation is unavailable", () => {
-    const buildPunchPayload = (action: "check-in" | "check-out", coords?: { latitude?: number; longitude?: number }) => {
-      const payload: { action: "check-in" | "check-out"; latitude?: number; longitude?: number } = { action };
-      if (typeof coords?.latitude === "number" && typeof coords?.longitude === "number") {
-        payload.latitude = coords.latitude;
-        payload.longitude = coords.longitude;
-      }
-      return payload;
-    };
-
-    const punchWithoutGps = buildPunchPayload("check-in");
+    const punchWithoutGps = buildPunchPayload({ action: "check-in" });
     expect(punchWithoutGps.latitude).toBeUndefined();
     expect(punchWithoutGps.longitude).toBeUndefined();
     expect(punchWithoutGps.latitude).not.toBe(12.9716);
@@ -21,11 +13,7 @@ describe("AIavro 14-Point Data Integrity Verification Suite (Task 03.6)", () => 
 
   // Point 2: Failed geolocation does not fall back to Bangalore
   it("Point 2: Failed or denied geolocation returns no coordinates rather than Bangalore", () => {
-    const handleGpsError = () => {
-      return { latitude: undefined, longitude: undefined };
-    };
-
-    const result = handleGpsError();
+    const result = buildPunchPayload({ action: "check-out" });
     expect(result.latitude).toBeUndefined();
     expect(result.longitude).toBeUndefined();
   });
@@ -128,14 +116,9 @@ describe("AIavro 14-Point Data Integrity Verification Suite (Task 03.6)", () => 
 
   // Point 10: Missing announcement category does not become General
   it("Point 10: Missing announcement category / priority defaults to '—' rather than 'General'", () => {
-    const formatAnnouncementCategory = (cat?: string | null) => {
-      if (!cat || !cat.trim()) return "—";
-      return cat.trim();
-    };
-
-    expect(formatAnnouncementCategory(null)).toBe("—");
-    expect(formatAnnouncementCategory(undefined)).toBe("—");
-    expect(formatAnnouncementCategory(null)).not.toBe("General");
+    expect(formatOptionalLabel(null)).toBe("—");
+    expect(formatOptionalLabel(undefined)).toBe("—");
+    expect(formatOptionalLabel(null)).not.toBe("General");
   });
 
   // Point 11: Privacy gates remain intact (fail-closed)
