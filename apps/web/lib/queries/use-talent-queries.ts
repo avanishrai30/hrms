@@ -314,13 +314,18 @@ export function formatNullableNumber(value?: number | null, suffix = "") {
   return `${value}${suffix}`;
 }
 
-export function formatCurrency(value?: number | string | null) {
+/**
+ * Format currency with explicit currency code support (defaults to INR based on tenant settings).
+ * Talent offer currency is currently backend-fixed to INR for this tenant.
+ */
+export function formatCurrency(value?: number | string | null, currencyCode = "INR") {
   if (value === null || value === undefined || value === "") return "-";
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "-";
-  return new Intl.NumberFormat("en-IN", {
+  const locale = currencyCode === "INR" ? "en-IN" : "en-US";
+  return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency: "INR",
+    currency: currencyCode,
     maximumFractionDigits: 0
   }).format(numeric);
 }
@@ -342,6 +347,74 @@ export function statusTone(status?: TalentStatus): "default" | "secondary" | "de
   if (["REJECTED", "CANCELLED", "EXPIRED", "NO_SHOW"].includes(status)) return "destructive";
   if (["PENDING_APPROVAL", "PENDING", "SUBMITTED", "SCHEDULED", "ON_HOLD"].includes(status)) return "secondary";
   return "outline";
+}
+
+/**
+ * Check if the user has permission to view candidate personal PII (email, mobile, address, salary expectation).
+ * In backend, candidates.read grants read access to candidate records.
+ */
+export function canAccessCandidatePii(permissions: string[]): boolean {
+  return permissions.includes("candidates.read");
+}
+
+/**
+ * Check if the user has permission to view offer compensation details (base salary, bonus, variable pay, total CTC).
+ * In backend, offers.read grants read access to compensation-sensitive offer records.
+ */
+export function canAccessCompensation(permissions: string[]): boolean {
+  return permissions.includes("offers.read");
+}
+
+/**
+ * Check if the user has permission to view interview feedback and evaluation scorecards.
+ * In backend, interviews.feedback grants access to detailed candidate feedback scores.
+ */
+export function canAccessInterviewFeedback(permissions: string[]): boolean {
+  return permissions.includes("interviews.feedback");
+}
+
+/**
+ * Check if the user has permission to manage recruitment operations (approve requisitions, onboard candidates).
+ */
+export function canManageRecruitment(permissions: string[]): boolean {
+  return permissions.includes("recruitment.manage");
+}
+
+/**
+ * Check if the user has permission to manage application stage movements.
+ */
+export function canManageApplications(permissions: string[]): boolean {
+  return permissions.includes("applications.manage");
+}
+
+/**
+ * Check if the user has permission to approve or release offers.
+ */
+export function canManageOffers(permissions: string[]): boolean {
+  return permissions.includes("offers.manage");
+}
+
+/**
+ * Check if the user has permission to verify or reject preboarding tasks.
+ */
+export function canManagePreboarding(permissions: string[]): boolean {
+  return permissions.includes("preboarding.manage");
+}
+
+/**
+ * Computes the sequential next stage in the standard 8-stage ATS workflow.
+ * Note: JOINED and REJECTED are terminal stages and return null.
+ * Backend also allows direct stage transitions, overrides, and rejection from any stage.
+ */
+export function getNextApplicationStage(currentStage: ApplicationStage): ApplicationStage | null {
+  if (currentStage === "JOINED" || currentStage === "REJECTED") {
+    return null;
+  }
+  const index = APPLICATION_STAGES.indexOf(currentStage);
+  if (index === -1) return null;
+  if (currentStage === "OFFER") return "JOINED";
+  if (index >= APPLICATION_STAGES.indexOf("OFFER")) return null;
+  return APPLICATION_STAGES[index + 1] ?? null;
 }
 
 export function visibleMetric(value?: number | null) {

@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { Route } from "next";
 import type { ReactNode } from "react";
 import { ArrowRight, BriefcaseBusiness, CalendarClock, FileCheck2, Layers3, UsersRound } from "lucide-react";
@@ -16,6 +19,7 @@ import {
 } from "../../../components/ui/table";
 import { EmptyState, ErrorState, LoadingState, PageHeader } from "../../../components/page-primitives";
 import { formatTalentLabel, statusTone, type TalentStatus } from "../../../lib/queries/use-talent-queries";
+import { useSessionStore } from "../../../lib/session-store";
 import { cn } from "../../../lib/utils";
 
 export const talentTabs: Array<{ href: Route; label: string; permission: string; icon: typeof BriefcaseBusiness }> = [
@@ -26,6 +30,20 @@ export const talentTabs: Array<{ href: Route; label: string; permission: string;
   { href: "/ats/interviews" as Route, label: "Interviews", permission: "interviews.read", icon: CalendarClock },
   { href: "/ats/offers" as Route, label: "Offers", permission: "offers.read", icon: FileCheck2 }
 ];
+
+export function getVisibleTalentTabs(
+  permissions: string[],
+  tabs = talentTabs
+): typeof talentTabs {
+  return tabs.filter((tab) => permissions.includes(tab.permission));
+}
+
+export function isTalentTabActive(tabHref: string, currentPathname: string): boolean {
+  if (tabHref === "/ats") {
+    return currentPathname === "/ats";
+  }
+  return currentPathname === tabHref || currentPathname.startsWith(`${tabHref}/`);
+}
 
 export function TalentPageShell({
   title,
@@ -38,24 +56,37 @@ export function TalentPageShell({
   actions?: ReactNode | undefined;
   children: ReactNode;
 }) {
+  const pathname = usePathname();
+  const permissions = useSessionStore((state) => state.permissions);
+  const visibleTabs = getVisibleTalentTabs(permissions);
+
   return (
     <div className="space-y-6">
       <PageHeader eyebrow="Talent Acquisition" title={title} description={description || undefined} actions={actions} />
-      <nav className="flex gap-2 overflow-x-auto rounded-xl border border-border bg-card p-1 shadow-xs" aria-label="Talent sections">
-        {talentTabs.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-xs font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            >
-              <Icon className="h-4 w-4" />
-              {tab.label}
-            </Link>
-          );
-        })}
-      </nav>
+      {visibleTabs.length > 0 ? (
+        <nav className="flex gap-2 overflow-x-auto rounded-xl border border-border bg-card p-1 shadow-xs" aria-label="Talent sections">
+          {visibleTabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = isTalentTabActive(tab.href, pathname);
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={cn(
+                  "inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-xs font-medium transition",
+                  isActive
+                    ? "bg-accent text-accent-foreground font-semibold shadow-xs"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+                aria-current={isActive ? "page" : undefined}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </Link>
+            );
+          })}
+        </nav>
+      ) : null}
       {children}
     </div>
   );
