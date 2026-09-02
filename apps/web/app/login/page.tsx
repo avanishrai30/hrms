@@ -24,9 +24,19 @@ interface LoginResponse {
   tenant: { name: string };
 }
 
+const DEVICE_ID_KEY = "aiavro_device_id";
+
 function getDeviceFingerprint() {
-  if (typeof navigator === "undefined") return "web-client";
-  return navigator.userAgent.slice(0, 128) || "web-client";
+  if (typeof window === "undefined") return "web-client";
+  try {
+    const existing = window.localStorage.getItem(DEVICE_ID_KEY);
+    if (existing && existing.length >= 8) return existing;
+    const generated = globalThis.crypto?.randomUUID?.() ?? `web-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+    window.localStorage.setItem(DEVICE_ID_KEY, generated);
+    return generated;
+  } catch {
+    return `web-${Date.now()}`;
+  }
 }
 
 export default function LoginPage() {
@@ -45,7 +55,7 @@ function LoginContent() {
 
   const nextPath = searchParams.get("next");
   const safeNextPath = nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/dashboard";
-  const tenantSlug = process.env.NEXT_PUBLIC_DEFAULT_TENANT_SLUG ?? "vc-organics";
+  const tenantSlug = "vc-organics";
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(schema),
@@ -122,7 +132,7 @@ function LoginContent() {
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     aria-pressed={showPassword}
                     onClick={() => setShowPassword((value) => !value)}
-                    className="absolute right-2.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+                    className="absolute right-2.5 top-1/2 grid h-8 min-w-8 -translate-y-1/2 place-items-center rounded-lg px-2 text-xs text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
                   >
                     {showPassword ? "Hide" : "Show"}
                   </button>
