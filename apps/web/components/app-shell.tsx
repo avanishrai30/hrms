@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import type { PermissionCode } from "@vc-wms/shared-types";
 import { useSessionStore } from "../lib/session-store";
+import { useEmployeeProfile } from "../lib/queries/use-dashboard-queries";
 
 interface NavItem {
   href: Route;
@@ -111,6 +112,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const tenantName = useSessionStore((state) => state.tenantName) || "VC Organics";
   const permissions = useSessionStore((state) => state.permissions) || [];
+  const profileQuery = useEmployeeProfile();
+  const profile = profileQuery.data;
+  const userDisplayName = profile?.fullName || profile?.firstName || "My Workspace";
+  const initialLetter = (profile?.firstName?.charAt(0) || profile?.fullName?.charAt(0) || tenantName.charAt(0) || "U").toUpperCase();
 
   const filterItem = (item: NavItem) => {
     if (!item.permission) return true;
@@ -217,10 +222,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center justify-between gap-2 p-2 rounded-card bg-surface border border-border-subtle shadow-sm">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="w-8 h-8 rounded-pill bg-primary-soft text-primary font-bold text-xs flex items-center justify-center shrink-0">
-                  A
+                  {initialLetter}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-foreground truncate">Avanish Rai</p>
+                  <p className="text-xs font-bold text-foreground truncate">{userDisplayName}</p>
                   <p className="text-[10px] text-foreground-muted truncate">{tenantName}</p>
                 </div>
               </div>
@@ -231,7 +236,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ) : (
             <div className="flex justify-center py-1">
               <div className="w-8 h-8 rounded-pill bg-primary-soft text-primary font-bold text-xs flex items-center justify-center">
-                A
+                {initialLetter}
               </div>
             </div>
           )}
@@ -289,7 +294,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             <Link href={"/profile" as Route} className="flex items-center gap-2 pl-2 border-l border-border-subtle">
               <div className="w-8 h-8 rounded-pill bg-gradient-to-br from-primary to-accent-purple text-white text-xs font-bold flex items-center justify-center shadow-sm">
-                A
+                {initialLetter}
               </div>
             </Link>
           </div>

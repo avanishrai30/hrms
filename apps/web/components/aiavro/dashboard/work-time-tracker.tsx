@@ -3,32 +3,41 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { Play, Square, ArrowUpRight, CheckCircle2, Clock } from "lucide-react";
+import { Play, Square, ArrowUpRight, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { apiRequest } from "../../../lib/api";
+import { SkeletonLoader } from "../feedback/aiavro-states";
 
 interface WorkTimeTrackerProps {
   checkInTime?: string | null | undefined;
   checkOutTime?: string | null | undefined;
-  status?: string | undefined;
+  status?: string | null | undefined;
+  shiftName?: string | null | undefined;
+  shiftHours?: number | null | undefined;
   canCheckIn?: boolean | undefined;
   canCheckOut?: boolean | undefined;
+  isLoading?: boolean | undefined;
+  isError?: boolean | undefined;
   onRefresh?: (() => void) | undefined;
 }
 
 export function WorkTimeTracker({
   checkInTime,
   checkOutTime,
-  status: _status = "NOT_MARKED",
+  status = "NOT_MARKED",
+  shiftName,
+  shiftHours,
   canCheckIn = true,
   canCheckOut = false,
+  isLoading,
+  isError,
   onRefresh
 }: WorkTimeTrackerProps) {
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  // Calculate worked duration if checked in
-  const computeDuration = (): { hours: number; minutes: number; formatted: string; percentage: number } => {
+  const computeDuration = (): { formatted: string; percentage: number | null } => {
     if (!checkInTime) {
-      return { hours: 0, minutes: 0, formatted: "00:00", percentage: 0 };
+      return { formatted: "00:00", percentage: 0 };
     }
     const start = new Date(checkInTime).getTime();
     const end = checkOutTime ? new Date(checkOutTime).getTime() : Date.now();
@@ -36,9 +45,13 @@ export function WorkTimeTracker({
     const hours = Math.floor(diffMins / 60);
     const minutes = diffMins % 60;
     const formatted = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-    const standardWorkMins = 8 * 60; // 8 hours
-    const percentage = Math.min(100, Math.round((diffMins / standardWorkMins) * 100));
-    return { hours, minutes, formatted, percentage };
+
+    let percentage: number | null = null;
+    if (shiftHours && shiftHours > 0) {
+      const shiftMins = shiftHours * 60;
+      percentage = Math.min(100, Math.round((diffMins / shiftMins) * 100));
+    }
+    return { formatted, percentage };
   };
 
   const duration = computeDuration();
@@ -46,30 +59,66 @@ export function WorkTimeTracker({
 
   const handlePunch = async () => {
     try {
-      setLoading(true);
+      setSubmitting(true);
+      setActionError(null);
       if (canCheckIn) {
         await apiRequest("/attendance/check-in", {
           method: "POST",
-          body: JSON.stringify({ type: "WEB", timestamp: new Date().toISOString() })
+          body: JSON.stringify({ source: "WEB" })
         });
       } else if (canCheckOut) {
         await apiRequest("/attendance/check-out", {
           method: "POST",
-          body: JSON.stringify({ type: "WEB", timestamp: new Date().toISOString() })
+          body: JSON.stringify({ source: "WEB" })
         });
       }
       if (onRefresh) onRefresh();
-    } catch (err) {
-      console.error("Attendance punch error:", err);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Attendance update failed";
+      setActionError(msg);
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  // SVG Circular Gauge calculation
+  if (isLoading) {
+    return (
+      <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card min-h-[240px] flex flex-col justify-between animate-pulse">
+        <div className="flex justify-between">
+          <SkeletonLoader className="h-4 w-24" />
+          <SkeletonLoader className="h-6 w-6 rounded-pill" />
+        </div>
+        <div className="flex justify-center my-4">
+          <SkeletonLoader className="w-24 h-24 rounded-pill" />
+        </div>
+        <SkeletonLoader className="h-8 w-full rounded-pill" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card min-h-[240px] flex flex-col items-center justify-center text-center">
+        <AlertCircle className="w-6 h-6 text-danger mb-2" />
+        <h4 className="text-xs font-semibold text-foreground">Attendance Unavailable</h4>
+        <p className="text-[11px] text-foreground-muted mt-1">Unable to load today&apos;s record.</p>
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            className="mt-3 px-3 py-1 rounded-control bg-primary-soft text-primary text-[11px] font-semibold hover:bg-primary-soft/80 transition"
+          >
+            Retry
+          </button>
+        )}
+      </div>
+    );
+  }
+
   const radius = 42;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (duration.percentage / 100) * circumference;
+  const strokeDashoffset = duration.percentage !== null
+    ? circumference - (duration.percentage / 100) * circumference
+    : circumference * (isCheckedIn ? 0.35 : 1);
 
   return (
     <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card flex flex-col justify-between min-h-[240px]">
@@ -77,7 +126,9 @@ export function WorkTimeTracker({
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-bold text-foreground">Time Tracker</h3>
-          <p className="text-[11px] text-foreground-muted font-medium">Standard 8h Shift</p>
+          <p className="text-[11px] text-foreground-muted font-medium">
+            {shiftName || (shiftHours ? `${shiftHours}h Shift` : "Standard Shift")}
+          </p>
         </div>
         <Link
           href={"/attendance" as Route}
@@ -88,12 +139,10 @@ export function WorkTimeTracker({
         </Link>
       </div>
 
-      {/* Middle Gauge & Digital Clock */}
+      {/* Circular Dial & Digital Timer */}
       <div className="flex items-center justify-center my-2">
         <div className="relative w-28 h-28 flex items-center justify-center">
-          {/* SVG Progress Dial */}
           <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-            {/* Background track (dotted effect) */}
             <circle
               cx="50"
               cy="50"
@@ -104,70 +153,79 @@ export function WorkTimeTracker({
               fill="transparent"
               strokeDasharray="3 3"
             />
-            {/* Active progress arc */}
-            <circle
-              cx="50"
-              cy="50"
-              r={radius}
-              className="text-primary transition-all duration-700 ease-out"
-              strokeWidth="7"
-              strokeDasharray={circumference}
-              strokeDashoffset={strokeDashoffset}
-              strokeLinecap="round"
-              stroke="currentColor"
-              fill="transparent"
-            />
+            {checkInTime && (
+              <circle
+                cx="50"
+                cy="50"
+                r={radius}
+                className="text-primary transition-all duration-700 ease-out"
+                strokeWidth="7"
+                strokeDasharray={circumference}
+                strokeDashoffset={strokeDashoffset}
+                strokeLinecap="round"
+                stroke="currentColor"
+                fill="transparent"
+              />
+            )}
           </svg>
 
-          {/* Centered Digital Display */}
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
             <span className="text-xl font-bold font-mono tracking-tight text-foreground tabular-nums leading-none">
               {duration.formatted}
             </span>
-            <span className="text-[10px] text-foreground-muted font-medium mt-0.5">Work Time</span>
+            <span className="text-[10px] text-foreground-muted font-medium mt-0.5">
+              {isCheckedIn ? "Elapsed" : (status ? status.replace(/_/g, " ") : "Not marked")}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Bottom Controls & Punch Action */}
-      <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
-        <div className="flex items-center gap-1.5 text-xs text-foreground-secondary font-medium">
-          {checkInTime ? (
-            <>
-              <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-              <span>In: {new Date(checkInTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-            </>
-          ) : (
-            <>
-              <Clock className="w-3.5 h-3.5 text-foreground-muted" />
-              <span>Not clocked in</span>
-            </>
-          )}
-        </div>
+      {/* Action Controls & Error Alert */}
+      <div>
+        {actionError && (
+          <p className="text-[10px] text-danger font-medium mb-1.5 text-center">{actionError}</p>
+        )}
+        <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
+          <div className="flex items-center gap-1.5 text-xs text-foreground-secondary font-medium truncate">
+            {checkInTime ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />
+                <span className="truncate">
+                  In: {new Date(checkInTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </>
+            ) : (
+              <>
+                <Clock className="w-3.5 h-3.5 text-foreground-muted shrink-0" />
+                <span className="truncate">Not clocked in</span>
+              </>
+            )}
+          </div>
 
-        <button
-          onClick={handlePunch}
-          disabled={loading || (!canCheckIn && !canCheckOut)}
-          className={`px-3 py-1.5 rounded-pill text-xs font-semibold inline-flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50 ${
-            isCheckedIn
-              ? "bg-[#261A4E] text-white hover:bg-[#1E1440]"
-              : "bg-primary text-white hover:bg-primary-hover shadow-sm"
-          }`}
-        >
-          {loading ? (
-            "Syncing..."
-          ) : isCheckedIn ? (
-            <>
-              <Square className="w-3 h-3 fill-current" />
-              Clock Out
-            </>
-          ) : (
-            <>
-              <Play className="w-3 h-3 fill-current" />
-              Clock In
-            </>
-          )}
-        </button>
+          <button
+            onClick={handlePunch}
+            disabled={submitting || (!canCheckIn && !canCheckOut)}
+            className={`px-3 py-1.5 rounded-pill text-xs font-semibold inline-flex items-center gap-1.5 transition active:scale-95 disabled:opacity-40 shrink-0 ${
+              isCheckedIn
+                ? "bg-[#261A4E] text-white hover:bg-[#1E1440]"
+                : "bg-primary text-white hover:bg-primary-hover shadow-sm"
+            }`}
+          >
+            {submitting ? (
+              "Updating..."
+            ) : isCheckedIn ? (
+              <>
+                <Square className="w-3 h-3 fill-current" />
+                Clock Out
+              </>
+            ) : (
+              <>
+                <Play className="w-3 h-3 fill-current" />
+                Clock In
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

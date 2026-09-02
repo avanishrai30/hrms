@@ -1,9 +1,17 @@
 "use client";
 
 import React from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useSessionStore } from "../../../lib/session-store";
-import { loadDashboard } from "../../../lib/dashboard-data";
+import {
+  useEmployeeProfile,
+  useAttendanceToday,
+  useLeaveBalances,
+  useLeaveRequests,
+  useHolidays,
+  useEmployeeRequests,
+  useAnnouncements,
+  useEmployeeCount
+} from "../../../lib/queries/use-dashboard-queries";
 import { MetricPillsStrip } from "../../../components/aiavro/dashboard/metric-pills-strip";
 import { EmployeeProfileCard } from "../../../components/aiavro/dashboard/employee-profile-card";
 import { WorkTimeTracker } from "../../../components/aiavro/dashboard/work-time-tracker";
@@ -12,52 +20,38 @@ import { ScheduleCalendar } from "../../../components/aiavro/dashboard/schedule-
 import { OnboardingTaskRail } from "../../../components/aiavro/dashboard/onboarding-task-rail";
 import { DeviceBenefitsAccordion } from "../../../components/aiavro/dashboard/device-benefits-accordion";
 import { AiavroCopilotCard } from "../../../components/aiavro/dashboard/aiavro-copilot-card";
-import { SkeletonLoader, InlineUnavailableState } from "../../../components/aiavro/feedback/aiavro-states";
 
 export default function AiavroEmployeeDashboard() {
-  const permissions = useSessionStore((state) => state.permissions);
-  const userName = "Avanish";
-
-  const { data: dashboard, isLoading, isError, refetch } = useQuery({
-    queryKey: ["aiavro-home-dashboard"],
-    queryFn: loadDashboard,
-    staleTime: 30000
-  });
-
+  const permissions = useSessionStore((state) => state.permissions) || [];
   const isHrOrAdmin = permissions.includes("employees.read") || permissions.includes("tenant.settings.read");
-  const leaveBalanceTotal = dashboard?.leaveBalances.reduce((sum, item) => sum + Number(item.availableDays ?? 0), 0) ?? 18;
-  const pendingRequestsTotal = dashboard?.leaveRequests.filter((item) => item.status.includes("PENDING")).length ?? 0;
-  const attendanceRecord = dashboard?.attendance?.record;
-  const attendanceStatus = attendanceRecord?.status ?? "Ready to Clock In";
 
-  if (isLoading) {
-    return (
-      <div className="p-6 max-w-[1600px] mx-auto space-y-6">
-        <div className="flex justify-between items-center">
-          <SkeletonLoader className="h-8 w-64" />
-          <SkeletonLoader className="h-8 w-80 rounded-pill" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <SkeletonLoader className="h-64 rounded-card" />
-          <SkeletonLoader className="h-64 rounded-card" />
-          <SkeletonLoader className="h-64 rounded-card" />
-          <SkeletonLoader className="h-64 rounded-card" />
-        </div>
-      </div>
-    );
-  }
+  // Domain Queries with localized cache and error boundaries
+  const profileQuery = useEmployeeProfile();
+  const attendanceQuery = useAttendanceToday();
+  const leaveBalancesQuery = useLeaveBalances();
+  const leaveRequestsQuery = useLeaveRequests();
+  const holidaysQuery = useHolidays();
+  const requestsQuery = useEmployeeRequests();
+  const announcementsQuery = useAnnouncements();
+  const employeeCountQuery = useEmployeeCount(isHrOrAdmin);
 
-  if (isError) {
-    return (
-      <div className="p-8 max-w-2xl mx-auto">
-        <InlineUnavailableState
-          title="Unable to load AIavro Dashboard"
-          description="Could not connect to workspace services. Please verify session and network connectivity."
-          onRetry={() => refetch()}
-        />
-      </div>
-    );
-  }
+  // Derived real values with ZERO synthetic fallbacks
+  const profileData = profileQuery.data ?? null;
+  const userName = profileData?.firstName || profileData?.fullName;
+
+  const attendanceRecord = attendanceQuery.data?.record;
+  const attendanceStatus = attendanceRecord?.status || (attendanceQuery.isError ? "Unavailable" : "Ready to Clock In");
+  const shiftData = attendanceQuery.data?.shift;
+
+  const leaveBalances = leaveBalancesQuery.data ?? [];
+  const totalLeaveDays = leaveBalancesQuery.isSuccess
+    ? leaveBalances.reduce((sum, item) => sum + Number(item.availableDays ?? 0), 0)
+    : null;
+
+  const pendingRequests = requestsQuery.data?.requests ?? [];
+  const pendingRequestsCount = requestsQuery.isSuccess
+    ? pendingRequests.filter((r) => r.status.includes("PENDING")).length
+    : null;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1680px] mx-auto space-y-6 animate-in fade-in duration-300">
@@ -66,56 +60,68 @@ export default function AiavroEmployeeDashboard() {
         userName={userName}
         isHrOrAdmin={isHrOrAdmin}
         attendanceStatus={attendanceStatus}
-        leaveBalanceDays={leaveBalanceTotal}
-        pendingRequestsCount={pendingRequestsTotal}
-        employeeCount={dashboard?.employeeCount ?? null}
-        departmentsCount={6}
-        openingsCount={4}
+        leaveBalanceDays={totalLeaveDays}
+        pendingRequestsCount={pendingRequestsCount}
+        employeeCount={employeeCountQuery.data ?? null}
       />
 
       {/* 2. Main High-Density Asymmetric Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 items-start">
         {/* Col 1: Employee Profile Card */}
         <EmployeeProfileCard
-          fullName="Avanish Rai"
-          designation="Principal Software Architect"
-          department="Engineering"
-          location="Bangalore HQ"
-          employeeCode="VC-0001"
-          salaryMonthlyInr={isHrOrAdmin ? 285000 : null}
+          profile={profileData}
+          isLoading={profileQuery.isLoading}
+          isError={profileQuery.isError}
+          onRetry={() => profileQuery.refetch()}
         />
 
-        {/* Col 2: Hiring / Workforce Velocity */}
+        {/* Col 2: Workforce Headcount or Leave Balances */}
         <HiringOrgWidget
           isHrOrAdmin={isHrOrAdmin}
-          totalEmployees={dashboard?.employeeCount ?? 128}
-          leaveBalanceDays={leaveBalanceTotal}
+          totalEmployees={employeeCountQuery.data}
+          leaveBalances={leaveBalances}
+          isLoading={isHrOrAdmin ? employeeCountQuery.isLoading : leaveBalancesQuery.isLoading}
+          isError={isHrOrAdmin ? employeeCountQuery.isError : leaveBalancesQuery.isError}
         />
 
         {/* Col 3: Work Time / Attendance Circular Tracker */}
         <WorkTimeTracker
           checkInTime={attendanceRecord?.checkInAt}
           checkOutTime={attendanceRecord?.checkOutAt}
-          status={attendanceStatus}
-          canCheckIn={dashboard?.attendance?.canCheckIn ?? true}
-          canCheckOut={dashboard?.attendance?.canCheckOut ?? false}
-          onRefresh={() => refetch()}
+          status={attendanceRecord?.status}
+          shiftName={shiftData?.name}
+          shiftHours={shiftData?.workHours}
+          canCheckIn={attendanceQuery.data?.canCheckIn ?? true}
+          canCheckOut={attendanceQuery.data?.canCheckOut ?? false}
+          isLoading={attendanceQuery.isLoading}
+          isError={attendanceQuery.isError}
+          onRefresh={() => attendanceQuery.refetch()}
         />
 
-        {/* Col 4: Onboarding / Action Rail */}
+        {/* Col 4: Action Rail / Service Requests */}
         <div className="lg:row-span-2">
-          <OnboardingTaskRail />
+          <OnboardingTaskRail
+            requests={pendingRequests}
+            isLoading={requestsQuery.isLoading}
+            isError={requestsQuery.isError}
+          />
         </div>
 
-        {/* Col 1 (Row 2): Device & Benefits Accordion */}
+        {/* Col 1 (Row 2): Announcements & Workplace Services */}
         <DeviceBenefitsAccordion
-          deviceTag="AST-LAP-001"
-          deviceName='MacBook Pro 16" M3 Max'
+          announcements={announcementsQuery.data ?? []}
+          isLoading={announcementsQuery.isLoading}
+          isError={announcementsQuery.isError}
         />
 
         {/* Col 2 & 3 (Row 2): Integrated Schedule & Calendar */}
         <div className="md:col-span-2">
-          <ScheduleCalendar />
+          <ScheduleCalendar
+            holidays={holidaysQuery.data ?? []}
+            leaveRequests={leaveRequestsQuery.data?.requests ?? []}
+            isLoading={holidaysQuery.isLoading || leaveRequestsQuery.isLoading}
+            isError={holidaysQuery.isError && leaveRequestsQuery.isError}
+          />
         </div>
       </div>
 
