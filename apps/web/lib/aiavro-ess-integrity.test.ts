@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
+import QRCode from "qrcode";
 import { getApiUrl } from "./api";
-import { generateQrMatrix } from "./qr-matrix";
 import type { PermissionCode } from "@vc-wms/shared-types";
 
 describe("AIavro Employee Self-Service (ESS) Security, Integrity & Contract Verification", () => {
@@ -71,7 +71,7 @@ describe("AIavro Employee Self-Service (ESS) Security, Integrity & Contract Veri
     });
   });
 
-  describe("ID Credential & Scannable QR Matrix", () => {
+  describe("ID Credential & Standards-Compliant QR Code", () => {
     it("ID card never renders literal ACTIVE without API status", () => {
       const card = {
         fullName: "Test Employee",
@@ -83,7 +83,7 @@ describe("AIavro Employee Self-Service (ESS) Security, Integrity & Contract Veri
       expect(status || null).toBeNull();
     });
 
-    it("qrCodePayload generates an ACTUAL deterministic, non-empty 2D QR matrix", () => {
+    it("encodes valid QR identification payload via mature qrcode package", async () => {
       const payload = JSON.stringify({
         org: "vc-organics",
         code: "VC-001",
@@ -94,18 +94,26 @@ describe("AIavro Employee Self-Service (ESS) Security, Integrity & Contract Veri
         issued: "2026-09-02"
       });
 
-      const matrix = generateQrMatrix(payload);
-      expect(matrix.length).toBeGreaterThan(20);
-      expect(matrix[0]!.length).toBe(matrix.length);
-      // Top-left finder pattern must have a dark 7x7 outer corner
-      expect(matrix[0]![0]).toBe(true);
-      expect(matrix[0]![1]).toBe(true);
-      expect(matrix[0]![6]).toBe(true);
+      const svg = await QRCode.toString(payload, {
+        type: "svg",
+        errorCorrectionLevel: "M",
+        margin: 4,
+        color: { dark: "#0F172A", light: "#FFFFFF" }
+      });
+
+      expect(svg).toContain("<svg");
+      expect(svg).toContain("<path");
+      expect(svg).toContain('stroke="#0F172A"');
     });
 
-    it("empty qrCodePayload produces an empty matrix without rendering fake graphics", () => {
-      const emptyMatrix = generateQrMatrix("");
-      expect(emptyMatrix).toEqual([]);
+    it("generates distinct QR SVG outputs for different payloads", async () => {
+      const payloadA = JSON.stringify({ code: "VC-001" });
+      const payloadB = JSON.stringify({ code: "VC-002" });
+
+      const svgA = await QRCode.toString(payloadA, { type: "svg", errorCorrectionLevel: "M", margin: 4 });
+      const svgB = await QRCode.toString(payloadB, { type: "svg", errorCorrectionLevel: "M", margin: 4 });
+
+      expect(svgA).not.toEqual(svgB);
     });
 
     it("credential copy identifies identification payload neutrally without claiming unverified signatures", () => {

@@ -143,7 +143,7 @@ export default function EmployeeDocumentsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Document Vault</h1>
           <p className="text-xs text-foreground-muted mt-0.5">
-            Store, view, and manage verified employee credentials, identity records, and compliance files.
+            Employee documents, identity records, and compliance files.
           </p>
         </div>
 
