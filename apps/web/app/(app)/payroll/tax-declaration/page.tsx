@@ -7,10 +7,10 @@ import { Badge, Button, Field, Input, Panel } from "../../../../components/ui";
 
 export default function TaxDeclarationPage() {
   const [regime, setRegime] = useState<"NEW" | "OLD">("NEW");
-  const [sec80c, setSec80c] = useState("150000");
-  const [sec80d, setSec80d] = useState("25000");
-  const [rent, setRent] = useState("180000");
-  const [nps, setNps] = useState("50000");
+  const [sec80c, setSec80c] = useState("");
+  const [sec80d, setSec80d] = useState("");
+  const [rent, setRent] = useState("");
+  const [nps, setNps] = useState("");
 
   return (
     <div className="space-y-6">

@@ -156,12 +156,21 @@ describe("CompensationEngine", () => {
     expect(result.grossEarningsMonthly).toBe(25000);
   });
 
-  it("provides comprehensive standard default components", () => {
-    const defaults = CompensationEngine.getDefaultComponents();
-    expect(defaults.length).toBeGreaterThanOrEqual(7);
-    expect(defaults.some((d) => d.code === "BASIC")).toBe(true);
-    expect(defaults.some((d) => d.code === "HRA")).toBe(true);
-    expect(defaults.some((d) => d.code === "PF_EE")).toBe(true);
-    expect(defaults.some((d) => d.code === "PF_ER")).toBe(true);
+  it("rejects percentage-of-basic structures without an explicit BASIC component", () => {
+    const invalidComponents: ComponentCalculationInput[] = [
+      {
+        componentId: "comp-hra",
+        name: "House Rent Allowance",
+        code: "HRA",
+        type: "EARNING",
+        category: "HRA",
+        calculationType: "PERCENTAGE_OF_BASIC",
+        calculationValue: 40
+      }
+    ];
+
+    expect(() => CompensationEngine.calculateBreakdown(30000, invalidComponents)).toThrow(
+      "Percentage-of-basic components require a configured BASIC component."
+    );
   });
 });

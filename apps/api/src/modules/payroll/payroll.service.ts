@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import {
   CompensationStatus,
+  EmploymentStatus,
   LeaveRequestStatus,
   PayrollAdjustmentType,
   PayrollEmployeeStatus,
@@ -73,6 +74,7 @@ export class PayrollService {
     actorMembershipId?: string
   ) {
     const { month, year, notes } = input;
+    const currency = await this.getTenantPayrollCurrency(tenantId);
 
     // Check if payroll run already exists for the month
     const existing = await this.prisma.payrollRun.findUnique({
@@ -96,13 +98,19 @@ export class PayrollService {
 
     // 1. Fetch all active employees
     const employees = await this.prisma.employee.findMany({
-      where: { tenantId, status: "ACTIVE" },
+      where: { tenantId, status: EmploymentStatus.ACTIVE },
       include: {
         compensations: {
-          where: { status: CompensationStatus.ACTIVE },
+          where: {
+            status: CompensationStatus.ACTIVE,
+            effectiveFrom: { lte: endDate },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: startDate } }]
+          },
           include: {
             items: { include: { component: true } }
-          }
+          },
+          orderBy: { effectiveFrom: "desc" },
+          take: 1
         },
         department: true,
         designation: true
@@ -111,6 +119,24 @@ export class PayrollService {
 
     if (employees.length === 0) {
       throw new BadRequestException("No active employees found for this tenant.");
+    }
+
+    const missingCompensation = employees.filter((employee) => employee.compensations.length === 0);
+    if (missingCompensation.length > 0) {
+      throw new BadRequestException({
+        message: "Payroll cannot be generated until every active employee has effective compensation.",
+        employeeCodes: missingCompensation.map((employee) => employee.employeeCode)
+      });
+    }
+
+    const mismatchedCurrency = employees.find((employee) => employee.compensations[0]?.currency !== currency);
+    if (mismatchedCurrency) {
+      throw new BadRequestException({
+        message: "Payroll run currency must match all employee compensation records.",
+        currency,
+        employeeCode: mismatchedCurrency.employeeCode,
+        employeeCurrency: mismatchedCurrency.compensations[0]?.currency
+      });
     }
 
     // 2. Fetch all monthly attendance records
@@ -175,8 +201,7 @@ export class PayrollService {
     for (const emp of employees) {
       const activeComp = emp.compensations[0];
       if (!activeComp) {
-        // Skip employees without an assigned salary
-        continue;
+        throw new BadRequestException("Payroll cannot be generated without employee compensation.");
       }
 
       const empAttendances = attendanceByEmp.get(emp.id) ?? [];
@@ -250,6 +275,7 @@ export class PayrollService {
         compensationSnapshot: {
           monthlyCtc: activeComp.monthlyCtc,
           annualCtc: activeComp.annualCtc,
+          currency: activeComp.currency,
           components
         }
       });
@@ -268,7 +294,7 @@ export class PayrollService {
           totalDeductions: Math.round(totalDeductions * 100) / 100,
           totalNet: Math.round(totalNet * 100) / 100,
           totalEmployerContributions: Math.round(totalEmployerContributions * 100) / 100,
-          currency: "INR",
+          currency,
           notes,
           createdByUserId: actorUserId
         }
@@ -551,6 +577,10 @@ export class PayrollService {
       throw new BadRequestException("Locked payroll runs cannot be re-approved.");
     }
 
+    if (run.status !== PayrollRunStatus.GENERATED) {
+      throw new BadRequestException("Only GENERATED payroll runs can be approved.");
+    }
+
     const approved = await this.prisma.$transaction(async (tx) => {
       await tx.payrollApproval.create({
         data: {
@@ -656,6 +686,10 @@ export class PayrollService {
 
     if (run.status === PayrollRunStatus.LOCKED) {
       throw new BadRequestException("Locked payroll runs cannot be cancelled.");
+    }
+
+    if (run.status === PayrollRunStatus.APPROVED) {
+      throw new BadRequestException("Approved payroll runs must be locked or reviewed through payroll approvals.");
     }
 
     const cancelled = await this.prisma.payrollRun.update({
@@ -828,6 +862,30 @@ export class PayrollService {
     });
   }
 
+  private async getTenantPayrollCurrency(tenantId: string) {
+    const settings = await this.prisma.tenantSettings.findUnique({
+      where: { tenantId },
+      select: { currency: true }
+    });
+
+    if (!settings?.currency) {
+      throw new BadRequestException("Tenant currency must be configured before payroll generation.");
+    }
+
+    return settings.currency;
+  }
+
+  private async assertEmployeeInTenant(tenantId: string, employeeId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+      select: { id: true }
+    });
+
+    if (!employee) {
+      throw new NotFoundException("Employee not found.");
+    }
+  }
+
   // =========================================================================
   // TASK 30: ENTERPRISE PAYROLL, TAX, STATUTORY & SETTLEMENT ENGINES
   // =========================================================================
@@ -945,6 +1003,13 @@ export class PayrollService {
     userId: string,
     membershipId?: string
   ) {
+    const existing = await this.prisma.payrollTaxDeclaration.findFirst({
+      where: { id, tenantId }
+    });
+    if (!existing) {
+      throw new NotFoundException("Payroll tax declaration not found.");
+    }
+
     const updated = await this.prisma.payrollTaxDeclaration.update({
       where: { id },
       data: {
@@ -970,9 +1035,18 @@ export class PayrollService {
 
   async uploadTaxProof(
     tenantId: string,
-    dto: z.infer<typeof UploadTaxProofSchema>
+    dto: z.infer<typeof UploadTaxProofSchema>,
+    userId: string,
+    membershipId?: string
   ) {
-    return this.prisma.payrollTaxProof.create({
+    const declaration = await this.prisma.payrollTaxDeclaration.findFirst({
+      where: { id: dto.declarationId, tenantId }
+    });
+    if (!declaration) {
+      throw new NotFoundException("Payroll tax declaration not found.");
+    }
+
+    const proof = await this.prisma.payrollTaxProof.create({
       data: {
         tenantId,
         declarationId: dto.declarationId,
@@ -982,6 +1056,18 @@ export class PayrollService {
         status: "PENDING"
       }
     });
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: "TAX_PROOF_UPLOADED",
+      resourceType: "PayrollTaxProof",
+      resourceId: proof.id,
+      metadata: { declarationId: dto.declarationId, section: dto.section }
+    });
+
+    return proof;
   }
 
   async verifyTaxProof(
@@ -991,6 +1077,13 @@ export class PayrollService {
     userId: string,
     membershipId?: string
   ) {
+    const existing = await this.prisma.payrollTaxProof.findFirst({
+      where: { id, tenantId }
+    });
+    if (!existing) {
+      throw new NotFoundException("Payroll tax proof not found.");
+    }
+
     const updated = await this.prisma.payrollTaxProof.update({
       where: { id },
       data: {
@@ -1066,6 +1159,8 @@ export class PayrollService {
     userId: string,
     membershipId?: string
   ) {
+    await this.assertEmployeeInTenant(tenantId, dto.employeeId);
+
     const fnfCalc = FnfEngine.calculateFnfSettlement({
       employeeId: dto.employeeId,
       monthlyGrossSalary: dto.monthlyGrossSalary,
@@ -1133,6 +1228,13 @@ export class PayrollService {
     userId: string,
     membershipId?: string
   ) {
+    const existing = await this.prisma.payrollSettlement.findFirst({
+      where: { id, tenantId }
+    });
+    if (!existing) {
+      throw new NotFoundException("Payroll settlement not found.");
+    }
+
     const updated = await this.prisma.payrollSettlement.update({
       where: { id },
       data: {
@@ -1171,6 +1273,8 @@ export class PayrollService {
     userId: string,
     membershipId?: string
   ) {
+    await this.assertEmployeeInTenant(tenantId, dto.employeeId);
+
     const bonus = await this.prisma.payrollBonus.create({
       data: {
         tenantId,
@@ -1215,6 +1319,8 @@ export class PayrollService {
     userId: string,
     membershipId?: string
   ) {
+    await this.assertEmployeeInTenant(tenantId, dto.employeeId);
+
     const incentive = await this.prisma.payrollIncentive.create({
       data: {
         tenantId,
@@ -1261,6 +1367,8 @@ export class PayrollService {
     userId: string,
     membershipId?: string
   ) {
+    await this.assertEmployeeInTenant(tenantId, dto.employeeId);
+
     const loan = await this.prisma.payrollLoan.create({
       data: {
         tenantId,
@@ -1307,6 +1415,8 @@ export class PayrollService {
     userId: string,
     membershipId?: string
   ) {
+    await this.assertEmployeeInTenant(tenantId, dto.employeeId);
+
     const rev = await this.prisma.compensationRevision.create({
       data: {
         tenantId,
@@ -1342,6 +1452,13 @@ export class PayrollService {
     userId: string,
     membershipId?: string
   ) {
+    const existing = await this.prisma.compensationRevision.findFirst({
+      where: { id, tenantId }
+    });
+    if (!existing) {
+      throw new NotFoundException("Compensation revision not found.");
+    }
+
     const updated = await this.prisma.compensationRevision.update({
       where: { id },
       data: {
@@ -1479,4 +1596,3 @@ export class PayrollService {
     return PayrollAnalyticsEngine.synthesizePayrollAnalytics(simulatedDepts, historicalTrends);
   }
 }
-

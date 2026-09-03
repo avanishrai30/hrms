@@ -5,6 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { Badge } from "../../../../components/ui";
 import { apiRequest } from "../../../../lib/api";
+import { formatMoney } from "../../../../lib/money";
 import type { PayrollRunView, PayslipView } from "@vc-wms/shared-types";
 
 export default function AdminPayslipsPage() {
@@ -190,7 +191,7 @@ export default function AdminPayslipsPage() {
               ) : (
                 lockedRuns.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {monthNames[r.month - 1]} {r.year} ({r.totalEmployees} employees - ₹{r.totalNet.toLocaleString()})
+                    {monthNames[r.month - 1]} {r.year} ({r.totalEmployees} employees - {formatMoney(r.totalNet, r.currency)})
                   </option>
                 ))
               )}
@@ -310,13 +311,13 @@ export default function AdminPayslipsPage() {
                       {monthNames[p.month - 1]} {p.year}
                     </td>
                     <td className="px-4 py-3.5 font-medium text-slate-900">
-                      ₹{p.grossSalary.toLocaleString()}
+                      {formatMoney(p.grossSalary, p.payrollRun?.currency)}
                     </td>
                     <td className="px-4 py-3.5 text-amber-700">
-                      ₹{p.deductions.toLocaleString()}
+                      {formatMoney(p.deductions, p.payrollRun?.currency)}
                     </td>
                     <td className="px-4 py-3.5 font-bold text-emerald-700">
-                      ₹{p.netSalary.toLocaleString()}
+                      {formatMoney(p.netSalary, p.payrollRun?.currency)}
                     </td>
                     <td className="px-4 py-3.5 font-mono text-xs text-slate-600">v{p.version}</td>
                     <td className="px-4 py-3.5">{getStatusBadge(p.status)}</td>

@@ -185,7 +185,7 @@ export const CreateSalaryBandSchema = z.object({
   minCtc: z.number().min(1),
   midCtc: z.number().min(1),
   maxCtc: z.number().min(1),
-  currency: z.string().default("INR")
+  currency: z.string().trim().length(3).toUpperCase()
 });
 
 export type CreatePayrollRunDto = z.infer<typeof createPayrollRunSchema>;

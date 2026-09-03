@@ -41,11 +41,14 @@ describe("Compensation Schemas", () => {
       name: "Factory Standard",
       code: "FACTORY_STD",
       jobRole: "Operator",
+      currency: "INR",
       items: [
         {
           componentId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
           calculationType: "PERCENTAGE_OF_BASIC",
           calculationValue: 50,
+          monthlyAmount: 0,
+          annualAmount: 0,
           order: 1
         }
       ]
@@ -61,6 +64,7 @@ describe("Compensation Schemas", () => {
       employeeId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
       effectiveFrom: "2026-04-01",
       monthlyCtc: 35000,
+      currency: "INR",
       reason: "JOINING_SALARY"
     };
 
@@ -80,5 +84,16 @@ describe("Compensation Schemas", () => {
     const parsed = reviseEmployeeCompensationSchema.parse(valid);
     expect(parsed.newMonthlyCtc).toBe(42000);
     expect(parsed.reason).toBe("PROMOTION_INCREASE");
+  });
+
+  it("requires explicit compensation currency", () => {
+    expect(() =>
+      assignEmployeeCompensationSchema.parse({
+        employeeId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+        effectiveFrom: "2026-04-01",
+        monthlyCtc: 35000,
+        reason: "JOINING_SALARY"
+      })
+    ).toThrow();
   });
 });

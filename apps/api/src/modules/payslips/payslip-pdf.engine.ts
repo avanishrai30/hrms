@@ -3,6 +3,7 @@ export interface PayslipPdfData {
   month: number;
   year: number;
   version: number;
+  currency: string;
   generatedAt: Date | string;
   employee: {
     fullName: string;
@@ -43,6 +44,8 @@ export class PayslipPdfEngine {
 
     const escapePdf = (str: string) =>
       str.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+    const formatAmount = (amount: number) =>
+      `${data.currency} ${amount.toLocaleString()}`;
 
     // Construct PostScript-like PDF content stream
     const contentOps: string[] = [];
@@ -121,9 +124,9 @@ export class PayslipPdfEngine {
     contentOps.push("/F2 10 Tf");
     contentOps.push("0.1 0.1 0.1 rg");
     contentOps.push(`55 605 Td (EARNINGS) Tj`);
-    contentOps.push(`170 0 Td (AMOUNT \\(INR\\)) Tj`);
+    contentOps.push(`170 0 Td (AMOUNT \\(${escapePdf(data.currency)}\\)) Tj`);
     contentOps.push(`95 0 Td (DEDUCTIONS) Tj`);
-    contentOps.push(`170 0 Td (AMOUNT \\(INR\\)) Tj`);
+    contentOps.push(`170 0 Td (AMOUNT \\(${escapePdf(data.currency)}\\)) Tj`);
     contentOps.push("ET");
 
     // Items row rendering
@@ -141,14 +144,14 @@ export class PayslipPdfEngine {
       if (earn) {
         contentOps.push(`55 ${currentY} Td (${escapePdf(earn.name)}) Tj`);
         contentOps.push(`/F2 9 Tf`);
-        contentOps.push(`175 0 Td (Rs. ${earn.amount.toLocaleString()}) Tj`);
+        contentOps.push(`175 0 Td (${escapePdf(formatAmount(earn.amount))}) Tj`);
       }
 
       if (ded) {
         contentOps.push(`/F1 9 Tf`);
         contentOps.push(`320 ${currentY} Td (${escapePdf(ded.name)}) Tj`);
         contentOps.push(`/F2 9 Tf`);
-        contentOps.push(`175 0 Td (Rs. ${ded.amount.toLocaleString()}) Tj`);
+        contentOps.push(`175 0 Td (${escapePdf(formatAmount(ded.amount))}) Tj`);
       }
 
       contentOps.push("ET");
@@ -171,9 +174,9 @@ export class PayslipPdfEngine {
     contentOps.push("/F2 9 Tf");
     contentOps.push("0.1 0.1 0.1 rg");
     contentOps.push(`55 ${currentY - 7} Td (Total Gross Earnings:) Tj`);
-    contentOps.push(`140 0 Td (Rs. ${data.grossSalary.toLocaleString()}) Tj`);
+    contentOps.push(`140 0 Td (${escapePdf(formatAmount(data.grossSalary))}) Tj`);
     contentOps.push(`125 0 Td (Total Deductions:) Tj`);
-    contentOps.push(`140 0 Td (Rs. ${data.totalDeductions.toLocaleString()}) Tj`);
+    contentOps.push(`140 0 Td (${escapePdf(formatAmount(data.totalDeductions))}) Tj`);
     contentOps.push("ET");
 
     currentY -= 50;
@@ -187,7 +190,7 @@ export class PayslipPdfEngine {
     contentOps.push("1 1 1 rg");
     contentOps.push(`55 ${currentY - 7} Td (NET TAKE-HOME SALARY:) Tj`);
     contentOps.push("/F2 15 Tf");
-    contentOps.push(`270 0 Td (INR ${data.netSalary.toLocaleString()}) Tj`);
+    contentOps.push(`270 0 Td (${escapePdf(formatAmount(data.netSalary))}) Tj`);
     contentOps.push("ET");
 
     // Footer & Digital Security Verification Note

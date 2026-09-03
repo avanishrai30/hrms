@@ -50,8 +50,8 @@ export const createSalaryComponentSchema = z.object({
   category: salaryComponentCategorySchema,
   isTaxable: z.boolean().default(true),
   isFixed: z.boolean().default(true),
-  calculationType: compensationCalculationTypeSchema.default("FLAT_AMOUNT"),
-  calculationValue: z.number().min(0).default(0),
+  calculationType: compensationCalculationTypeSchema,
+  calculationValue: z.number().min(0),
   description: z.string().trim().max(500).optional(),
   isActive: z.boolean().default(true)
 });
@@ -60,11 +60,11 @@ export const updateSalaryComponentSchema = createSalaryComponentSchema.partial()
 
 export const compensationTemplateItemInputSchema = z.object({
   componentId: z.string().uuid(),
-  calculationType: compensationCalculationTypeSchema.default("FLAT_AMOUNT"),
-  calculationValue: z.number().min(0).default(0),
-  monthlyAmount: z.number().min(0).default(0),
-  annualAmount: z.number().min(0).default(0),
-  order: z.number().int().min(0).default(0)
+  calculationType: compensationCalculationTypeSchema,
+  calculationValue: z.number().min(0),
+  monthlyAmount: z.number().min(0),
+  annualAmount: z.number().min(0),
+  order: z.number().int().min(0).optional()
 });
 
 export const createCompensationTemplateSchema = z.object({
@@ -72,7 +72,7 @@ export const createCompensationTemplateSchema = z.object({
   code: z.string().trim().min(2).max(20).toUpperCase(),
   description: z.string().trim().max(500).optional(),
   jobRole: z.string().trim().max(100).optional(),
-  currency: z.string().trim().min(2).max(10).default("INR"),
+  currency: z.string().trim().length(3).toUpperCase(),
   isActive: z.boolean().default(true),
   items: z.array(compensationTemplateItemInputSchema).min(1, "Template must include at least one salary component")
 });
@@ -98,7 +98,7 @@ export const assignEmployeeCompensationSchema = z.object({
   effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format must be YYYY-MM-DD"),
   monthlyCtc: z.number().positive("Monthly CTC must be greater than 0"),
   annualCtc: z.number().positive("Annual CTC must be greater than 0").optional(),
-  currency: z.string().trim().min(2).max(10).default("INR"),
+  currency: z.string().trim().length(3).toUpperCase(),
   reason: compensationChangeReasonSchema.default("JOINING_SALARY"),
   notes: z.string().trim().max(500).optional(),
   items: z.array(employeeCompensationItemInputSchema).optional()

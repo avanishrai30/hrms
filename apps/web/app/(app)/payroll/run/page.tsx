@@ -5,6 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { Badge } from "../../../../components/ui";
 import { apiRequest } from "../../../../lib/api";
+import { formatMoney } from "../../../../lib/money";
 import type {
   PayrollAdjustmentType,
   PayrollRunEmployeeView,
@@ -29,6 +30,7 @@ export default function PayrollRunWorkbenchPage() {
 
   // Workflow Actions state
   const [isActing, setIsActing] = useState(false);
+  const [showLockDialog, setShowLockDialog] = useState(false);
 
   const loadRun = async (m = selectedMonth, y = selectedYear) => {
     try {
@@ -104,9 +106,6 @@ export default function PayrollRunWorkbenchPage() {
 
   const handleLock = async () => {
     if (!currentRun) return;
-    if (!confirm("Are you sure you want to permanently lock this payroll run? Locked payroll runs cannot be edited or recalculated.")) {
-      return;
-    }
     try {
       setIsActing(true);
       setError(null);
@@ -119,15 +118,16 @@ export default function PayrollRunWorkbenchPage() {
       setError(err instanceof Error ? err.message : "Failed to lock payroll run.");
     } finally {
       setIsActing(false);
+      setShowLockDialog(false);
     }
   };
 
   const openAdjustmentModal = (emp: PayrollRunEmployeeView) => {
     setTargetEmp(emp);
     setAdjType("BONUS");
-    setAdjTitle("Overtime / Performance Incentive");
-    setAdjAmount(1500);
-    setAdjReason("Monthly operational excellence bonus");
+    setAdjTitle("");
+    setAdjAmount(0);
+    setAdjReason("");
     setShowAdjModal(true);
   };
 
@@ -239,7 +239,7 @@ export default function PayrollRunWorkbenchPage() {
 
               {currentRun.status === "APPROVED" && (
                 <button
-                  onClick={handleLock}
+                  onClick={() => setShowLockDialog(true)}
                   disabled={isActing}
                   className="rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 shadow-sm transition"
                 >
@@ -269,19 +269,19 @@ export default function PayrollRunWorkbenchPage() {
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <span className="text-[11px] font-semibold text-slate-500 uppercase">Gross Earnings</span>
             <div className="mt-1 text-xl font-bold text-slate-900">
-              ₹{currentRun.totalGross.toLocaleString()}
+              {formatMoney(currentRun.totalGross, currentRun.currency)}
             </div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <span className="text-[11px] font-semibold text-slate-500 uppercase">Total Deductions</span>
             <div className="mt-1 text-xl font-bold text-amber-700">
-              ₹{currentRun.totalDeductions.toLocaleString()}
+              {formatMoney(currentRun.totalDeductions, currentRun.currency)}
             </div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <span className="text-[11px] font-semibold text-slate-500 uppercase">Net Disbursed</span>
             <div className="mt-1 text-xl font-bold text-emerald-600">
-              ₹{currentRun.totalNet.toLocaleString()}
+              {formatMoney(currentRun.totalNet, currentRun.currency)}
             </div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -342,13 +342,13 @@ export default function PayrollRunWorkbenchPage() {
                       )}
                     </td>
                     <td className="px-4 py-3.5 font-medium text-slate-800">
-                      ₹{emp.baseMonthlyCtc.toLocaleString()}
+                      {formatMoney(emp.baseMonthlyCtc, currentRun.currency)}
                     </td>
                     <td className="px-4 py-3.5 font-semibold text-slate-900">
-                      ₹{emp.grossSalary.toLocaleString()}
+                      {formatMoney(emp.grossSalary, currentRun.currency)}
                     </td>
                     <td className="px-4 py-3.5 text-amber-700">
-                      ₹{emp.totalDeductions.toLocaleString()}
+                      {formatMoney(emp.totalDeductions, currentRun.currency)}
                     </td>
                     <td className="px-4 py-3.5">
                       {emp.totalAdjustments !== 0 ? (
@@ -358,15 +358,15 @@ export default function PayrollRunWorkbenchPage() {
                           }`}
                         >
                           {emp.totalAdjustments > 0
-                            ? `+₹${emp.totalAdjustments.toLocaleString()}`
-                            : `-₹${Math.abs(emp.totalAdjustments).toLocaleString()}`}
+                            ? `+${formatMoney(emp.totalAdjustments, currentRun.currency)}`
+                            : `-${formatMoney(Math.abs(emp.totalAdjustments), currentRun.currency)}`}
                         </span>
                       ) : (
-                        <span className="text-xs text-slate-400">₹0</span>
+                        <span className="text-xs text-slate-400">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3.5 font-bold text-emerald-700 text-base">
-                      ₹{emp.netSalary.toLocaleString()}
+                      {formatMoney(emp.netSalary, currentRun.currency)}
                     </td>
                     <td className="px-4 py-3.5 text-right space-x-2">
                       {currentRun.status !== "LOCKED" && (
@@ -438,7 +438,7 @@ export default function PayrollRunWorkbenchPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Amount (₹)</label>
+                <label className="block font-semibold text-slate-700 mb-1">Amount</label>
                 <input
                   type="number"
                   min={1}
@@ -479,6 +479,39 @@ export default function PayrollRunWorkbenchPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showLockDialog && currentRun && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Lock payroll run?</h3>
+              <p className="mt-1 text-sm text-slate-600">
+                This finalizes {monthNames[currentRun.month - 1]} {currentRun.year}. Locked payroll runs cannot be edited or recalculated.
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              Net payroll: <span className="font-semibold text-slate-900">{formatMoney(currentRun.totalNet, currentRun.currency)}</span>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-100 pt-3">
+              <button
+                type="button"
+                onClick={() => setShowLockDialog(false)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleLock}
+                disabled={isActing}
+                className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-800 shadow-sm transition disabled:opacity-50"
+              >
+                {isActing ? "Locking..." : "Lock Payroll"}
+              </button>
+            </div>
           </div>
         </div>
       )}

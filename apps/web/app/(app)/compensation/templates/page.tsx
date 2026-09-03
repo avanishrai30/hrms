@@ -5,6 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { Badge } from "../../../../components/ui";
 import { apiRequest } from "../../../../lib/api";
+import { formatMoney } from "../../../../lib/money";
 import type {
   CompensationBreakdownResult,
   CompensationTemplateView,
@@ -17,7 +18,7 @@ export default function CompensationTemplatesPage() {
   const [templates, setTemplates] = useState<CompensationTemplateView[]>([]);
   const [components, setComponents] = useState<SalaryComponentView[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<CompensationTemplateView | null>(null);
-  const [simulatedCtc, setSimulatedCtc] = useState<number>(30000);
+  const [simulatedCtc, setSimulatedCtc] = useState<number>(0);
   const [simulationResult, setSimulationResult] = useState<CompensationBreakdownResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +60,10 @@ export default function CompensationTemplatesPage() {
   // Update simulator
   useEffect(() => {
     async function runSim() {
-      if (simulatedCtc <= 0) return;
+      if (simulatedCtc <= 0) {
+        setSimulationResult(null);
+        return;
+      }
       try {
         const result = await apiRequest<CompensationBreakdownResult>("/compensation/preview", {
           method: "POST",
@@ -242,7 +246,7 @@ export default function CompensationTemplatesPage() {
                               : it.calculationType === "PERCENTAGE_OF_GROSS"
                               ? `${it.calculationValue}% of Gross`
                               : it.calculationValue > 0
-                              ? `Fixed ₹${it.calculationValue}`
+                              ? `Fixed ${formatMoney(it.calculationValue, selectedTemplate.currency)}`
                               : "Balancing Allocation"}
                           </td>
                         </tr>
@@ -265,7 +269,7 @@ export default function CompensationTemplatesPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">
-                      Monthly CTC: ₹
+                      Monthly CTC
                     </label>
                     <input
                       type="number"
@@ -284,25 +288,25 @@ export default function CompensationTemplatesPage() {
                       <div className="bg-white rounded-lg p-3 border border-emerald-100 shadow-xs">
                         <span className="text-[11px] text-slate-500 uppercase">Gross Earnings</span>
                         <div className="text-base font-bold text-slate-900 mt-0.5">
-                          ₹{simulationResult.grossEarningsMonthly.toLocaleString()}
+                          {formatMoney(simulationResult.grossEarningsMonthly, selectedTemplate.currency)}
                         </div>
                       </div>
                       <div className="bg-white rounded-lg p-3 border border-emerald-100 shadow-xs">
                         <span className="text-[11px] text-slate-500 uppercase">Deductions</span>
                         <div className="text-base font-bold text-amber-700 mt-0.5">
-                          ₹{simulationResult.totalDeductionsMonthly.toLocaleString()}
+                          {formatMoney(simulationResult.totalDeductionsMonthly, selectedTemplate.currency)}
                         </div>
                       </div>
                       <div className="bg-white rounded-lg p-3 border border-emerald-100 shadow-xs">
                         <span className="text-[11px] text-slate-500 uppercase">Employer PF/ESI</span>
                         <div className="text-base font-bold text-slate-700 mt-0.5">
-                          ₹{simulationResult.employerContributionsMonthly.toLocaleString()}
+                          {formatMoney(simulationResult.employerContributionsMonthly, selectedTemplate.currency)}
                         </div>
                       </div>
                       <div className="bg-emerald-600 text-white rounded-lg p-3 shadow-xs">
                         <span className="text-[11px] text-emerald-100 uppercase font-medium">Net Take-Home</span>
                         <div className="text-base font-bold mt-0.5">
-                          ₹{simulationResult.netTakeHomeMonthly.toLocaleString()}
+                          {formatMoney(simulationResult.netTakeHomeMonthly, selectedTemplate.currency)}
                         </div>
                       </div>
                     </div>
@@ -328,10 +332,10 @@ export default function CompensationTemplatesPage() {
                                 {item.type}
                               </td>
                               <td className="px-4 py-2 text-right font-bold text-slate-900">
-                                ₹{item.monthlyAmount.toLocaleString()}
+                                {formatMoney(item.monthlyAmount, selectedTemplate.currency)}
                               </td>
                               <td className="px-4 py-2 text-right text-slate-500">
-                                ₹{item.annualAmount.toLocaleString()}
+                                {formatMoney(item.annualAmount, selectedTemplate.currency)}
                               </td>
                             </tr>
                           ))}

@@ -8,6 +8,7 @@ describe("PayslipPdfEngine", () => {
       month: 8,
       year: 2026,
       version: 1,
+      currency: "USD",
       generatedAt: new Date("2026-08-31T12:00:00Z"),
       employee: {
         fullName: "Avanish Rai",
@@ -55,7 +56,8 @@ describe("PayslipPdfEngine", () => {
     expect(pdfText.includes("VC ORGANICS LTD")).toBe(true);
     expect(pdfText.includes("Avanish Rai")).toBe(true);
     expect(pdfText.includes("EMP-001")).toBe(true);
-    expect(pdfText.includes("73,533")).toBe(true);
+    expect(pdfText.includes("USD 73,533")).toBe(true);
+    expect(pdfText.includes("Rs.")).toBe(false);
     expect(pdfText.includes("%%EOF")).toBe(true);
   });
 });

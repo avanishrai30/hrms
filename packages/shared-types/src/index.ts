@@ -909,6 +909,7 @@ export interface EmployeeCompensationHistoryView {
   previousAnnualCtc: number;
   newMonthlyCtc: number;
   newAnnualCtc: number;
+  currency: string | null;
   reason: CompensationChangeReason;
   notes: string | null;
   revisionDate: string;
@@ -1167,6 +1168,7 @@ export interface PayslipView {
     month: number;
     year: number;
     status: string;
+    currency: string;
   };
   payrollRunEmployee?: PayrollRunEmployeeView;
   distributions?: PayslipDistributionView[];
@@ -3226,8 +3228,6 @@ export interface OperationsAnalyticsView {
     avgTurnaroundDays: number;
   };
 }
-
-
 
 
 

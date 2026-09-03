@@ -393,6 +393,13 @@ export interface PayslipItem {
   netSalary: number;
   status: string;
   generatedAt: string;
+  payrollRun?: {
+    id: string;
+    month: number;
+    year: number;
+    status: string;
+    currency: string;
+  };
   payrollRunEmployee?: {
     breakdowns?: Array<{
       id: string;

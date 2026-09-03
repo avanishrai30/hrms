@@ -5,6 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { Badge } from "../../../components/ui";
 import { apiRequest } from "../../../lib/api";
+import { formatMoney } from "../../../lib/money";
 import type { PayrollRunView } from "@vc-wms/shared-types";
 
 export default function PayrollDashboardPage() {
@@ -149,19 +150,19 @@ export default function PayrollDashboardPage() {
               <div>
                 <span className="text-[11px] text-slate-400 uppercase">Gross Earnings</span>
                 <div className="text-lg font-bold mt-0.5 text-white">
-                  ₹{latestRun.totalGross.toLocaleString()}
+                  {formatMoney(latestRun.totalGross, latestRun.currency)}
                 </div>
               </div>
               <div>
                 <span className="text-[11px] text-slate-400 uppercase">Total Deductions</span>
                 <div className="text-lg font-bold mt-0.5 text-amber-400">
-                  ₹{latestRun.totalDeductions.toLocaleString()}
+                  {formatMoney(latestRun.totalDeductions, latestRun.currency)}
                 </div>
               </div>
               <div>
                 <span className="text-[11px] text-slate-400 uppercase">Net Disbursed</span>
                 <div className="text-lg font-bold mt-0.5 text-emerald-400">
-                  ₹{latestRun.totalNet.toLocaleString()}
+                  {formatMoney(latestRun.totalNet, latestRun.currency)}
                 </div>
               </div>
             </div>
@@ -219,7 +220,7 @@ export default function PayrollDashboardPage() {
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <span className="text-xs font-semibold text-slate-500 uppercase">Employer Contributions</span>
           <div className="mt-2 text-2xl font-bold text-slate-900">
-            ₹{(latestRun?.totalEmployerContributions ?? 0).toLocaleString()}
+            {formatMoney(latestRun?.totalEmployerContributions, latestRun?.currency)}
           </div>
           <span className="text-xs text-slate-400 mt-1 block">Latest cycle PF & ESI match</span>
         </div>
@@ -266,13 +267,13 @@ export default function PayrollDashboardPage() {
                     </td>
                     <td className="px-4 py-3.5 text-slate-700">{r.totalEmployees}</td>
                     <td className="px-4 py-3.5 font-medium text-slate-900">
-                      ₹{r.totalGross.toLocaleString()}
+                      {formatMoney(r.totalGross, r.currency)}
                     </td>
                     <td className="px-4 py-3.5 text-amber-700">
-                      ₹{r.totalDeductions.toLocaleString()}
+                      {formatMoney(r.totalDeductions, r.currency)}
                     </td>
                     <td className="px-4 py-3.5 font-bold text-emerald-700">
-                      ₹{r.totalNet.toLocaleString()}
+                      {formatMoney(r.totalNet, r.currency)}
                     </td>
                     <td className="px-4 py-3.5">{getStatusBadge(r.status)}</td>
                     <td className="px-4 py-3.5 text-right">

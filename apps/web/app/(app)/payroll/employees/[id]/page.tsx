@@ -5,6 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { Badge } from "../../../../../components/ui";
 import { apiRequest } from "../../../../../lib/api";
+import { formatMoney } from "../../../../../lib/money";
 import type { PayrollRunEmployeeView } from "@vc-wms/shared-types";
 
 export default function EmployeePayrollDetailPage({
@@ -56,6 +57,10 @@ export default function EmployeePayrollDetailPage({
   const earnings = employeePayroll.breakdowns?.filter((b) => b.type === "EARNING") ?? [];
   const deductions = employeePayroll.breakdowns?.filter((b) => b.type === "DEDUCTION") ?? [];
   const employerContributions = employeePayroll.breakdowns?.filter((b) => b.type === "EMPLOYER_CONTRIBUTION") ?? [];
+  const payrollCurrency =
+    typeof employeePayroll.compensationSnapshot.currency === "string"
+      ? employeePayroll.compensationSnapshot.currency
+      : null;
 
   return (
     <div className="space-y-6">
@@ -95,7 +100,7 @@ export default function EmployeePayrollDetailPage({
           <div className="text-right">
             <span className="text-xs uppercase font-semibold text-slate-400">Net Take-Home Salary</span>
             <div className="text-2xl font-extrabold text-emerald-600">
-              ₹{employeePayroll.netSalary.toLocaleString()}
+              {formatMoney(employeePayroll.netSalary, payrollCurrency)}
             </div>
           </div>
         </div>
@@ -148,7 +153,7 @@ export default function EmployeePayrollDetailPage({
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h2 className="text-base font-bold text-slate-900">Gross Earnings</h2>
             <span className="font-bold text-slate-900">
-              ₹{employeePayroll.grossSalary.toLocaleString()}
+              {formatMoney(employeePayroll.grossSalary, payrollCurrency)}
             </span>
           </div>
 
@@ -158,11 +163,11 @@ export default function EmployeePayrollDetailPage({
                 <div>
                   <div className="font-semibold text-slate-800">{e.name}</div>
                   <div className="text-[10px] text-slate-400 font-mono">
-                    Base: ₹{e.baseAmount.toLocaleString()}
+                    Base: {formatMoney(e.baseAmount, payrollCurrency)}
                   </div>
                 </div>
                 <div className="font-bold text-slate-900 text-right">
-                  ₹{e.proratedAmount.toLocaleString()}
+                  {formatMoney(e.proratedAmount, payrollCurrency)}
                 </div>
               </div>
             ))}
@@ -175,7 +180,7 @@ export default function EmployeePayrollDetailPage({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-base font-bold text-slate-900">Statutory Deductions</h2>
               <span className="font-bold text-amber-700">
-                ₹{employeePayroll.totalDeductions.toLocaleString()}
+                {formatMoney(employeePayroll.totalDeductions, payrollCurrency)}
               </span>
             </div>
 
@@ -187,7 +192,7 @@ export default function EmployeePayrollDetailPage({
                     <div className="text-[10px] text-slate-400 font-mono">{d.code}</div>
                   </div>
                   <div className="font-bold text-amber-700 text-right">
-                    ₹{d.proratedAmount.toLocaleString()}
+                    {formatMoney(d.proratedAmount, payrollCurrency)}
                   </div>
                 </div>
               ))}
@@ -200,7 +205,9 @@ export default function EmployeePayrollDetailPage({
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h3 className="text-base font-bold text-slate-900">Adjustments</h3>
                 <span className="font-bold text-slate-900">
-                  {employeePayroll.totalAdjustments >= 0 ? `+₹${employeePayroll.totalAdjustments.toLocaleString()}` : `-₹${Math.abs(employeePayroll.totalAdjustments).toLocaleString()}`}
+                  {employeePayroll.totalAdjustments >= 0
+                    ? `+${formatMoney(employeePayroll.totalAdjustments, payrollCurrency)}`
+                    : `-${formatMoney(Math.abs(employeePayroll.totalAdjustments), payrollCurrency)}`}
                 </span>
               </div>
 
@@ -216,7 +223,9 @@ export default function EmployeePayrollDetailPage({
                         a.amount >= 0 ? "text-emerald-700" : "text-red-700"
                       }`}
                     >
-                      {a.amount >= 0 ? `+₹${a.amount.toLocaleString()}` : `-₹${Math.abs(a.amount).toLocaleString()}`}
+                      {a.amount >= 0
+                        ? `+${formatMoney(a.amount, payrollCurrency)}`
+                        : `-${formatMoney(Math.abs(a.amount), payrollCurrency)}`}
                     </div>
                   </div>
                 ))}
@@ -234,7 +243,7 @@ export default function EmployeePayrollDetailPage({
                 {employerContributions.map((ec) => (
                   <div key={ec.id} className="py-1.5 flex justify-between">
                     <span className="text-slate-600">{ec.name}</span>
-                    <span className="font-semibold text-slate-900">₹{ec.proratedAmount.toLocaleString()}</span>
+                    <span className="font-semibold text-slate-900">{formatMoney(ec.proratedAmount, payrollCurrency)}</span>
                   </div>
                 ))}
               </div>

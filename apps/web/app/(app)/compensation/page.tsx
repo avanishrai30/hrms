@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { apiRequest } from "../../../lib/api";
+import { formatMoney } from "../../../lib/money";
 import type {
   CompensationBreakdownResult,
   CompensationTemplateView,
@@ -35,10 +36,9 @@ export default function CompensationDirectoryPage() {
   // Form states
   const [targetEmployeeId, setTargetEmployeeId] = useState("");
   const [targetTemplateId, setTargetTemplateId] = useState("");
-  const [monthlyCtcInput, setMonthlyCtcInput] = useState<number>(30000);
-  const [effectiveFromInput, setEffectiveFromInput] = useState(
-    new Date().toISOString().split("T")[0] ?? ""
-  );
+  const [monthlyCtcInput, setMonthlyCtcInput] = useState<number>(0);
+  const [currencyInput, setCurrencyInput] = useState("");
+  const [effectiveFromInput, setEffectiveFromInput] = useState("");
   const [reasonInput, setReasonInput] = useState<"JOINING_SALARY" | "ANNUAL_REVISION" | "PROMOTION_INCREASE" | "MANUAL_ADJUSTMENT">("JOINING_SALARY");
   const [notesInput, setNotesInput] = useState("");
   const [previewResult, setPreviewResult] = useState<CompensationBreakdownResult | null>(null);
@@ -101,6 +101,7 @@ export default function CompensationDirectoryPage() {
           templateId: targetTemplateId || undefined,
           effectiveFrom: effectiveFromInput,
           monthlyCtc: monthlyCtcInput,
+          currency: currencyInput,
           reason: reasonInput,
           notes: notesInput || undefined
         })
@@ -130,7 +131,7 @@ export default function CompensationDirectoryPage() {
           templateId: targetTemplateId || undefined,
           effectiveFrom: effectiveFromInput,
           reason: reasonInput,
-          notes: notesInput || "Annual performance salary increment"
+          notes: notesInput
         })
       });
 
@@ -147,18 +148,24 @@ export default function CompensationDirectoryPage() {
   const openAssignModal = (employeeId?: string) => {
     setTargetEmployeeId(employeeId ?? (employees[0]?.id ?? ""));
     setTargetTemplateId(templates[0]?.id ?? "");
-    setMonthlyCtcInput(35000);
+    setCurrencyInput(templates[0]?.currency ?? "");
+    setMonthlyCtcInput(0);
+    setEffectiveFromInput("");
     setReasonInput("JOINING_SALARY");
     setNotesInput("");
+    setPreviewResult(null);
     setShowAssignModal(true);
   };
 
   const openReviseModal = (comp: EmployeeCompensationView) => {
     setSelectedComp(comp);
     setTargetTemplateId(comp.templateId ?? "");
-    setMonthlyCtcInput(Math.round(comp.monthlyCtc * 1.1)); // Default 10% increment
+    setCurrencyInput(comp.currency);
+    setMonthlyCtcInput(comp.monthlyCtc);
+    setEffectiveFromInput("");
     setReasonInput("ANNUAL_REVISION");
     setNotesInput("");
+    setPreviewResult(null);
     setShowReviseModal(true);
   };
 
@@ -171,6 +178,7 @@ export default function CompensationDirectoryPage() {
   const totalMonthlyCtc = compensations.reduce((acc, c) => acc + c.monthlyCtc, 0);
   const avgMonthlyCtc = compensations.length > 0 ? Math.round(totalMonthlyCtc / compensations.length) : 0;
   const totalAnnualizedRunRate = totalMonthlyCtc * 12;
+  const metricsCurrency = compensations[0]?.currency;
 
   const filteredCompensations = compensations.filter((c) => {
     if (!search) return true;
@@ -225,7 +233,7 @@ export default function CompensationDirectoryPage() {
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <span className="text-xs font-semibold text-slate-500 uppercase">Monthly Payroll CTC</span>
           <div className="mt-2 text-2xl font-bold text-slate-900">
-            ₹{totalMonthlyCtc.toLocaleString()}
+            {formatMoney(totalMonthlyCtc, metricsCurrency)}
           </div>
           <span className="text-xs text-slate-400 mt-1 block">Active monthly run-rate</span>
         </div>
@@ -233,7 +241,7 @@ export default function CompensationDirectoryPage() {
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <span className="text-xs font-semibold text-slate-500 uppercase">Annualized CTC</span>
           <div className="mt-2 text-2xl font-bold text-emerald-600">
-            ₹{totalAnnualizedRunRate.toLocaleString()}
+            {formatMoney(totalAnnualizedRunRate, metricsCurrency)}
           </div>
           <span className="text-xs text-slate-400 mt-1 block">12-month projected spend</span>
         </div>
@@ -241,7 +249,7 @@ export default function CompensationDirectoryPage() {
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <span className="text-xs font-semibold text-slate-500 uppercase">Average Monthly CTC</span>
           <div className="mt-2 text-2xl font-bold text-slate-900">
-            ₹{avgMonthlyCtc.toLocaleString()}
+            {formatMoney(avgMonthlyCtc, metricsCurrency)}
           </div>
           <span className="text-xs text-slate-400 mt-1 block">Per enrolled employee</span>
         </div>
@@ -308,10 +316,10 @@ export default function CompensationDirectoryPage() {
                       <div className="text-xs text-slate-400">{c.employee?.designation?.name ?? "Staff"}</div>
                     </td>
                     <td className="px-4 py-3.5 font-bold text-slate-900">
-                      ₹{c.monthlyCtc.toLocaleString()}
+                      {formatMoney(c.monthlyCtc, c.currency)}
                     </td>
                     <td className="px-4 py-3.5 font-medium text-emerald-700">
-                      ₹{c.annualCtc.toLocaleString()}
+                      {formatMoney(c.annualCtc, c.currency)}
                     </td>
                     <td className="px-4 py-3.5">
                       {c.template ? (
@@ -381,7 +389,7 @@ export default function CompensationDirectoryPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Monthly CTC (₹)
+                    Monthly CTC
                   </label>
                   <input
                     type="number"
@@ -395,14 +403,36 @@ export default function CompensationDirectoryPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Currency
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={3}
+                    value={currencyInput}
+                    onChange={(e) => setCurrencyInput(e.target.value.toUpperCase())}
+                    placeholder="USD"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Compensation Template
                   </label>
                   <select
                     value={targetTemplateId}
-                    onChange={(e) => setTargetTemplateId(e.target.value)}
+                    onChange={(e) => {
+                      const templateId = e.target.value;
+                      setTargetTemplateId(templateId);
+                      const template = templates.find((t) => t.id === templateId);
+                      if (template) setCurrencyInput(template.currency);
+                    }}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                   >
-                    <option value="">Auto Standard Calculation</option>
+                    <option value="">Use configured active components</option>
                     {templates.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name} ({t.code})
@@ -456,13 +486,13 @@ export default function CompensationDirectoryPage() {
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 space-y-2 text-xs">
                   <div className="flex justify-between font-bold text-slate-900 text-sm border-b border-emerald-200 pb-2">
                     <span>Estimated Net Take Home</span>
-                    <span>₹{previewResult.netTakeHomeMonthly.toLocaleString()} / mo</span>
+                    <span>{formatMoney(previewResult.netTakeHomeMonthly, currencyInput)} / mo</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-slate-600 pt-1">
-                    <div>Gross Earnings: ₹{previewResult.grossEarningsMonthly.toLocaleString()}</div>
-                    <div>Deductions: ₹{previewResult.totalDeductionsMonthly.toLocaleString()}</div>
-                    <div>Annual CTC: ₹{previewResult.annualCtc.toLocaleString()}</div>
-                    <div>Employer PF/ESI: ₹{previewResult.employerContributionsMonthly.toLocaleString()}</div>
+                    <div>Gross Earnings: {formatMoney(previewResult.grossEarningsMonthly, currencyInput)}</div>
+                    <div>Deductions: {formatMoney(previewResult.totalDeductionsMonthly, currencyInput)}</div>
+                    <div>Annual CTC: {formatMoney(previewResult.annualCtc, currencyInput)}</div>
+                    <div>Employer PF/ESI: {formatMoney(previewResult.employerContributionsMonthly, currencyInput)}</div>
                   </div>
                 </div>
               )}
@@ -511,18 +541,18 @@ export default function CompensationDirectoryPage() {
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs flex items-center justify-between">
                 <div>
                   <span className="text-slate-500">Current Monthly CTC:</span>{" "}
-                  <span className="font-bold text-slate-900">₹{selectedComp.monthlyCtc.toLocaleString()}</span>
+                  <span className="font-bold text-slate-900">{formatMoney(selectedComp.monthlyCtc, selectedComp.currency)}</span>
                 </div>
                 <div>
                   <span className="text-slate-500">Current Annual:</span>{" "}
-                  <span className="font-bold text-slate-900">₹{selectedComp.annualCtc.toLocaleString()}</span>
+                  <span className="font-bold text-slate-900">{formatMoney(selectedComp.annualCtc, selectedComp.currency)}</span>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    New Monthly CTC (₹)
+                    New Monthly CTC
                   </label>
                   <input
                     type="number"
@@ -578,7 +608,7 @@ export default function CompensationDirectoryPage() {
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                   >
                     <option value="">Maintain Current Structure</option>
-                    {templates.map((t) => (
+                    {templates.filter((t) => t.currency === selectedComp.currency).map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}
                       </option>
@@ -643,11 +673,11 @@ export default function CompensationDirectoryPage() {
               <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg text-xs">
                 <div>
                   <span className="text-slate-500">Monthly CTC:</span>{" "}
-                  <span className="font-bold text-slate-900">₹{selectedComp.monthlyCtc.toLocaleString()}</span>
+                  <span className="font-bold text-slate-900">{formatMoney(selectedComp.monthlyCtc, selectedComp.currency)}</span>
                 </div>
                 <div>
                   <span className="text-slate-500">Annual CTC:</span>{" "}
-                  <span className="font-bold text-emerald-600">₹{selectedComp.annualCtc.toLocaleString()}</span>
+                  <span className="font-bold text-emerald-600">{formatMoney(selectedComp.annualCtc, selectedComp.currency)}</span>
                 </div>
               </div>
 
@@ -661,8 +691,8 @@ export default function CompensationDirectoryPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-slate-900">₹{item.monthlyAmount.toLocaleString()}/mo</div>
-                      <div className="text-slate-400 text-[10px]">₹{item.annualAmount.toLocaleString()}/yr</div>
+                      <div className="font-bold text-slate-900">{formatMoney(item.monthlyAmount, selectedComp.currency)}/mo</div>
+                      <div className="text-slate-400 text-[10px]">{formatMoney(item.annualAmount, selectedComp.currency)}/yr</div>
                     </div>
                   </div>
                 ))}

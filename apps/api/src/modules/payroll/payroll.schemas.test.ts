@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addPayrollAdjustmentSchema,
   approvePayrollRunSchema,
+  CreateSalaryBandSchema,
   createPayrollRunSchema,
   lockPayrollRunSchema
 } from "./payroll.schemas.js";
@@ -46,5 +47,18 @@ describe("Payroll Schemas", () => {
   it("validates approval and locking payloads", () => {
     expect(approvePayrollRunSchema.parse({ note: "Approved by HR" }).note).toBe("Approved by HR");
     expect(lockPayrollRunSchema.parse({ note: "Locked by Tenant Admin" }).note).toBe("Locked by Tenant Admin");
+  });
+
+  it("requires explicit salary band currency", () => {
+    expect(() =>
+      CreateSalaryBandSchema.parse({
+        bandCode: "L1",
+        bandName: "Level 1",
+        jobLevel: "Associate",
+        minCtc: 300000,
+        midCtc: 450000,
+        maxCtc: 600000
+      })
+    ).toThrow();
   });
 });

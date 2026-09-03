@@ -5,6 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { Badge } from "../../../../components/ui";
 import { apiRequest } from "../../../../lib/api";
+import { formatMoney } from "../../../../lib/money";
 import type { PayrollRunView } from "@vc-wms/shared-types";
 
 export default function PayrollHistoryPage() {
@@ -120,16 +121,16 @@ export default function PayrollHistoryPage() {
                     </td>
                     <td className="px-4 py-3.5 text-slate-700">{r.totalEmployees}</td>
                     <td className="px-4 py-3.5 font-medium text-slate-900">
-                      ₹{r.totalGross.toLocaleString()}
+                      {formatMoney(r.totalGross, r.currency)}
                     </td>
                     <td className="px-4 py-3.5 text-amber-700">
-                      ₹{r.totalDeductions.toLocaleString()}
+                      {formatMoney(r.totalDeductions, r.currency)}
                     </td>
                     <td className="px-4 py-3.5 font-bold text-emerald-700 text-base">
-                      ₹{r.totalNet.toLocaleString()}
+                      {formatMoney(r.totalNet, r.currency)}
                     </td>
                     <td className="px-4 py-3.5 text-slate-600">
-                      ₹{r.totalEmployerContributions.toLocaleString()}
+                      {formatMoney(r.totalEmployerContributions, r.currency)}
                     </td>
                     <td className="px-4 py-3.5">{getStatusBadge(r.status)}</td>
                     <td className="px-4 py-3.5 text-right">

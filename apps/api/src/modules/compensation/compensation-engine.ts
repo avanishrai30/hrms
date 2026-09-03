@@ -31,15 +31,14 @@ export class CompensationEngine {
     let basicMonthly = 0;
     if (basicComp) {
       if (basicComp.calculationType === "PERCENTAGE_OF_BASIC" || basicComp.calculationType === "PERCENTAGE_OF_GROSS") {
-        basicMonthly = Math.round((monthlyCtc * (basicComp.calculationValue || 50)) / 100);
-      } else if (basicComp.calculationType === "FLAT_AMOUNT" && basicComp.monthlyAmount && basicComp.monthlyAmount > 0) {
-        basicMonthly = basicComp.monthlyAmount;
+        basicMonthly = Math.round((monthlyCtc * basicComp.calculationValue) / 100);
+      } else if (basicComp.calculationType === "FLAT_AMOUNT") {
+        basicMonthly = basicComp.monthlyAmount ?? basicComp.calculationValue;
       } else {
-        // Default: 50% of CTC
-        basicMonthly = Math.round(monthlyCtc * 0.5);
+        throw new Error("Basic salary component must define an explicit calculation rule.");
       }
-    } else {
-      basicMonthly = Math.round(monthlyCtc * 0.5);
+    } else if (components.some((c) => c.calculationType === "PERCENTAGE_OF_BASIC")) {
+      throw new Error("Percentage-of-basic components require a configured BASIC component.");
     }
 
     const calculatedItems: CompensationBreakdownResult["items"] = [];
@@ -132,75 +131,4 @@ export class CompensationEngine {
     };
   }
 
-  /**
-   * Generates standard default Indian salary components suitable for factory/office workers.
-   */
-  static getDefaultComponents(): Array<Omit<ComponentCalculationInput, "componentId">> {
-    return [
-      {
-        name: "Basic Salary",
-        code: "BASIC",
-        type: "EARNING",
-        category: "BASIC",
-        calculationType: "PERCENTAGE_OF_BASIC",
-        calculationValue: 50
-      },
-      {
-        name: "House Rent Allowance",
-        code: "HRA",
-        type: "EARNING",
-        category: "HRA",
-        calculationType: "PERCENTAGE_OF_BASIC",
-        calculationValue: 40
-      },
-      {
-        name: "Conveyance Allowance",
-        code: "CONVEYANCE",
-        type: "EARNING",
-        category: "CONVEYANCE",
-        calculationType: "FLAT_AMOUNT",
-        calculationValue: 1600
-      },
-      {
-        name: "Medical Allowance",
-        code: "MEDICAL",
-        type: "EARNING",
-        category: "MEDICAL",
-        calculationType: "FLAT_AMOUNT",
-        calculationValue: 1250
-      },
-      {
-        name: "Special Allowance",
-        code: "SPECIAL_ALLOWANCE",
-        type: "EARNING",
-        category: "SPECIAL_ALLOWANCE",
-        calculationType: "FLAT_AMOUNT",
-        calculationValue: 0
-      },
-      {
-        name: "Provident Fund (Employee)",
-        code: "PF_EE",
-        type: "DEDUCTION",
-        category: "PF",
-        calculationType: "PERCENTAGE_OF_BASIC",
-        calculationValue: 12
-      },
-      {
-        name: "Professional Tax",
-        code: "PT",
-        type: "DEDUCTION",
-        category: "PROFESSIONAL_TAX",
-        calculationType: "FLAT_AMOUNT",
-        calculationValue: 200
-      },
-      {
-        name: "Provident Fund (Employer)",
-        code: "PF_ER",
-        type: "EMPLOYER_CONTRIBUTION",
-        category: "PF",
-        calculationType: "PERCENTAGE_OF_BASIC",
-        calculationValue: 12
-      }
-    ];
-  }
 }

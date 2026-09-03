@@ -118,6 +118,7 @@ export class PayslipsService {
         month: run.month,
         year: run.year,
         version,
+        currency: run.currency,
         generatedAt: new Date(),
         employee: {
           fullName: runEmp.employee.fullName,
@@ -260,6 +261,7 @@ export class PayslipsService {
       month: runEmp.payrollRun.month,
       year: runEmp.payrollRun.year,
       version,
+      currency: runEmp.payrollRun.currency,
       generatedAt: new Date(),
       employee: {
         fullName: runEmp.employee.fullName,
@@ -560,6 +562,15 @@ export class PayslipsService {
               designation: { select: { name: true } }
             }
           },
+          payrollRun: {
+            select: {
+              id: true,
+              month: true,
+              year: true,
+              status: true,
+              currency: true
+            }
+          },
           distributions: { take: 1, orderBy: { createdAt: "desc" } }
         },
         orderBy: [{ year: "desc" }, { month: "desc" }, { createdAt: "desc" }],
@@ -587,6 +598,15 @@ export class PayslipsService {
     return this.prisma.payslip.findMany({
       where: { tenantId, employeeId: employee.id },
       include: {
+        payrollRun: {
+          select: {
+            id: true,
+            month: true,
+            year: true,
+            status: true,
+            currency: true
+          }
+        },
         payrollRunEmployee: {
           include: {
             breakdowns: true,

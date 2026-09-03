@@ -143,7 +143,7 @@ export class PayrollController {
   ) {
     const tenant = requireTenantContext(req);
     const parsed = approvePayrollRunSchema.parse(body);
-    const primaryRole = tenant.roles[0] ?? "HR_ADMIN";
+    const primaryRole = requirePayrollActorRole(tenant.roles, "approve");
     return this.payrollService.approvePayrollRun(
       tenant.tenantId,
       id,
@@ -163,7 +163,7 @@ export class PayrollController {
   ) {
     const tenant = requireTenantContext(req);
     const parsed = lockPayrollRunSchema.parse(body);
-    const primaryRole = tenant.roles[0] ?? "TENANT_ADMIN";
+    const primaryRole = requirePayrollActorRole(tenant.roles, "lock");
     return this.payrollService.lockPayrollRun(
       tenant.tenantId,
       id,
@@ -305,7 +305,12 @@ export class PayrollController {
   ) {
     const tenant = requireTenantContext(req);
     const dto = UploadTaxProofSchema.parse(body);
-    return this.payrollService.uploadTaxProof(tenant.tenantId, dto);
+    return this.payrollService.uploadTaxProof(
+      tenant.tenantId,
+      dto,
+      tenant.userId,
+      tenant.membershipId
+    );
   }
 
   @Put("tax-proofs/:id/verify")
@@ -555,4 +560,13 @@ export class PayrollController {
     const tenant = requireTenantContext(req);
     return this.payrollService.getPayrollExecutiveAnalytics(tenant.tenantId);
   }
+}
+
+function requirePayrollActorRole(roles: string[], action: "approve" | "lock") {
+  const [primaryRole] = roles;
+  if (!primaryRole) {
+    throw new BadRequestException(`Payroll ${action} requires an authenticated role context.`);
+  }
+
+  return primaryRole;
 }

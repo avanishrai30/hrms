@@ -5,6 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { Badge } from "../../../../components/ui";
 import { apiRequest } from "../../../../lib/api";
+import { formatMoney } from "../../../../lib/money";
 import type { EmployeeCompensationHistoryView } from "@vc-wms/shared-types";
 
 interface EmployeeOption {
@@ -162,9 +163,9 @@ export default function CompensationHistoryPage() {
                       <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
                         <span className="text-[11px] text-slate-500 uppercase">Previous CTC</span>
                         <div className="text-base font-semibold text-slate-700 mt-1">
-                          ₹{h.previousMonthlyCtc.toLocaleString()} <span className="text-xs font-normal">/ mo</span>
+                          {formatMoney(h.previousMonthlyCtc, h.currency)} <span className="text-xs font-normal">/ mo</span>
                         </div>
-                        <div className="text-[11px] text-slate-400">₹{h.previousAnnualCtc.toLocaleString()} / yr</div>
+                        <div className="text-[11px] text-slate-400">{formatMoney(h.previousAnnualCtc, h.currency)} / yr</div>
                       </div>
 
                       <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
@@ -172,15 +173,17 @@ export default function CompensationHistoryPage() {
                           Revised New CTC
                         </span>
                         <div className="text-base font-bold text-emerald-950 mt-1">
-                          ₹{h.newMonthlyCtc.toLocaleString()} <span className="text-xs font-normal">/ mo</span>
+                          {formatMoney(h.newMonthlyCtc, h.currency)} <span className="text-xs font-normal">/ mo</span>
                         </div>
-                        <div className="text-[11px] text-emerald-700">₹{h.newAnnualCtc.toLocaleString()} / yr</div>
+                        <div className="text-[11px] text-emerald-700">{formatMoney(h.newAnnualCtc, h.currency)} / yr</div>
                       </div>
 
                       <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 flex flex-col justify-between">
                         <span className="text-[11px] text-slate-500 uppercase">Net Increment</span>
                         <div className="text-base font-bold text-emerald-600">
-                          {diffMonthly >= 0 ? `+₹${diffMonthly.toLocaleString()}` : `-₹${Math.abs(diffMonthly).toLocaleString()}`}
+                          {diffMonthly >= 0
+                            ? `+${formatMoney(diffMonthly, h.currency)}`
+                            : `-${formatMoney(Math.abs(diffMonthly), h.currency)}`}
                         </div>
                         <span className="text-[11px] font-semibold text-emerald-700">
                           {percentDiff !== "N/A" ? `${percentDiff}% increase` : "Initial Salary"}

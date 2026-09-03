@@ -32,128 +32,9 @@ export class CompensationService {
     private readonly auditService: AuditService
   ) {}
 
-  // ----------------- Default Seeding -----------------
-
-  async ensureDefaultComponentsAndTemplates(tenantId: string) {
-    const existingCount = await this.prisma.salaryComponent.count({
-      where: { tenantId }
-    });
-
-    if (existingCount === 0) {
-      const defaults = CompensationEngine.getDefaultComponents();
-      for (const d of defaults) {
-        await this.prisma.salaryComponent.create({
-          data: {
-            tenantId,
-            name: d.name,
-            code: d.code,
-            type: d.type,
-            category: d.category,
-            calculationType: d.calculationType,
-            calculationValue: d.calculationValue,
-            isTaxable: true,
-            isFixed: true,
-            isActive: true
-          }
-        });
-      }
-    }
-
-    const templateCount = await this.prisma.compensationTemplate.count({
-      where: { tenantId }
-    });
-
-    if (templateCount === 0) {
-      const allComponents = await this.prisma.salaryComponent.findMany({
-        where: { tenantId }
-      });
-
-      const basic = allComponents.find((c) => c.code === "BASIC");
-      const hra = allComponents.find((c) => c.code === "HRA");
-      const conv = allComponents.find((c) => c.code === "CONVEYANCE");
-      const med = allComponents.find((c) => c.code === "MEDICAL");
-      const spl = allComponents.find((c) => c.code === "SPECIAL_ALLOWANCE");
-      const pfEe = allComponents.find((c) => c.code === "PF_EE");
-      const pt = allComponents.find((c) => c.code === "PT");
-      const pfEr = allComponents.find((c) => c.code === "PF_ER");
-
-      if (basic && hra && spl) {
-        // Preset 1: Factory Worker
-        await this.prisma.compensationTemplate.create({
-          data: {
-            tenantId,
-            name: "Factory Worker Standard",
-            code: "FACTORY_WORKER",
-            description: "Standard wage structure for factory operators and plant technicians",
-            jobRole: "Factory Worker",
-            currency: "INR",
-            items: {
-              create: [
-                { tenantId, componentId: basic.id, calculationType: "PERCENTAGE_OF_BASIC", calculationValue: 50, order: 1 },
-                { tenantId, componentId: hra.id, calculationType: "PERCENTAGE_OF_BASIC", calculationValue: 40, order: 2 },
-                ...(conv ? [{ tenantId, componentId: conv.id, calculationType: "FLAT_AMOUNT" as const, calculationValue: 1600, order: 3 }] : []),
-                { tenantId, componentId: spl.id, calculationType: "FLAT_AMOUNT", calculationValue: 0, order: 4 },
-                ...(pfEe ? [{ tenantId, componentId: pfEe.id, calculationType: "PERCENTAGE_OF_BASIC" as const, calculationValue: 12, order: 5 }] : []),
-                ...(pt ? [{ tenantId, componentId: pt.id, calculationType: "FLAT_AMOUNT" as const, calculationValue: 200, order: 6 }] : []),
-                ...(pfEr ? [{ tenantId, componentId: pfEr.id, calculationType: "PERCENTAGE_OF_BASIC" as const, calculationValue: 12, order: 7 }] : [])
-              ]
-            }
-          }
-        });
-
-        // Preset 2: Warehouse Worker
-        await this.prisma.compensationTemplate.create({
-          data: {
-            tenantId,
-            name: "Warehouse Staff",
-            code: "WAREHOUSE_WORKER",
-            description: "Compensation structure for picker, packer, and warehouse fulfillment associates",
-            jobRole: "Warehouse Worker",
-            currency: "INR",
-            items: {
-              create: [
-                { tenantId, componentId: basic.id, calculationType: "PERCENTAGE_OF_BASIC", calculationValue: 50, order: 1 },
-                { tenantId, componentId: hra.id, calculationType: "PERCENTAGE_OF_BASIC", calculationValue: 40, order: 2 },
-                ...(conv ? [{ tenantId, componentId: conv.id, calculationType: "FLAT_AMOUNT" as const, calculationValue: 1600, order: 3 }] : []),
-                { tenantId, componentId: spl.id, calculationType: "FLAT_AMOUNT", calculationValue: 0, order: 4 },
-                ...(pfEe ? [{ tenantId, componentId: pfEe.id, calculationType: "PERCENTAGE_OF_BASIC" as const, calculationValue: 12, order: 5 }] : []),
-                ...(pt ? [{ tenantId, componentId: pt.id, calculationType: "FLAT_AMOUNT" as const, calculationValue: 200, order: 6 }] : [])
-              ]
-            }
-          }
-        });
-
-        // Preset 3: Manager
-        await this.prisma.compensationTemplate.create({
-          data: {
-            tenantId,
-            name: "Management & Corporate",
-            code: "MANAGER",
-            description: "Executive package with full medical allowance, PF, and variable flex allowances",
-            jobRole: "Manager",
-            currency: "INR",
-            items: {
-              create: [
-                { tenantId, componentId: basic.id, calculationType: "PERCENTAGE_OF_BASIC", calculationValue: 50, order: 1 },
-                { tenantId, componentId: hra.id, calculationType: "PERCENTAGE_OF_BASIC", calculationValue: 50, order: 2 },
-                ...(conv ? [{ tenantId, componentId: conv.id, calculationType: "FLAT_AMOUNT" as const, calculationValue: 3000, order: 3 }] : []),
-                ...(med ? [{ tenantId, componentId: med.id, calculationType: "FLAT_AMOUNT" as const, calculationValue: 2500, order: 4 }] : []),
-                { tenantId, componentId: spl.id, calculationType: "FLAT_AMOUNT", calculationValue: 0, order: 5 },
-                ...(pfEe ? [{ tenantId, componentId: pfEe.id, calculationType: "PERCENTAGE_OF_BASIC" as const, calculationValue: 12, order: 6 }] : []),
-                ...(pt ? [{ tenantId, componentId: pt.id, calculationType: "FLAT_AMOUNT" as const, calculationValue: 200, order: 7 }] : []),
-                ...(pfEr ? [{ tenantId, componentId: pfEr.id, calculationType: "PERCENTAGE_OF_BASIC" as const, calculationValue: 12, order: 8 }] : [])
-              ]
-            }
-          }
-        });
-      }
-    }
-  }
-
   // ----------------- Salary Components -----------------
 
   async listComponents(tenantId: string) {
-    await this.ensureDefaultComponentsAndTemplates(tenantId);
     return this.prisma.salaryComponent.findMany({
       where: { tenantId, isActive: true },
       orderBy: [{ type: "asc" }, { name: "asc" }]
@@ -248,7 +129,6 @@ export class CompensationService {
   // ----------------- Compensation Templates -----------------
 
   async listTemplates(tenantId: string) {
-    await this.ensureDefaultComponentsAndTemplates(tenantId);
     return this.prisma.compensationTemplate.findMany({
       where: { tenantId, isActive: true },
       include: {
@@ -383,8 +263,6 @@ export class CompensationService {
   // ----------------- Breakdown Calculation Preview -----------------
 
   async calculatePreview(tenantId: string, input: CalculateBreakdownDto) {
-    await this.ensureDefaultComponentsAndTemplates(tenantId);
-
     let components: ComponentCalculationInput[] = [];
 
     if (input.templateId) {
@@ -413,18 +291,7 @@ export class CompensationService {
     }
 
     if (components.length === 0) {
-      const allComp = await this.prisma.salaryComponent.findMany({
-        where: { tenantId, isActive: true }
-      });
-      components = allComp.map((c) => ({
-        componentId: c.id,
-        name: c.name,
-        code: c.code,
-        type: c.type,
-        category: c.category,
-        calculationType: c.calculationType,
-        calculationValue: c.calculationValue
-      }));
+      throw new BadRequestException("Salary components must be configured before compensation preview.");
     }
 
     return CompensationEngine.calculateBreakdown(input.monthlyCtc, components);
@@ -444,6 +311,21 @@ export class CompensationService {
     });
     if (!employee) {
       throw new NotFoundException("Employee not found.");
+    }
+
+    if (input.employeeId !== employeeId) {
+      throw new BadRequestException("Compensation employeeId must match the route employee.");
+    }
+
+    if (input.templateId) {
+      await this.assertTemplateInTenant(tenantId, input.templateId, input.currency);
+    }
+
+    if (input.items && input.items.length > 0) {
+      await this.assertComponentsInTenant(
+        tenantId,
+        input.items.map((item) => item.componentId)
+      );
     }
 
     const effectiveFromDate = new Date(input.effectiveFrom);
@@ -504,6 +386,7 @@ export class CompensationService {
             effectiveTo: null,
             approvedByUserId: actorUserId,
             breakdownSnapshot: {
+              currency: input.currency,
               previousMonthlyCtc: activeExisting.monthlyCtc,
               previousAnnualCtc: activeExisting.annualCtc,
               newMonthlyCtc: input.monthlyCtc,
@@ -524,7 +407,7 @@ export class CompensationService {
           effectiveTo: null,
           monthlyCtc: input.monthlyCtc,
           annualCtc,
-          currency: input.currency ?? "INR",
+          currency: input.currency,
           status: CompensationStatus.ACTIVE,
           reason: input.reason,
           notes: input.notes,
@@ -600,6 +483,17 @@ export class CompensationService {
     const effectiveFromDate = new Date(input.effectiveFrom);
     const newAnnualCtc = input.newAnnualCtc ?? Math.round(input.newMonthlyCtc * 12 * 100) / 100;
 
+    if (input.templateId) {
+      await this.assertTemplateInTenant(tenantId, input.templateId, currentActive.currency);
+    }
+
+    if (input.items && input.items.length > 0) {
+      await this.assertComponentsInTenant(
+        tenantId,
+        input.items.map((item) => item.componentId)
+      );
+    }
+
     let itemsToCreate: Array<{ componentId: string; monthlyAmount: number; annualAmount: number }> = [];
 
     if (input.items && input.items.length > 0) {
@@ -642,9 +536,10 @@ export class CompensationService {
           effectiveFrom: effectiveFromDate,
           effectiveTo: null,
           approvedByUserId: actorUserId,
-          breakdownSnapshot: {
-            previousMonthlyCtc: currentActive.monthlyCtc,
-            previousAnnualCtc: currentActive.annualCtc,
+            breakdownSnapshot: {
+              currency: currentActive.currency,
+              previousMonthlyCtc: currentActive.monthlyCtc,
+              previousAnnualCtc: currentActive.annualCtc,
             newMonthlyCtc: input.newMonthlyCtc,
             newAnnualCtc,
             items: itemsToCreate
@@ -744,14 +639,20 @@ export class CompensationService {
   }
 
   async getEmployeeHistory(tenantId: string, employeeId: string) {
-    return this.prisma.employeeCompensationHistory.findMany({
+    const history = await this.prisma.employeeCompensationHistory.findMany({
       where: { tenantId, employeeId },
       include: {
+        compensation: { select: { currency: true } },
         approvedBy: { select: { id: true, email: true } },
         employee: { select: { id: true, employeeCode: true, fullName: true } }
       },
       orderBy: { revisionDate: "desc" }
     });
+
+    return history.map(({ compensation, ...item }) => ({
+      ...item,
+      currency: compensation?.currency ?? null
+    }));
   }
 
   async listAllCompensations(tenantId: string, filters: CompensationFilterDto) {
@@ -822,5 +723,31 @@ export class CompensationService {
       orderBy: { createdAt: "desc" },
       take: limit
     });
+  }
+
+  private async assertTemplateInTenant(tenantId: string, templateId: string, expectedCurrency: string) {
+    const template = await this.prisma.compensationTemplate.findFirst({
+      where: { id: templateId, tenantId },
+      select: { currency: true }
+    });
+
+    if (!template) {
+      throw new NotFoundException("Compensation template not found.");
+    }
+
+    if (template.currency !== expectedCurrency) {
+      throw new BadRequestException("Compensation template currency must match employee compensation currency.");
+    }
+  }
+
+  private async assertComponentsInTenant(tenantId: string, componentIds: string[]) {
+    const uniqueComponentIds = [...new Set(componentIds)];
+    const ownedComponents = await this.prisma.salaryComponent.count({
+      where: { tenantId, id: { in: uniqueComponentIds } }
+    });
+
+    if (ownedComponents !== uniqueComponentIds.length) {
+      throw new BadRequestException("All compensation components must belong to the current tenant.");
+    }
   }
 }
