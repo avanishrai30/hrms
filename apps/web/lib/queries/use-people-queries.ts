@@ -101,8 +101,11 @@ export interface EmployeeRecordView {
   department?: { id: string; name: string; code?: string | undefined } | string | null | undefined;
   designationId?: string | undefined;
   designation?: { id: string; name: string; code?: string | undefined } | string | null | undefined;
+  locationId?: string | null | undefined;
+  location?: { id: string; name: string } | null | undefined;
   managerId?: string | null | undefined;
   managerName?: string | null | undefined;
+  manager?: { fullName?: string; email?: string } | null | undefined;
   profileCompletionScore?: number | undefined;
 }
 
@@ -569,6 +572,57 @@ export function useRejectLeaveMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["manager", "approvals"] });
       queryClient.invalidateQueries({ queryKey: ["manager", "dashboard"] });
+    }
+  });
+}
+
+export function useEmployeeLeaveBalances(employeeId: string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: ["people", "employee", employeeId, "leave-balances"] as const,
+    queryFn: () => apiRequest<Array<{ id: string; leaveType?: { name?: string }; allocatedDays?: number; usedDays?: number; availableDays?: number }>>(`/leaves/balances/${employeeId}`),
+    enabled: Boolean(employeeId) && enabled,
+    staleTime: 60 * 1000
+  });
+}
+
+export function useEmployeeAssets(employeeId: string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: ["people", "employee", employeeId, "assets"] as const,
+    queryFn: () => apiRequest<{ items?: Array<{ id: string; name: string; category?: string; serialNumber?: string; status: string }> } | Array<{ id: string; name: string; category?: string; serialNumber?: string; status: string }>>(`/assets?assignedEmployeeId=${employeeId}`),
+    enabled: Boolean(employeeId) && enabled,
+    staleTime: 60 * 1000
+  });
+}
+
+export function useUpdateEmployeeProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      apiRequest(`/employees/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data)
+      }),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: peopleKeys.employeeDetail(variables.id) });
+      qc.invalidateQueries({ queryKey: peopleKeys.employees() });
+      qc.invalidateQueries({ queryKey: peopleKeys.directory() });
+    }
+  });
+}
+
+export function useUpdateEmployeeStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      apiRequest(`/employees/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status })
+      }),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: peopleKeys.employeeDetail(variables.id) });
+      qc.invalidateQueries({ queryKey: peopleKeys.employees() });
+      qc.invalidateQueries({ queryKey: peopleKeys.directory() });
+      qc.invalidateQueries({ queryKey: peopleKeys.employeeTimeline(variables.id) });
     }
   });
 }

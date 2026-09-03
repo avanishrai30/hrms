@@ -1120,7 +1120,7 @@ export class AnalyticsEngine {
         dStat.count++;
         deptMap.set(deptName, dStat);
 
-        const buName = pEmp.employee.businessUnit?.name || "Corporate";
+        const buName = pEmp.employee.businessUnit?.name || "Unassigned";
         const buStat = buMap.get(buName) || { grossCost: 0, count: 0 };
         buStat.grossCost += pEmp.grossSalary;
         buStat.count++;

@@ -173,6 +173,66 @@ export function usePunchMutation() {
   });
 }
 
+// ----------------- Attendance Corrections -----------------
+
+export interface AttendanceCorrectionItem {
+  id: string;
+  attendanceRecordId?: string;
+  date: string;
+  requestedCheckIn?: string;
+  requestedCheckOut?: string;
+  reason: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  approverComments?: string;
+  createdAt: string;
+}
+
+export function useAttendanceCorrections(enabled: boolean = true) {
+  return useQuery({
+    queryKey: ["ess-attendance", "corrections"] as const,
+    queryFn: async () => {
+      const res = await apiRequest<AttendanceCorrectionItem[] | { corrections: AttendanceCorrectionItem[] }>("/attendance/corrections");
+      if (Array.isArray(res)) return res;
+      if (res && "corrections" in res && Array.isArray(res.corrections)) return res.corrections;
+      return [];
+    },
+    enabled,
+    staleTime: 30000
+  });
+}
+
+export function useSubmitAttendanceCorrection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { date: string; requestedCheckIn?: string; requestedCheckOut?: string; reason: string; attendanceRecordId?: string }) => {
+      return apiRequest("/attendance/corrections", {
+        method: "POST",
+        body: JSON.stringify(data)
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ess-attendance", "corrections"] });
+      queryClient.invalidateQueries({ queryKey: attendanceKeys.all });
+    }
+  });
+}
+
+export function useReviewAttendanceCorrection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, status, reviewNotes }: { id: string; status: "APPROVED" | "REJECTED"; reviewNotes?: string }) => {
+      return apiRequest(`/attendance/corrections/${id}/review`, {
+        method: "PATCH",
+        body: JSON.stringify({ status, reviewNotes })
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ess-attendance", "corrections"] });
+      queryClient.invalidateQueries({ queryKey: attendanceKeys.all });
+    }
+  });
+}
+
 // ----------------- Leave Types & Hooks -----------------
 
 export interface LeaveBalanceData {
@@ -202,7 +262,13 @@ export interface LeaveRequestData {
   status: string;
   startDate: string;
   endDate: string;
+  daysCount?: number;
   reason?: string;
+  employee?: {
+    id?: string;
+    fullName?: string;
+    employeeCode?: string;
+  } | null;
   leaveType?: {
     id?: string;
     name?: string;
@@ -306,6 +372,66 @@ export function useCancelLeaveRequest() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leaveKeys.all });
+    }
+  });
+}
+
+export function useLeaveCalendar(startDate?: string, endDate?: string, enabled: boolean = true) {
+  const qs = new URLSearchParams();
+  if (startDate) qs.set("startDate", startDate);
+  if (endDate) qs.set("endDate", endDate);
+  const qStr = qs.toString();
+  return useQuery({
+    queryKey: ["ess-leaves", "calendar", { startDate, endDate }] as const,
+    queryFn: async () => {
+      const res = await apiRequest<Array<{ id: string; employeeId: string; employeeName?: string; startDate: string; endDate: string; status: string; leaveType?: { name: string } }>>(`/leaves/calendar${qStr ? `?${qStr}` : ""}`);
+      return Array.isArray(res) ? res : [];
+    },
+    enabled,
+    staleTime: 60000
+  });
+}
+
+export function useAllLeaveRequests(enabled: boolean = true) {
+  return useQuery({
+    queryKey: ["ess-leaves", "all-requests"] as const,
+    queryFn: async () => {
+      const res = await apiRequest<LeaveRequestData[] | { requests: LeaveRequestData[] }>("/leaves/requests");
+      if (Array.isArray(res)) return res;
+      if (res && "requests" in res && Array.isArray(res.requests)) return res.requests;
+      return [];
+    },
+    enabled,
+    staleTime: 30000
+  });
+}
+
+export function useApproveLeaveRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, comments }: { id: string; comments?: string }) =>
+      apiRequest(`/leaves/requests/${id}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ comments })
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: leaveKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["ess-leaves", "all-requests"] });
+    }
+  });
+}
+
+export function useRejectLeaveRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiRequest(`/leaves/requests/${id}/reject`, {
+        method: "POST",
+        body: JSON.stringify({ reason })
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: leaveKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["ess-leaves", "all-requests"] });
     }
   });
 }

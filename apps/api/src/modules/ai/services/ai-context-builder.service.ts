@@ -220,7 +220,9 @@ export class AiContextBuilderService {
             where: { id: emp.managerEmployeeId },
             include: { designation: true }
           });
-          const snippet = `Reporting Manager: ${mgr?.fullName} (${mgr?.designation?.name || "Manager"}, Email: ${mgr?.email}), Department: ${emp.department?.name || "General"}`;
+          const mgrDesig = mgr?.designation?.name ? ` (${mgr.designation.name})` : "";
+          const deptStr = emp.department?.name ? `, Department: ${emp.department.name}` : "";
+          const snippet = `Reporting Manager: ${mgr?.fullName || "—"}${mgrDesig}, Email: ${mgr?.email || "—"}${deptStr}`;
           contextSnippets.push(`[ORGANIZATION HIERARCHY]:\n${snippet}`);
           sources.push({
             title: "Manager Hierarchy",

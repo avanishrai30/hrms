@@ -14,12 +14,21 @@ import {
   Mail,
   Layers,
   FileCheck,
-  CircleUser
+  CircleUser,
+  Calendar,
+  Laptop,
+  Edit2,
+  AlertTriangle,
+  UserX
 } from "lucide-react";
 import {
   useEmployee,
   useEmployeeTimeline,
   useEmployeeDocuments,
+  useEmployeeLeaveBalances,
+  useEmployeeAssets,
+  useUpdateEmployeeProfile,
+  useUpdateEmployeeStatus,
   formatEmploymentType,
   formatEmploymentStatus
 } from "../../../../lib/queries/use-people-queries";
@@ -45,6 +54,16 @@ import {
   TableRow,
   TableCell
 } from "../../../../components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from "../../../../components/ui/dialog";
+import { Input } from "../../../../components/ui/input";
+import { Label } from "../../../../components/ui/label";
 
 export default function EmployeeDetailPage({
   params
@@ -54,11 +73,34 @@ export default function EmployeeDetailPage({
   const { id } = use(params);
   const gate = usePermissionGate(["employees.read"]);
   const canReadDocuments = useHasPermission(["documents.read", "documents.view"]);
-  const [activeTab, setActiveTab] = useState<"overview" | "org" | "documents" | "timeline">("overview");
+  const canReadLeave = useHasPermission(["leave.view"]);
+  const canReadAssets = useHasPermission(["assets.view"]);
+  const canUpdate = useHasPermission(["employees.update"]);
+  const canUpdateStatus = useHasPermission(["employees.status.update"]);
+
+  const [activeTab, setActiveTab] = useState<"overview" | "org" | "leave" | "assets" | "documents" | "timeline">("overview");
+
+  // Edit Profile Dialog State
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editPhone, setEditPhone] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Status Change Dialog State
+  const [isStatusOpen, setIsStatusOpen] = useState(false);
+  const [newStatus, setNewStatus] = useState("ACTIVE");
+  const [statusReason, setStatusReason] = useState("");
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const { data: employee, isLoading, isError, refetch } = useEmployee(id, gate.isAuthorized);
   const { data: timeline = [] } = useEmployeeTimeline(id, gate.isAuthorized && activeTab === "timeline");
   const { data: documents = [] } = useEmployeeDocuments(id, gate.isAuthorized && canReadDocuments && activeTab === "documents");
+  const { data: leaveBalances = [] } = useEmployeeLeaveBalances(id, gate.isAuthorized && canReadLeave && activeTab === "leave");
+  const { data: assetsData } = useEmployeeAssets(id, gate.isAuthorized && canReadAssets && activeTab === "assets");
+
+  const assets = Array.isArray(assetsData) ? assetsData : (assetsData?.items ?? []);
+
+  const updateProfileMutation = useUpdateEmployeeProfile();
+  const updateStatusMutation = useUpdateEmployeeStatus();
 
   if (gate.isLoading || (gate.isAuthorized && isLoading)) {
     return (
@@ -117,6 +159,46 @@ export default function EmployeeDetailPage({
   const name = employee.fullName || "";
   const initial = name.trim().length > 0 ? name.trim().charAt(0).toUpperCase() : null;
 
+  const handleOpenEdit = () => {
+    setEditPhone(employee.phone || "");
+    setEditError(null);
+    setIsEditOpen(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setEditError(null);
+      await updateProfileMutation.mutateAsync({
+        id,
+        data: { phone: editPhone.trim() || undefined }
+      });
+      setIsEditOpen(false);
+    } catch (err: unknown) {
+      setEditError(err instanceof Error ? err.message : "Failed to update profile.");
+    }
+  };
+
+  const handleOpenStatus = () => {
+    setNewStatus(employee.status || "ACTIVE");
+    setStatusReason("");
+    setStatusError(null);
+    setIsStatusOpen(true);
+  };
+
+  const handleSaveStatus = async () => {
+    try {
+      setStatusError(null);
+      await updateStatusMutation.mutateAsync({
+        id,
+        status: newStatus
+      });
+      setIsStatusOpen(false);
+    } catch (err: unknown) {
+      setStatusError(err instanceof Error ? err.message : "Failed to update employee status.");
+    }
+  };
+
   return (
     <div className="flex flex-col gap-5 max-w-5xl mx-auto">
       {/* 1. Breadcrumb */}
@@ -168,7 +250,19 @@ export default function EmployeeDetailPage({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-border">
+            <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-border flex-wrap">
+              {canUpdate && (
+                <Button variant="outline" size="sm" onClick={handleOpenEdit}>
+                  <Edit2 className="size-3.5 mr-1.5" />
+                  <span>Edit Profile</span>
+                </Button>
+              )}
+              {canUpdateStatus && (
+                <Button variant="outline" size="sm" onClick={handleOpenStatus} className="text-destructive hover:text-destructive">
+                  <UserX className="size-3.5 mr-1.5" />
+                  <span>Change Status</span>
+                </Button>
+              )}
               <Button variant="outline" size="sm" asChild>
                 <Link href={"/employees" as Route}>
                   <ArrowLeft className="size-3.5 mr-1.5" />
@@ -180,11 +274,13 @@ export default function EmployeeDetailPage({
         </CardContent>
       </Card>
 
-      {/* 3. Detail Tabs (Studio Admin Tabs) */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "overview" | "org" | "documents" | "timeline")} className="w-full">
-        <TabsList className="grid grid-cols-4 w-full sm:w-auto">
+      {/* 3. Detail Tabs */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
+        <TabsList className="grid grid-cols-3 sm:grid-cols-6 w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="org">Hierarchy</TabsTrigger>
+          <TabsTrigger value="leave">Leave</TabsTrigger>
+          <TabsTrigger value="assets">Assets</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
@@ -210,8 +306,10 @@ export default function EmployeeDetailPage({
                   <span className="font-medium text-foreground">{employee.phone || "—"}</span>
                 </div>
                 <div className="flex justify-between py-1">
-                  <span className="text-muted-foreground">Location</span>
-                  <span className="font-medium text-foreground">—</span>
+                  <span className="text-muted-foreground">Work Location</span>
+                  <span className="font-medium text-foreground">
+                    {employee.location?.name || "—"}
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -250,30 +348,130 @@ export default function EmployeeDetailPage({
             <CardHeader className="border-b border-border pb-3">
               <CardTitle className="text-xs font-semibold flex items-center gap-2">
                 <Layers className="size-3.5 text-primary" />
-                Organizational Reporting Structure
+                Organizational Hierarchy
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-4 space-y-4 text-xs">
-              <div className="p-4 rounded-lg bg-muted/40 border border-border/60">
-                <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Reports To</p>
-                <p className="text-sm font-bold text-foreground mt-1">
-                  {employee.managerName || "—"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Manager ID: {employee.managerId || "—"}
-                </p>
+            <CardContent className="p-4 space-y-4">
+              <div className="rounded-lg border border-border p-3.5 bg-muted/20">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Department</p>
+                <p className="text-sm font-semibold text-foreground">{deptName}</p>
+                <p className="text-xs text-muted-foreground">Designation: {desigName}</p>
               </div>
 
-              <div className="p-4 rounded-lg bg-muted/40 border border-border/60">
-                <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Department & Team</p>
-                <p className="text-sm font-bold text-foreground mt-1">{deptName}</p>
-                <p className="text-xs text-muted-foreground">Designation: {desigName}</p>
+              <div className="rounded-lg border border-border p-3.5 bg-muted/20">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Reporting Manager</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {employee.manager?.fullName || "—"}
+                </p>
+                {employee.manager?.email && (
+                  <p className="text-xs text-muted-foreground font-mono">{employee.manager.email}</p>
+                )}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Tab 3: Documents */}
+        {/* Tab 3: Leave Balances */}
+        <TabsContent value="leave" className="mt-4 space-y-4">
+          {!canReadLeave ? (
+            <Card className="border-border p-6 text-center shadow-xs">
+              <Lock className="size-6 text-amber-500 mx-auto mb-2" />
+              <p className="text-xs font-semibold text-foreground">Leave Balances Restricted</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                You need <code className="font-mono text-[10px]">leave.view</code> permission to view leave entitlements.
+              </p>
+            </Card>
+          ) : leaveBalances.length > 0 ? (
+            <Card className="border border-border bg-card shadow-xs overflow-hidden">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Leave Type</TableHead>
+                      <TableHead className="text-right">Allocated</TableHead>
+                      <TableHead className="text-right">Used</TableHead>
+                      <TableHead className="text-right font-semibold text-primary">Available</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {leaveBalances.map((bal) => (
+                      <TableRow key={bal.id}>
+                        <TableCell className="font-medium text-foreground flex items-center gap-2">
+                          <Calendar className="size-3.5 text-primary" />
+                          <span>{bal.leaveType?.name || "Standard Leave"}</span>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">{bal.allocatedDays ?? 0}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">{bal.usedDays ?? 0}</TableCell>
+                        <TableCell className="text-right font-mono text-xs font-bold text-primary">
+                          {bal.availableDays ?? 0}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-dashed border-border py-12 text-center text-xs text-muted-foreground">
+              <Calendar className="size-8 mx-auto mb-2 opacity-40" />
+              <p className="font-semibold text-foreground">No leave balance records</p>
+              <p className="text-[11px] mt-0.5">Leave balance allocations for this employee have not been configured.</p>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Tab 4: Assets */}
+        <TabsContent value="assets" className="mt-4 space-y-4">
+          {!canReadAssets ? (
+            <Card className="border-border p-6 text-center shadow-xs">
+              <Lock className="size-6 text-amber-500 mx-auto mb-2" />
+              <p className="text-xs font-semibold text-foreground">Assets Access Restricted</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                You need <code className="font-mono text-[10px]">assets.view</code> permission to view assigned equipment.
+              </p>
+            </Card>
+          ) : assets.length > 0 ? (
+            <Card className="border border-border bg-card shadow-xs overflow-hidden">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Asset Name</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Serial Number</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {assets.map((asset) => (
+                      <TableRow key={asset.id}>
+                        <TableCell className="font-medium text-foreground flex items-center gap-2">
+                          <Laptop className="size-3.5 text-primary" />
+                          <span>{asset.name}</span>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{asset.category || "—"}</TableCell>
+                        <TableCell className="text-xs font-mono text-muted-foreground">{asset.serialNumber || "—"}</TableCell>
+                        <TableCell>
+                          <Badge variant={asset.status === "ASSIGNED" ? "success" : "secondary"} className="text-[10px]">
+                            {asset.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-dashed border-border py-12 text-center text-xs text-muted-foreground">
+              <Laptop className="size-8 mx-auto mb-2 opacity-40" />
+              <p className="font-semibold text-foreground">No assigned assets</p>
+              <p className="text-[11px] mt-0.5">No devices or equipment are currently assigned to this employee.</p>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Tab 5: Documents */}
         <TabsContent value="documents" className="mt-4 space-y-4">
           {!canReadDocuments ? (
             <Card className="border-border p-6 text-center shadow-xs">
@@ -326,7 +524,7 @@ export default function EmployeeDetailPage({
           )}
         </TabsContent>
 
-        {/* Tab 4: Timeline */}
+        {/* Tab 6: Timeline */}
         <TabsContent value="timeline" className="mt-4 space-y-4">
           {timeline.length > 0 ? (
             <Card className="border border-border bg-card shadow-xs p-5">
@@ -356,6 +554,98 @@ export default function EmployeeDetailPage({
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Profile Information</DialogTitle>
+            <DialogDescription>
+              Update direct contact details for {name}.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSaveEdit} className="space-y-4 py-2">
+            {editError && (
+              <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+                {editError}
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="phone">Contact Phone Number</Label>
+              <Input
+                id="phone"
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+                placeholder="+91 98765 43210"
+              />
+            </div>
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updateProfileMutation.isPending}>
+                {updateProfileMutation.isPending ? "Saving…" : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Status Confirmation Dialog (High Risk Action) */}
+      <Dialog open={isStatusOpen} onOpenChange={setIsStatusOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="size-5" />
+              Change Employment Status
+            </DialogTitle>
+            <DialogDescription>
+              Modify employment status for {name} ({employee.employeeCode || id}).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2 text-xs">
+            {statusError && (
+              <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive">
+                {statusError}
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label>Target Status</Label>
+              <select
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                value={newStatus}
+                onChange={(e) => setNewStatus(e.target.value)}
+              >
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="ON_LEAVE">ON_LEAVE</option>
+                <option value="SUSPENDED">SUSPENDED (Restricted)</option>
+                <option value="TERMINATED">TERMINATED (Offboarded)</option>
+              </select>
+            </div>
+
+            {(newStatus === "TERMINATED" || newStatus === "SUSPENDED") && (
+              <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive space-y-1">
+                <p className="font-semibold">Caution: Dangerous Action</p>
+                <p className="text-[11px] opacity-90">
+                  Setting this employee to {newStatus} will immediately revoke platform authentication access and trigger offboarding workflows.
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="pt-2">
+            <Button variant="outline" onClick={() => setIsStatusOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant={newStatus === "TERMINATED" || newStatus === "SUSPENDED" ? "destructive" : "default"}
+              onClick={handleSaveStatus}
+              disabled={updateStatusMutation.isPending}
+            >
+              {updateStatusMutation.isPending ? "Updating…" : `Confirm ${newStatus}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

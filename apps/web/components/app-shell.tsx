@@ -33,6 +33,7 @@ import {
 import type { PermissionCode } from "@vc-wms/shared-types";
 import { useSessionStore } from "../lib/session-store";
 import { useEmployeeProfile } from "../lib/queries/use-dashboard-queries";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest, refreshAccessToken } from "../lib/api";
 import {
   SidebarProvider,
@@ -260,6 +261,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: profile } = useEmployeeProfile();
   const [isDark, setIsDark] = useState(false);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
+
+  const { data: unreadData, refetch: refetchUnread } = useQuery({
+    queryKey: ["notifications", "unread-count"],
+    queryFn: () => apiRequest<{ unreadCount: number }>("/notifications/me/unread-count").catch(() => ({ unreadCount: 0 })),
+    refetchInterval: 30000,
+    staleTime: 15000,
+    enabled: !isAuthChecking && Boolean(accessToken)
+  });
+
+  const { data: notificationsData, refetch: refetchNotifications } = useQuery({
+    queryKey: ["notifications", "recent"],
+    queryFn: () => apiRequest<Array<{ id: string; title: string; message: string; isRead: boolean; createdAt: string }>>("/notifications/me").catch(() => []),
+    staleTime: 15000,
+    enabled: !isAuthChecking && Boolean(accessToken)
+  });
+
+  const unreadCount = unreadData?.unreadCount ?? 0;
+  const notifications = Array.isArray(notificationsData) ? notificationsData : [];
+
+  const handleMarkAllRead = async () => {
+    try {
+      await apiRequest("/notifications/me/read-all", { method: "POST" });
+      refetchUnread();
+      refetchNotifications();
+    } catch {
+      // silent
+    }
+  };
 
   React.useEffect(() => {
     let active = true;
@@ -510,14 +539,58 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
 
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              aria-label="Notifications"
-            >
-              <Bell className="size-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative h-8 w-8 text-muted-foreground hover:text-foreground"
+                  aria-label="Notifications"
+                >
+                  <Bell className="size-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1.5 right-1.5 flex h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80 p-0 shadow-lg border border-border">
+                <div className="flex items-center justify-between p-3 border-b border-border bg-muted/20">
+                  <span className="text-xs font-semibold text-foreground">Notifications</span>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={handleMarkAllRead}
+                      className="text-[11px] text-primary hover:underline font-medium"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-72 overflow-y-auto divide-y divide-border/60">
+                  {notifications.length > 0 ? (
+                    notifications.slice(0, 8).map((n) => (
+                      <div
+                        key={n.id}
+                        className={`p-3 text-xs space-y-0.5 transition ${
+                          !n.isRead ? "bg-muted/40 font-medium" : "text-muted-foreground"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground">{n.title}</span>
+                          <span className="text-[10px] font-mono text-muted-foreground">
+                            {n.createdAt ? new Date(n.createdAt).toLocaleDateString([], { month: "short", day: "numeric" }) : ""}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2">{n.message}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-6 text-center text-xs text-muted-foreground">
+                      No notifications to display.
+                    </div>
+                  )}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Separator orientation="vertical" className="h-4" />
 
