@@ -409,20 +409,25 @@ export class EssService {
       ];
     }
 
-    const employees = await this.prisma.employee.findMany({
-      where,
-      include: {
-        department: true,
-        designation: true,
-        businessUnit: true,
-        region: true,
-        team: true,
-        profile: true
-      },
-      orderBy: { fullName: "asc" },
-      take: filter?.limit ?? 50,
-      skip: filter?.offset ?? 0
-    });
+    const limit = filter?.limit ?? 50;
+    const offset = filter?.offset ?? 0;
+    const [employees, total] = await Promise.all([
+      this.prisma.employee.findMany({
+        where,
+        include: {
+          department: true,
+          designation: true,
+          businessUnit: true,
+          region: true,
+          team: true,
+          profile: true
+        },
+        orderBy: { fullName: "asc" },
+        take: limit,
+        skip: offset
+      }),
+      this.prisma.employee.count({ where })
+    ]);
 
     const managerIds = Array.from(
       new Set(employees.map((e) => e.managerEmployeeId).filter((id): id is string => Boolean(id)))
@@ -435,23 +440,28 @@ export class EssService {
 
     const managerMap = new Map(managers.map((m) => [m.id, m.fullName]));
 
-    return employees.map((e) => ({
-      id: e.id,
-      employeeCode: e.employeeCode,
-      fullName: e.fullName,
-      preferredName: e.preferredName,
-      email: e.email,
-      phone: e.phone,
-      department: e.department.name,
-      designation: e.designation.name,
-      businessUnit: e.businessUnit?.name || "Corporate",
-      team: e.team?.name || "Core Team",
-      region: e.region?.name || "Headquarters",
-      managerName: e.managerEmployeeId ? managerMap.get(e.managerEmployeeId) || null : null,
-      joiningDate: e.joiningDate.toISOString(),
-      profilePhoto: e.profile?.profilePhoto || e.profilePhotoObjectKey || null,
-      status: e.status
-    }));
+    return {
+      items: employees.map((e) => ({
+        id: e.id,
+        employeeCode: e.employeeCode,
+        fullName: e.fullName,
+        preferredName: e.preferredName,
+        email: e.email,
+        phone: e.phone,
+        department: e.department.name,
+        designation: e.designation.name,
+        businessUnit: e.businessUnit?.name,
+        team: e.team?.name,
+        region: e.region?.name,
+        managerName: e.managerEmployeeId ? managerMap.get(e.managerEmployeeId) || null : null,
+        joiningDate: e.joiningDate.toISOString(),
+        profilePhoto: e.profile?.profilePhoto || e.profilePhotoObjectKey || null,
+        status: e.status
+      })),
+      total,
+      limit,
+      offset
+    };
   }
 
   private calculateProfileCompletion(data: {

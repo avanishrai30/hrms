@@ -56,6 +56,12 @@ describe("Organization Directory (Task 18)", () => {
             return Promise.resolve([list[0]]);
           }
           return Promise.resolve(list);
+        }),
+        count: vi.fn().mockImplementation(({ where }) => {
+          if (where?.OR) {
+            return Promise.resolve(1);
+          }
+          return Promise.resolve(2);
         })
       }
     };
@@ -76,16 +82,18 @@ describe("Organization Directory (Task 18)", () => {
   it("searches organization directory and resolves reporting manager chains", async () => {
     const directory = await essService.getDirectory(tenantId, {});
 
-    expect(directory).toHaveLength(2);
-    expect(directory[0]!.fullName).toBe("Alice Smith");
-    expect(directory[1]!.fullName).toBe("Bob Johnson");
-    expect(directory[1]!.managerName).toBe("Alice Smith");
+    expect(directory.items).toHaveLength(2);
+    expect(directory.total).toBe(2);
+    expect(directory.items[0]!.fullName).toBe("Alice Smith");
+    expect(directory.items[1]!.fullName).toBe("Bob Johnson");
+    expect(directory.items[1]!.managerName).toBe("Alice Smith");
   });
 
   it("filters directory with search query", async () => {
     const results = await essService.getDirectory(tenantId, { search: "Alice" });
 
-    expect(results).toHaveLength(1);
-    expect(results[0]!.fullName).toBe("Alice Smith");
+    expect(results.items).toHaveLength(1);
+    expect(results.total).toBe(1);
+    expect(results.items[0]!.fullName).toBe("Alice Smith");
   });
 });

@@ -3,7 +3,6 @@
 import * as React from "react";
 import {
   Search,
-  ArrowUpDown,
   Filter,
   Download,
   ChevronLeft,
@@ -39,62 +38,46 @@ import {
   TableHead,
   TableCell
 } from "../../../../components/ui/table";
-import { useDirectory } from "../../../../lib/queries/use-people-queries";
+import { useDirectoryPage } from "../../../../lib/queries/use-people-queries";
+import { usePermissionGate } from "../../../../lib/session-store";
+import {
+  buildWorkforceCurrentPageCsv,
+  canRenderTenantWorkforceTable,
+  resolveRegionOrBusinessUnit,
+  unavailable
+} from "../../../../lib/workforce-table-data";
 import type { DirectoryEmployeeView } from "@vc-wms/shared-types";
 
 export function RecentWorkforceTable() {
+  const gate = usePermissionGate(["directory.view", "employees.read"]);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
-  const [sortOption, setSortOption] = React.useState<"name-asc" | "name-desc" | "code">("name-asc");
   const [pageIndex, setPageIndex] = React.useState(0);
   const [pageSize, setPageSize] = React.useState(5);
 
-  const { data: directoryData, isLoading } = useDirectory({
+  const { data: directoryData, isLoading } = useDirectoryPage({
     search: search.trim() || undefined,
-    limit: 50
-  });
+    status: statusFilter !== "all" ? statusFilter : undefined,
+    limit: pageSize,
+    offset: pageIndex * pageSize
+  }, gate.isAuthorized);
 
-  const rawEmployees: DirectoryEmployeeView[] = Array.isArray(directoryData) ? directoryData : [];
+  if (gate.isLoading || !canRenderTenantWorkforceTable(gate.permissions)) {
+    return null;
+  }
 
-  // Filter & sort
-  const filteredEmployees = React.useMemo(() => {
-    return rawEmployees
-      .filter((emp) => {
-        if (statusFilter === "all") return true;
-        return (emp.status || "").toLowerCase().includes(statusFilter.toLowerCase());
-      })
-      .sort((a, b) => {
-        if (sortOption === "name-asc") return a.fullName.localeCompare(b.fullName);
-        if (sortOption === "name-desc") return b.fullName.localeCompare(a.fullName);
-        if (sortOption === "code") return (a.employeeCode || "").localeCompare(b.employeeCode || "");
-        return 0;
-      });
-  }, [rawEmployees, statusFilter, sortOption]);
-
-  const totalRows = filteredEmployees.length;
+  const currentPageRows: DirectoryEmployeeView[] = directoryData?.items ?? [];
+  const totalRows = directoryData?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(totalRows / pageSize));
-  const currentPageRows = filteredEmployees.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
 
   const handleExport = () => {
-    const csvContent = [
-      ["Employee Code", "Name", "Email", "Department", "Region", "Status"].join(","),
-      ...filteredEmployees.map((e) =>
-        [
-          e.employeeCode || "",
-          `"${e.fullName}"`,
-          e.email || "",
-          `"${e.department || ""}"`,
-          `"${e.region || e.businessUnit || "HQ"}"`,
-          e.status || ""
-        ].join(",")
-      )
-    ].join("\n");
+    const csvContent = buildWorkforceCurrentPageCsv(currentPageRows);
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "vc-organics-workforce-report.csv");
+    link.setAttribute("download", `workforce-current-page-${pageIndex + 1}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -112,7 +95,7 @@ export function RecentWorkforceTable() {
         <CardAction>
           <Button variant="outline" size="sm" onClick={handleExport} className="h-8 gap-1.5">
             <Download className="size-3.5" />
-            <span>Export</span>
+            <span>Export page</span>
           </Button>
         </CardAction>
       </CardHeader>
@@ -150,33 +133,16 @@ export function RecentWorkforceTable() {
                   }}
                 >
                   <DropdownMenuRadioItem value="all">All Statuses</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="active">Active</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="leave">On Leave</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="probation">Probation</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="ACTIVE">Active</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="ON_LEAVE">On Leave</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="PROBATION">Probation</DropdownMenuRadioItem>
                 </DropdownMenuRadioGroup>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
 
           <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
-                  <ArrowUpDown className="size-3" />
-                  <span>Sort</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuRadioGroup
-                  value={sortOption}
-                  onValueChange={(val) => setSortOption(val as typeof sortOption)}
-                >
-                  <DropdownMenuRadioItem value="name-asc">Name (A–Z)</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="name-desc">Name (Z–A)</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="code">Employee Code</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <span className="text-[11px] text-muted-foreground">Sorted by name from server</span>
           </div>
         </div>
 
@@ -229,14 +195,14 @@ export function RecentWorkforceTable() {
                           variant={isActive ? "secondary" : "outline"}
                           className="text-[10px] font-normal"
                         >
-                          {emp.status ? emp.status.replace(/_/g, " ") : "Active"}
+                          {emp.status ? emp.status.replace(/_/g, " ") : "—"}
                         </Badge>
                       </TableCell>
                       <TableCell className="p-3 text-xs text-muted-foreground">
-                        {emp.department || "General"}
+                        {unavailable(emp.department)}
                       </TableCell>
                       <TableCell className="p-3 text-xs text-muted-foreground">
-                        {emp.region || emp.businessUnit || "HQ"}
+                        {resolveRegionOrBusinessUnit(emp)}
                       </TableCell>
                       <TableCell className="p-3 text-xs font-mono text-right text-muted-foreground">
                         {emp.employeeCode || "—"}
@@ -258,8 +224,8 @@ export function RecentWorkforceTable() {
         {/* Table Pagination Footer matching Studio Admin exact layout */}
         <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
           <div className="hidden sm:block">
-            Showing {filteredEmployees.length === 0 ? 0 : pageIndex * pageSize + 1} to{" "}
-            {Math.min((pageIndex + 1) * pageSize, filteredEmployees.length)} of {filteredEmployees.length} records
+            Showing {totalRows === 0 ? 0 : pageIndex * pageSize + 1} to{" "}
+            {Math.min((pageIndex + 1) * pageSize, totalRows)} of {totalRows} records
           </div>
 
           <div className="flex items-center gap-6 ml-auto sm:ml-0">

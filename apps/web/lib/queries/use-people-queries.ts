@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "../api";
+import { normalizeDirectoryPageResponse, type DirectoryPageResponse } from "../workforce-table-data";
 import type {
   DirectoryEmployeeView,
   BusinessUnitView,
@@ -35,6 +36,10 @@ export function useDebounce<T>(value: T, delay: number = 300): T {
 export interface DirectoryFilterParams {
   search?: string | undefined;
   departmentId?: string | undefined;
+  designationId?: string | undefined;
+  businessUnitId?: string | undefined;
+  teamId?: string | undefined;
+  status?: string | undefined;
   locationId?: string | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
@@ -44,6 +49,10 @@ export function buildDirectoryQueryParams(filter?: DirectoryFilterParams | undef
   const queryParams = new URLSearchParams();
   if (filter?.search) queryParams.set("search", filter.search);
   if (filter?.departmentId && filter.departmentId !== "ALL") queryParams.set("departmentId", filter.departmentId);
+  if (filter?.designationId && filter.designationId !== "ALL") queryParams.set("designationId", filter.designationId);
+  if (filter?.businessUnitId && filter.businessUnitId !== "ALL") queryParams.set("businessUnitId", filter.businessUnitId);
+  if (filter?.teamId && filter.teamId !== "ALL") queryParams.set("teamId", filter.teamId);
+  if (filter?.status && filter.status !== "all" && filter.status !== "ALL") queryParams.set("status", filter.status);
   if (filter?.locationId) queryParams.set("locationId", filter.locationId);
   if (filter?.limit !== undefined && filter?.limit !== null) queryParams.set("limit", String(filter.limit));
   if (filter?.offset !== undefined && filter?.offset !== null) queryParams.set("offset", String(filter.offset));
@@ -243,7 +252,21 @@ export function useDirectory(
   const path = `/directory${qs ? `?${qs}` : ""}`;
   return useQuery({
     queryKey: peopleKeys.directory(filter),
-    queryFn: () => apiRequest<DirectoryEmployeeView[]>(path),
+    queryFn: async () => normalizeDirectoryPageResponse(await apiRequest<DirectoryEmployeeView[] | DirectoryPageResponse>(path)).items,
+    enabled,
+    staleTime: 60 * 1000
+  });
+}
+
+export function useDirectoryPage(
+  filter?: DirectoryFilterParams | undefined,
+  enabled: boolean = true
+) {
+  const qs = buildDirectoryQueryParams(filter);
+  const path = `/directory${qs ? `?${qs}` : ""}`;
+  return useQuery({
+    queryKey: [...peopleKeys.directory(filter), "page"] as const,
+    queryFn: async () => normalizeDirectoryPageResponse(await apiRequest<DirectoryEmployeeView[] | DirectoryPageResponse>(path)),
     enabled,
     staleTime: 60 * 1000
   });
