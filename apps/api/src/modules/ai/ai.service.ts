@@ -2,7 +2,9 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 import { PrismaService } from "../prisma/prisma.service.js";
 import type {
   AiPromptRequestDto,
-  AiSettingsUpdateDto
+  AiSettingsUpdateDto,
+  AiToolConfirmDto,
+  AiToolExecuteDto
 } from "./ai.schemas.js";
 import { PredictionEngine } from "./engines/prediction.engine.js";
 import { InsightsEngine } from "./engines/insights.engine.js";
@@ -13,6 +15,8 @@ import { AI_PROVIDER, type AIProvider } from "./providers/ai-provider.interface.
 import { AiSecurityService } from "./services/ai-security.service.js";
 import { KnowledgeBaseService } from "./services/knowledge-base.service.js";
 import { NaturalLanguageReportsService } from "./services/natural-language-reports.service.js";
+import { AiContextBuilderService } from "./services/ai-context-builder.service.js";
+import { AiToolRegistryService, type ToolExecutionResult } from "./tools/ai-tool-registry.service.js";
 
 @Injectable()
 export class AiService {
@@ -24,7 +28,9 @@ export class AiService {
     private readonly knowledgeService: KnowledgeBaseService,
     private readonly predictionEngine: PredictionEngine,
     private readonly insightsEngine: InsightsEngine,
-    private readonly nlReportsService: NaturalLanguageReportsService
+    private readonly nlReportsService: NaturalLanguageReportsService,
+    private readonly contextBuilder: AiContextBuilderService,
+    private readonly toolRegistry: AiToolRegistryService
   ) {}
 
   async handleChatPrompt(
@@ -67,95 +73,81 @@ export class AiService {
       content: dto.prompt
     });
 
-    // 5. Intent Classification & Grounding Retrieval
-    const promptLower = dto.prompt.toLowerCase();
-    let intent = "GENERAL_CHAT";
-    let groundedDataText = "";
-    let dataPayload: Record<string, unknown> | null = null;
-    const quickReplies: string[] = [];
-    const suggestedActions: Array<{ label: string; action: string; payload?: Record<string, unknown> }> = [];
+    // 5. Build Grounded Context via Context Builder with Permission Intersection
+    const contextResult = await this.contextBuilder.buildGroundedContext({
+      tenantId,
+      userId,
+      userPermissions,
+      prompt: dto.prompt,
+      employeeId: employee?.id
+    });
 
-    if (promptLower.includes("leave") && (promptLower.includes("balance") || promptLower.includes("days") || promptLower.includes("how many"))) {
-      intent = "LEAVE_BALANCE";
-      if (employee) {
-        const balances = await this.prisma.leaveBalance.findMany({
-          where: { tenantId, employeeId: employee.id },
-          include: { leaveType: true }
-        });
-        const summary = balances.map((b: { leaveType: { name: string }; allocatedDays: number; usedDays: number }) => `${b.leaveType.name}: ${Math.max(0, b.allocatedDays - b.usedDays)} days remaining (Allocated: ${b.allocatedDays}, Used: ${b.usedDays})`).join("\n");
-        groundedDataText = `Employee Leave Balances for ${employee.fullName}:\n${summary || "No active leave balances mapped."}`;
-        dataPayload = {
-          type: "LEAVE_BALANCE",
-          balances: balances.map((b: { leaveType: { name: string }; allocatedDays: number; usedDays: number }) => ({
-            leaveType: b.leaveType.name,
-            available: Math.max(0, b.allocatedDays - b.usedDays),
-            total: b.allocatedDays
-          }))
-        };
-      }
-      suggestedActions.push({ label: "🌴 Apply for Leave", action: "NAVIGATE", payload: { href: "/leave/request" } });
-      quickReplies.push("How do I apply for casual leave?", "What is the holiday calendar?");
-    } else if (promptLower.includes("attendance") || promptLower.includes("punch") || promptLower.includes("shift")) {
-      intent = "ATTENDANCE_QUERY";
-      if (employee) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const att = await this.prisma.attendance.findFirst({
-          where: { tenantId, employeeId: employee.id, date: { gte: today } },
-          include: { shift: true }
-        });
-        groundedDataText = `Today's Attendance Status: ${att?.status || "NOT_RECORDED"}. Shift: ${att?.shift?.name || "—"}. Total Worked: ${(att?.workedMinutes ?? 0) / 60} hours.`;
-        dataPayload = {
-          type: "ATTENDANCE_STATUS",
-          status: att?.status || "NOT_RECORDED",
-          shiftName: att?.shift?.name || null,
-          checkIn: att?.checkInAt?.toISOString() || null
-        };
-      }
-      suggestedActions.push({ label: "⏱️ Punch In / Out", action: "NAVIGATE", payload: { href: "/attendance" } });
-      quickReplies.push("Show my attendance this month", "Submit attendance correction");
-    } else if (promptLower.includes("payslip") || promptLower.includes("salary") || promptLower.includes("pay")) {
-      intent = "PAYSLIP_QUERY";
-      if (employee) {
-        const latestPayslip = await this.prisma.payslip.findFirst({
-          where: { tenantId, employeeId: employee.id },
-          orderBy: { createdAt: "desc" }
-        });
-        if (latestPayslip) {
-          groundedDataText = `Latest Payslip Period: Month ${latestPayslip.month}/${latestPayslip.year}, Gross: ₹${latestPayslip.grossSalary}, Net Pay: ₹${latestPayslip.netSalary}, Status: ${latestPayslip.status}`;
-          dataPayload = {
-            type: "PAYSLIP_CARD",
-            payslipId: latestPayslip.id,
-            month: latestPayslip.month,
-            year: latestPayslip.year,
-            netPay: latestPayslip.netSalary
-          };
-          suggestedActions.push({ label: "💰 View Payslip", action: "NAVIGATE", payload: { href: `/payslips/${latestPayslip.id}` } });
+    let dataPayload: Record<string, unknown> | null = contextResult.dataPayload;
+    const sources = contextResult.sources;
+    const quickReplies = contextResult.quickReplies;
+    const suggestedActions = contextResult.suggestedActions;
+
+    // 6. Tool Proposal Detection (e.g. write actions requiring confirmation)
+    const promptLower = dto.prompt.toLowerCase();
+    if (promptLower.includes("apply for leave") || promptLower.includes("request leave")) {
+      if (userPermissions.includes("leave.create") && employee) {
+        const leaveType = await this.prisma.leaveType.findFirst({ where: { tenantId } });
+        if (leaveType) {
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const dayAfter = new Date(tomorrow);
+          dayAfter.setDate(dayAfter.getDate() + 1);
+
+          const toolProposal = await this.toolRegistry.executeTool({
+            tenantId,
+            userId,
+            userPermissions,
+            toolName: "submit_leave_request",
+            parameters: {
+              leaveTypeId: leaveType.id,
+              startDate: tomorrow.toISOString().split("T")[0],
+              endDate: dayAfter.toISOString().split("T")[0],
+              reason: "Applied via AI Copilot"
+            }
+          });
+
+          if (toolProposal.type === "PROPOSAL") {
+            dataPayload = {
+              type: "TOOL_PROPOSAL",
+              toolName: toolProposal.toolName,
+              confirmationToken: toolProposal.confirmationToken,
+              expiresAt: toolProposal.expiresAt,
+              parameters: toolProposal.parameters,
+              previewText: toolProposal.previewText
+            };
+          }
         }
       }
-      quickReplies.push("Explain my tax deductions", "Download Form 16");
-    } else if (promptLower.includes("manager") || promptLower.includes("reporting") || promptLower.includes("report to")) {
-      intent = "MANAGER_QUERY";
-      if (employee?.managerEmployeeId) {
-        const manager = await this.prisma.employee.findUnique({
-          where: { id: employee.managerEmployeeId },
-          include: { designation: true }
+    } else if (promptLower.includes("clock in") || promptLower.includes("clock out") || promptLower.includes("punch in")) {
+      if (userPermissions.includes("attendance.create")) {
+        const punchType = promptLower.includes("clock out") ? "OUT" : "IN";
+        const toolProposal = await this.toolRegistry.executeTool({
+          tenantId,
+          userId,
+          userPermissions,
+          toolName: "clock_attendance_punch",
+          parameters: { punchType }
         });
-        groundedDataText = `Reporting Manager: ${manager?.fullName} (${manager?.designation?.name || "Manager"}, Email: ${manager?.email})`;
-      } else {
-        groundedDataText = "You report directly to Executive Leadership.";
+
+        if (toolProposal.type === "PROPOSAL") {
+          dataPayload = {
+            type: "TOOL_PROPOSAL",
+            toolName: toolProposal.toolName,
+            confirmationToken: toolProposal.confirmationToken,
+            expiresAt: toolProposal.expiresAt,
+            parameters: toolProposal.parameters,
+            previewText: toolProposal.previewText
+          };
+        }
       }
-      quickReplies.push("View organization chart", "Search colleagues");
-    } else if (promptLower.includes("policy") || promptLower.includes("maternity") || promptLower.includes("probation") || promptLower.includes("notice period")) {
-      intent = "POLICY_SEARCH";
-      const relevantChunks = await this.knowledgeService.searchKnowledge(tenantId, { query: dto.prompt, topK: 3 });
-      if (relevantChunks.length > 0) {
-        groundedDataText = "Relevant Company Policy Excerpts:\n" + relevantChunks.map((c) => `[${c.documentTitle}]: ${c.content}`).join("\n\n");
-      }
-      quickReplies.push("What are the working hours?", "What is the travel reimbursement policy?");
     }
 
-    // 6. Build prompt and invoke AI Provider
+    // 7. Build prompt and invoke AI Provider
     const systemPrompt = buildHrAssistantSystemPrompt({
       tenantName: tenant.name,
       userName: user?.email || "User",
@@ -166,8 +158,8 @@ export class AiService {
       designation: employee?.designation?.name
     });
 
-    const fullPrompt = groundedDataText
-      ? `${dto.prompt}\n\n[VERIFIED TENANT DATA CONTEXT]:\n${groundedDataText}`
+    const fullPrompt = contextResult.groundedDataText
+      ? `${dto.prompt}\n\n[VERIFIED TENANT DATA CONTEXT]:\n${contextResult.groundedDataText}`
       : dto.prompt;
 
     const chatResponse = await this.aiProvider.chat(fullPrompt, {
@@ -179,26 +171,26 @@ export class AiService {
       }))
     });
 
-    // 7. PII Redaction
+    // 8. PII Redaction
     const sanitizedContent = this.securityService.maskPii(chatResponse.content, userPermissions);
 
-    // 8. Persist Assistant Response in Memory
+    // 9. Persist Assistant Response in Memory
     const assistantMessage = await this.memoryService.appendMessage(tenantId, conversation.id, {
       role: "ASSISTANT",
       content: sanitizedContent,
-      intent,
+      intent: "GENERAL_CHAT",
       dataPayload,
       tokensUsed: chatResponse.tokensUsed,
       modelUsed: chatResponse.model
     });
 
-    // 9. Audit Logging
+    // 10. Audit Logging
     await this.securityService.recordAiAudit(tenantId, userId, {
       action: "ai.query",
       promptSummary: dto.prompt,
       modelUsed: chatResponse.model,
       tokensUsed: chatResponse.tokensUsed,
-      intent
+      intent: "GENERAL_CHAT"
     });
 
     return {
@@ -206,8 +198,9 @@ export class AiService {
       messageId: assistantMessage.id,
       role: "assistant" as const,
       content: sanitizedContent,
-      intent,
+      intent: "GENERAL_CHAT",
       dataPayload,
+      sources,
       tokensUsed: chatResponse.tokensUsed,
       modelUsed: chatResponse.model,
       quickReplies,
@@ -215,91 +208,124 @@ export class AiService {
     };
   }
 
+  async executeTool(
+    tenantId: string,
+    userId: string,
+    userPermissions: string[],
+    dto: AiToolExecuteDto
+  ): Promise<ToolExecutionResult> {
+    return this.toolRegistry.executeTool({
+      tenantId,
+      userId,
+      userPermissions,
+      toolName: dto.toolName,
+      parameters: dto.parameters
+    });
+  }
+
+  async confirmTool(
+    tenantId: string,
+    userId: string,
+    userPermissions: string[],
+    dto: AiToolConfirmDto
+  ) {
+    return this.toolRegistry.confirmToolExecution({
+      tenantId,
+      userId,
+      userPermissions,
+      confirmationToken: dto.confirmationToken
+    });
+  }
+
+  getAvailableTools(userPermissions: string[]) {
+    return this.toolRegistry.getAvailableTools(userPermissions);
+  }
+
   async getExecutiveAiSummary(tenantId: string, _userId: string) {
     const [
       activeCount,
-      allEmployees,
-      topInsights,
-      headcountForecast
+      departments,
+      recentVerifications,
+      predictions
     ] = await Promise.all([
       this.prisma.employee.count({ where: { tenantId, status: "ACTIVE" } }),
-      this.prisma.employee.findMany({
-        where: { tenantId, status: "ACTIVE" },
-        take: 20
+      this.prisma.department.findMany({
+        where: { tenantId },
+        select: { id: true, name: true, _count: { select: { employees: true } } }
       }),
-      this.insightsEngine.listInsights(tenantId),
-      this.predictionEngine.calculateHeadcountForecast(tenantId)
+      this.prisma.faceVerification.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: "desc" },
+        take: 50
+      }),
+      this.prisma.aiWorkforcePrediction.findMany({
+        where: { tenantId },
+        take: 10
+      })
     ]);
 
-    // Calculate sample predictions for active employees
-    const attritionPredictions = [];
-    const burnoutPredictions = [];
+    const highAttritionRisks = predictions.filter(
+      (p: { predictionType: string; riskScore: number }) => p.predictionType === "ATTRITION_RISK" && p.riskScore >= 70
+    ).length;
 
-    for (const emp of allEmployees.slice(0, 8)) {
-      const attRisk = await this.predictionEngine.calculateEmployeeAttritionRisk(tenantId, emp.id).catch(() => null);
-      if (attRisk) attritionPredictions.push(attRisk);
-
-      const burnRisk = await this.predictionEngine.calculateEmployeeBurnoutRisk(tenantId, emp.id).catch(() => null);
-      if (burnRisk) burnoutPredictions.push(burnRisk);
-    }
-
-    attritionPredictions.sort((a, b) => b.riskScore - a.riskScore);
-    burnoutPredictions.sort((a, b) => b.riskScore - a.riskScore);
-
-    const highAttritionCount = attritionPredictions.filter((a) => a.riskScore >= 70).length;
-    const criticalBurnoutCount = burnoutPredictions.filter((b) => b.riskScore >= 70).length;
-
-    const narrative = `Executive Workforce Summary: Total active headcount is ${activeCount} with a steady ${headcountForecast.growthTrendMonthly > 0 ? "+" : ""}${headcountForecast.growthTrendMonthly} monthly net talent trajectory. Workforce attrition risk is controlled with ${highAttritionCount} elevated cases flagged for retention catchups. Overall attendance regularity remains healthy at 94.8%.`;
+    const matchedVerifications = recentVerifications.filter(
+      (v: { status: string }) => v.status === "MATCHED"
+    ).length;
+    const biometricTrustScore =
+      recentVerifications.length > 0
+        ? Math.round((matchedVerifications / recentVerifications.length) * 100)
+        : 100;
 
     return {
-      tenantId,
-      generatedAt: new Date().toISOString(),
-      narrative,
-      metrics: {
-        headcountTrend: { current: activeCount, previous: Math.max(1, activeCount - 2), changePercent: 5.2 },
-        attritionRiskSummary: {
-          highRiskCount: highAttritionCount,
-          averageScore: attritionPredictions.length > 0 ? Math.round(attritionPredictions.reduce((acc, p) => acc + p.riskScore, 0) / attritionPredictions.length) : 24,
-          topDepartment: attritionPredictions[0]?.department || "Engineering"
-        },
-        burnoutRiskSummary: {
-          criticalCount: criticalBurnoutCount,
-          averageScore: burnoutPredictions.length > 0 ? Math.round(burnoutPredictions.reduce((acc, p) => acc + p.riskScore, 0) / burnoutPredictions.length) : 28
-        },
-        attendanceHealth: { currentRate: 94.8, trend: "+1.2% vs last month" },
-        payrollCostSummary: { latestTotal: 4850000, changePercent: 3.8 },
-        complianceScore: 98.5
-      },
-      topInsights: topInsights.slice(0, 4),
-      topAttritionRisks: attritionPredictions.slice(0, 5),
-      topBurnoutRisks: burnoutPredictions.slice(0, 5),
-      headcountForecasts: headcountForecast.forecastHorizon
+      activeEmployees: activeCount,
+      departmentCount: departments.length,
+      biometricTrustScore,
+      highAttritionRisksCount: highAttritionRisks,
+      recentAlerts: [
+        {
+          id: "alert-1",
+          title: "Workforce Telemetry Active",
+          description: `Telemetry monitored across ${departments.length} departments.`,
+          severity: "INFO",
+          timestamp: new Date().toISOString()
+        }
+      ]
     };
   }
 
   async getApprovalSummary(tenantId: string, requestId: string) {
-    const req = await this.prisma.employeeRequest.findFirst({
+    const request = await this.prisma.leaveRequest.findFirst({
       where: { id: requestId, tenantId },
-      include: { employee: { include: { department: true } } }
+      include: {
+        employee: { include: { department: true, designation: true } },
+        leaveType: true
+      }
     });
 
-    if (!req) {
-      throw new NotFoundException("Request not found.");
+    if (!request) {
+      throw new NotFoundException("Approval request not found.");
     }
 
-    const pastRequestsCount = await this.prisma.employeeRequest.count({
-      where: { tenantId, employeeId: req.employeeId }
+    const employeeLeaves = await this.prisma.leaveRequest.count({
+      where: {
+        tenantId,
+        employeeId: request.employeeId,
+        status: "APPROVED"
+      }
     });
 
     return {
-      requestId: req.id,
-      requestType: req.requestType,
-      employeeName: req.employee.fullName,
-      summaryText: `Employee ${req.employee.fullName} (${req.employee.department.name}) submitted a ${req.requestType.replace(/_/g, " ")} request. Reason: "${req.reason}".`,
-      riskAssessment: (pastRequestsCount > 4 ? "MEDIUM_RISK" : "LOW_RISK") as "LOW_RISK" | "MEDIUM_RISK",
-      balanceAfterApproval: 12,
-      policyViolations: [],
-      historicalContext: `Employee has submitted ${pastRequestsCount} total self-service requests over their tenure.`
+      requestId: request.id,
+      employeeName: request.employee.fullName,
+      employeeCode: request.employee.employeeCode,
+      department: request.employee.department?.name || "—",
+      leaveType: request.leaveType.name,
+      dates: `${request.startDate.toISOString().split("T")[0]} to ${request.endDate.toISOString().split("T")[0]}`,
+      daysRequested: request.totalDays,
+      reason: request.reason || "No reason specified",
+      historicalLeavesTaken: employeeLeaves,
+      aiRecommendation: request.totalDays <= 3 ? "APPROVE" : "MANUAL_REVIEW",
+      riskScore: request.totalDays > 5 ? 65 : 20
     };
   }
 
@@ -381,38 +407,51 @@ export class AiService {
   }
 
   async getCeoDashboard(tenantId: string) {
-    const employeeCount = await this.prisma.employee.count({ where: { tenantId, status: "ACTIVE" } });
+    const [employeeCount, latestPayrollRun, attritionHistory] = await Promise.all([
+      this.prisma.employee.count({ where: { tenantId, status: "ACTIVE" } }),
+      this.prisma.payrollRun.findFirst({
+        where: { tenantId, status: { in: ["APPROVED", "LOCKED", "GENERATED"] } },
+        orderBy: { createdAt: "desc" }
+      }),
+      this.prisma.employeeStatusHistory.count({
+        where: { tenantId, newStatus: "INACTIVE" }
+      })
+    ]);
 
-    const totalEmployees = employeeCount || 120;
-    const totalPayrollAnnualInr = totalEmployees * 950000;
-    const annualRevenueInr = totalPayrollAnnualInr * 4.2; // 4.2x multiplier standard
+    const totalEmployees = employeeCount;
+    const monthlyGross = latestPayrollRun?.totalGross ?? 0;
+    const totalPayrollAnnualInr = monthlyGross * 12;
+    const annualRevenueInr = totalPayrollAnnualInr * 4;
 
     return ExecutiveAiEngine.computeCeoMetrics({
       totalEmployees,
       annualRevenueInr,
       totalPayrollAnnualInr,
-      avgOpenDays: 24,
-      attritionCount: Math.round(totalEmployees * 0.07),
-      completedGoalsPercent: 88.5
+      avgOpenDays: 0,
+      attritionCount: attritionHistory,
+      completedGoalsPercent: totalEmployees > 0 ? 80 : 0
     });
   }
 
   async getChroDashboard(tenantId: string) {
-    const [employeeCount, completedCourses, enrolledCourses] = await Promise.all([
+    const [employeeCount, completedCourses, enrolledCourses, highRiskPredictions] = await Promise.all([
       this.prisma.employee.count({ where: { tenantId, status: "ACTIVE" } }),
       this.prisma.courseEnrollment.count({ where: { tenantId, status: "COMPLETED" } }),
-      this.prisma.courseEnrollment.count({ where: { tenantId } })
+      this.prisma.courseEnrollment.count({ where: { tenantId } }),
+      this.prisma.aiWorkforcePrediction.count({
+        where: { tenantId, predictionType: "ATTRITION_RISK", riskScore: { gte: 70 } }
+      })
     ]);
 
-    const total = employeeCount || 100;
+    const total = employeeCount;
     return ExecutiveAiEngine.computeChroMetrics({
-      avgHappinessScore: 4.35,
-      performanceRatingAvg: 4.15,
-      completedTrainings: completedCourses || 45,
-      enrolledTrainings: enrolledCourses || 50,
-      readySuccessors: Math.round(total * 0.15),
-      keyPositions: Math.round(total * 0.2),
-      flightRisks: Math.max(1, Math.round(total * 0.04))
+      avgHappinessScore: total > 0 ? 4.0 : 0,
+      performanceRatingAvg: total > 0 ? 3.8 : 0,
+      completedTrainings: completedCourses,
+      enrolledTrainings: enrolledCourses,
+      readySuccessors: 0,
+      keyPositions: Math.max(1, Math.round(total * 0.1)),
+      flightRisks: highRiskPredictions
     });
   }
 
@@ -428,10 +467,10 @@ export class AiService {
       })
     ]);
 
-    const monthlyPayrollInr = payrollRun?.totalNet || 4850000;
-    const pendingClaimsInr = approvedClaims._sum.totalAmount || 125000;
-    const allocatedAnnualBudgetInr = monthlyPayrollInr * 14; // including bonuses & benefits
-    const spentToDateInr = monthlyPayrollInr * 8; // 8 months in
+    const monthlyPayrollInr = payrollRun?.totalNet || 0;
+    const pendingClaimsInr = approvedClaims._sum.totalAmount || 0;
+    const allocatedAnnualBudgetInr = monthlyPayrollInr * 12;
+    const spentToDateInr = monthlyPayrollInr;
 
     return ExecutiveAiEngine.computeCfoMetrics({
       monthlyPayrollInr,

@@ -52,3 +52,15 @@ export const AiSettingsUpdateSchema = z.object({
   enableWorkforcePredictions: z.boolean().optional()
 });
 export type AiSettingsUpdateDto = z.infer<typeof AiSettingsUpdateSchema>;
+
+export const AiToolExecuteSchema = z.object({
+  toolName: z.string().min(1).max(100),
+  parameters: z.record(z.unknown()).default({})
+});
+export type AiToolExecuteDto = z.infer<typeof AiToolExecuteSchema>;
+
+export const AiToolConfirmSchema = z.object({
+  confirmationToken: z.string().min(1).max(128)
+});
+export type AiToolConfirmDto = z.infer<typeof AiToolConfirmSchema>;
+

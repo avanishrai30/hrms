@@ -25,7 +25,11 @@ import {
   AiPromptRequestSchema,
   type AiPromptRequestDto,
   AiSettingsUpdateSchema,
-  type AiSettingsUpdateDto
+  type AiSettingsUpdateDto,
+  AiToolConfirmSchema,
+  type AiToolConfirmDto,
+  AiToolExecuteSchema,
+  type AiToolExecuteDto
 } from "./ai.schemas.js";
 import { AiService } from "./ai.service.js";
 import { DocumentAiService } from "./services/document-ai.service.js";
@@ -55,6 +59,33 @@ export class AiController {
   ) {
     const tenant = requireTenantContext(req);
     return this.aiService.handleChatPrompt(tenant.tenantId, tenant.userId, tenant.permissions, body);
+  }
+
+  @Get("tools")
+  @RequirePermissions("ai.chat")
+  async listTools(@Req() req: AuthenticatedRequest) {
+    const tenant = requireTenantContext(req);
+    return this.aiService.getAvailableTools(tenant.permissions);
+  }
+
+  @Post("tools/execute")
+  @RequirePermissions("ai.chat")
+  async executeTool(
+    @Req() req: AuthenticatedRequest,
+    @Body(new ZodValidationPipe(AiToolExecuteSchema)) body: AiToolExecuteDto
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.aiService.executeTool(tenant.tenantId, tenant.userId, tenant.permissions, body);
+  }
+
+  @Post("tools/confirm")
+  @RequirePermissions("ai.chat")
+  async confirmTool(
+    @Req() req: AuthenticatedRequest,
+    @Body(new ZodValidationPipe(AiToolConfirmSchema)) body: AiToolConfirmDto
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.aiService.confirmTool(tenant.tenantId, tenant.userId, tenant.permissions, body);
   }
 
   @Get("conversations")

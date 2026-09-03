@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Badge, Button, Field, Input, Panel } from "../../../../components/ui";
 import { apiRequest } from "../../../../lib/api";
 import type { AiKnowledgeChunkView, AiKnowledgeDocumentView } from "@vc-wms/shared-types";
+import { AiNavBar } from "../components/ai-nav-bar";
 
 export default function AiKnowledgeBasePage() {
   const [documents, setDocuments] = useState<AiKnowledgeDocumentView[]>([]);
@@ -92,7 +93,9 @@ export default function AiKnowledgeBasePage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-4 max-w-6xl mx-auto">
+      <AiNavBar />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

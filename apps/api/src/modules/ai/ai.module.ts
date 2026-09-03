@@ -14,12 +14,16 @@ import { AiSecurityService } from "./services/ai-security.service.js";
 import { KnowledgeBaseService } from "./services/knowledge-base.service.js";
 import { DocumentAiService } from "./services/document-ai.service.js";
 import { NaturalLanguageReportsService } from "./services/natural-language-reports.service.js";
+import { AiContextBuilderService } from "./services/ai-context-builder.service.js";
+import { AiToolRegistryService } from "./tools/ai-tool-registry.service.js";
 
 @Module({
   imports: [PrismaModule, AuditModule],
   controllers: [AiController],
   providers: [
     AiService,
+    AiContextBuilderService,
+    AiToolRegistryService,
     ConversationMemoryService,
     PredictionEngine,
     InsightsEngine,
@@ -37,6 +41,8 @@ import { NaturalLanguageReportsService } from "./services/natural-language-repor
   ],
   exports: [
     AiService,
+    AiContextBuilderService,
+    AiToolRegistryService,
     PredictionEngine,
     InsightsEngine,
     KnowledgeBaseService,

@@ -43,7 +43,19 @@ export class ExecutiveAiEngine {
     attritionCount: number;
     completedGoalsPercent: number;
   }): CeoMetrics {
-    const totalEmployees = Math.max(1, params.totalEmployees);
+    if (params.totalEmployees <= 0) {
+      return {
+        totalEmployees: 0,
+        revenuePerEmployee: 0,
+        totalWorkforceCostInr: 0,
+        hiringVelocityDays: 0,
+        attritionRiskPercent: 0,
+        productivityIndex: 0,
+        growthForecastPercent: 0
+      };
+    }
+
+    const totalEmployees = params.totalEmployees;
     const revenuePerEmployee = Math.round(params.annualRevenueInr / totalEmployees);
     const attritionRiskPercent = parseFloat(((params.attritionCount / totalEmployees) * 100).toFixed(1));
     const productivityIndex = Math.min(100, Math.round((params.completedGoalsPercent * 0.7) + (30 * (1 - (attritionRiskPercent / 100)))));

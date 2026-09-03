@@ -6,6 +6,16 @@ import Link from "next/link";
 import { Badge, Button, Input, Panel } from "../../../components/ui";
 import { apiRequest } from "../../../lib/api";
 import type { AiPromptResponseView } from "@vc-wms/shared-types";
+import { AiNavBar } from "./components/ai-nav-bar";
+
+interface ToolProposalData {
+  type: "TOOL_PROPOSAL";
+  toolName: string;
+  confirmationToken: string;
+  expiresAt: string;
+  parameters: Record<string, unknown>;
+  previewText: string;
+}
 
 interface ChatMessage {
   id: string;
@@ -13,6 +23,7 @@ interface ChatMessage {
   content: string;
   intent?: string | undefined;
   dataPayload?: Record<string, unknown> | undefined;
+  sources?: Array<{ title: string; category: string; excerpt: string }> | undefined;
   tokensUsed?: number | undefined;
   modelUsed?: string | undefined;
   createdAt: string;
@@ -25,7 +36,7 @@ const QUICK_PROMPTS = [
   "⏱️ Show my attendance today",
   "💰 View my latest payslip",
   "📜 What is the maternity leave policy?",
-  "📊 Summarize workforce attrition risks"
+  "📝 Apply for leave tomorrow"
 ];
 
 export default function AiCopilotPage() {
@@ -34,6 +45,7 @@ export default function AiCopilotPage() {
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingTokens, setConfirmingTokens] = useState<Record<string, "pending" | "confirmed" | "failed">>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -50,12 +62,12 @@ export default function AiCopilotPage() {
       {
         id: "welcome-1",
         role: "assistant",
-        content: "Hello! I am your **AIavro HR Assistant** for this tenant workspace.\n\nI can answer authorized questions about your **leave balances**, **shift timings**, **payroll & tax deductions**, **company policies**, and **workforce insights**.\n\nHow can I help you today?",
+        content: "Hello! I am your **AIavro Copilot** for this tenant workspace.\n\nI can answer authorized questions about your **leave balances**, **shift timings**, **payroll summaries**, **company policies**, and help execute privileged workflows with your confirmation.\n\nHow can I help you today?",
         createdAt: new Date().toISOString(),
         quickReplies: [
           "How many leave days do I have?",
           "Show my attendance today",
-          "Download my latest payslip"
+          "View my latest payslip"
         ]
       }
     ]);
@@ -79,7 +91,7 @@ export default function AiCopilotPage() {
     setLoading(true);
 
     try {
-      const response = await apiRequest<AiPromptResponseView>("/ai/chat", {
+      const response = await apiRequest<AiPromptResponseView & { sources?: Array<{ title: string; category: string; excerpt: string }> }>("/ai/chat", {
         method: "POST",
         body: JSON.stringify({
           conversationId,
@@ -98,6 +110,7 @@ export default function AiCopilotPage() {
         content: response.content,
         intent: response.intent,
         dataPayload: response.dataPayload || undefined,
+        sources: response.sources,
         tokensUsed: response.tokensUsed,
         modelUsed: response.modelUsed,
         createdAt: new Date().toISOString(),
@@ -113,6 +126,29 @@ export default function AiCopilotPage() {
     }
   }
 
+  async function handleConfirmTool(confirmationToken: string) {
+    try {
+      setConfirmingTokens((prev) => ({ ...prev, [confirmationToken]: "pending" }));
+      const result = await apiRequest<{ summary: string; result: Record<string, unknown> }>("/ai/tools/confirm", {
+        method: "POST",
+        body: JSON.stringify({ confirmationToken })
+      });
+
+      setConfirmingTokens((prev) => ({ ...prev, [confirmationToken]: "confirmed" }));
+
+      const feedbackMessage: ChatMessage = {
+        id: `tool-confirm-${Date.now()}`,
+        role: "assistant",
+        content: `✅ **Action Confirmed and Executed:**\n\n${result.summary}`,
+        createdAt: new Date().toISOString()
+      };
+      setMessages((prev) => [...prev, feedbackMessage]);
+    } catch (err: unknown) {
+      setConfirmingTokens((prev) => ({ ...prev, [confirmationToken]: "failed" }));
+      setError(err instanceof Error ? err.message : "Failed to execute tool action.");
+    }
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -121,31 +157,29 @@ export default function AiCopilotPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-5xl mx-auto space-y-4">
+    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-5xl mx-auto space-y-3">
+      {/* Contextual Sub-Nav */}
+      <AiNavBar />
+
       {/* Top Bar */}
-      <div className="flex items-center justify-between bg-white dark:bg-neutral-900 px-6 py-3 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
+      <div className="flex items-center justify-between bg-white dark:bg-neutral-900 px-6 py-2.5 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white text-xl shadow-md">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white text-lg shadow-md">
             ✨
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h1 className="text-base font-bold text-neutral-900 dark:text-neutral-100">AIavro HR Assistant</h1>
+              <h1 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">AIavro Copilot</h1>
               <Badge tone="success">Active</Badge>
             </div>
-            <p className="text-xs text-neutral-500">Multi-Model Grounded Assistant (RAG & Internal APIs)</p>
+            <p className="text-[11px] text-neutral-500">Tenant-isolated RAG & Permission-Gated Actions</p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 text-xs text-neutral-500">
+          <span className="hidden sm:inline">Model: Server AI Gateway</span>
           <Link href={"/ai/history" as Route}>
             <Button variant="ghost">📜 History</Button>
-          </Link>
-          <Link href={"/ai/knowledge-base" as Route}>
-            <Button variant="ghost">📚 Policies</Button>
-          </Link>
-          <Link href={"/analytics/ai" as Route}>
-            <Button variant="secondary">📈 Predictions</Button>
           </Link>
         </div>
       </div>
@@ -158,44 +192,105 @@ export default function AiCopilotPage() {
             className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
           >
             <div className="flex items-center space-x-2 mb-1 px-1">
-              <span className="text-[11px] font-medium text-neutral-500">
-                {msg.role === "user" ? "You" : "HR Copilot"}
+              <span className="text-[11px] font-semibold text-neutral-400">
+                {msg.role === "user" ? "You" : "AIavro Copilot"}
               </span>
               <span className="text-[10px] text-neutral-400">
                 {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </span>
-              {msg.modelUsed && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-mono">
-                  {msg.modelUsed}
-                </span>
-              )}
             </div>
 
             <div
-              className={`max-w-2xl px-5 py-4 rounded-2xl text-sm leading-relaxed shadow-sm ${
+              className={`max-w-[85%] rounded-2xl p-4 text-sm leading-relaxed shadow-sm transition ${
                 msg.role === "user"
-                  ? "bg-emerald-600 text-white rounded-tr-none font-medium"
+                  ? "bg-emerald-600 text-white dark:bg-emerald-500 rounded-tr-none"
                   : "bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 border border-neutral-200 dark:border-neutral-800 rounded-tl-none"
               }`}
             >
               <div className="whitespace-pre-wrap">{msg.content}</div>
 
-              {/* Grounded Data Card Payload */}
+              {/* Citations / Sources */}
+              {msg.sources && msg.sources.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-800 text-xs">
+                  <div className="font-semibold text-neutral-500 mb-1.5 flex items-center space-x-1">
+                    <span>📚</span>
+                    <span>Sources & Policy Citations:</span>
+                  </div>
+                  <div className="space-y-1">
+                    {msg.sources.map((src, i) => (
+                      <div key={i} className="p-2 rounded bg-neutral-100 dark:bg-neutral-800 text-[11px] text-neutral-600 dark:text-neutral-300">
+                        <span className="font-bold text-neutral-900 dark:text-neutral-100">{src.title}</span> ({src.category}): {src.excerpt}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Data Payloads */}
               {msg.dataPayload && (
-                <div className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-800 text-xs">
+                <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-800 text-xs space-y-2">
+                  {/* Tool Proposal Card (Human Confirmation Required) */}
+                  {msg.dataPayload.type === "TOOL_PROPOSAL" && (
+                    (() => {
+                      const proposal = msg.dataPayload as unknown as ToolProposalData;
+                      const status = confirmingTokens[proposal.confirmationToken];
+                      return (
+                        <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/60 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-amber-900 dark:text-amber-200 text-xs flex items-center space-x-1.5">
+                              <span>⚠️</span>
+                              <span>Action Confirmation Required</span>
+                            </span>
+                            <Badge tone="warning">Mutating Action</Badge>
+                          </div>
+                          <p className="text-neutral-700 dark:text-neutral-300 text-xs">
+                            {proposal.previewText}
+                          </p>
+                          <div className="text-[11px] text-neutral-500 font-mono bg-white/60 dark:bg-neutral-900/60 p-2 rounded">
+                            Action: {proposal.toolName} | Params: {JSON.stringify(proposal.parameters)}
+                          </div>
+                          <div className="flex items-center space-x-2 pt-1">
+                            {status === "confirmed" ? (
+                              <Badge tone="success">Action Confirmed</Badge>
+                            ) : (
+                              <>
+                                <Button
+                                  variant="primary"
+                                  disabled={status === "pending"}
+                                  onClick={() => void handleConfirmTool(proposal.confirmationToken)}
+                                >
+                                  {status === "pending" ? "Executing..." : "Confirm & Execute"}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  disabled={status === "pending"}
+                                  onClick={() => setConfirmingTokens((prev) => ({ ...prev, [proposal.confirmationToken]: "failed" }))}
+                                >
+                                  Cancel
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()
+                  )}
+
+                  {/* Leave Balances Card */}
                   {msg.dataPayload.type === "LEAVE_BALANCE" && Array.isArray(msg.dataPayload.balances) && (
                     <div className="grid grid-cols-2 gap-2 mt-2">
                       {(msg.dataPayload.balances as Array<{ leaveType: string; available: number; total: number }>).map((b, i) => (
-                        <div key={i} className="p-2.5 rounded-lg bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700">
-                          <div className="font-semibold text-neutral-900 dark:text-neutral-100">{b.leaveType}</div>
-                          <div className="text-emerald-600 dark:text-emerald-400 font-bold mt-1 text-sm">
-                            {b.available} <span className="text-[10px] text-neutral-400 font-normal">/ {b.total} days</span>
+                        <div key={i} className="p-2.5 rounded-lg bg-neutral-100 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700">
+                          <div className="font-semibold text-neutral-700 dark:text-neutral-300">{b.leaveType}</div>
+                          <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                            {b.available} <span className="text-[11px] font-normal text-neutral-500">/ {b.total} days</span>
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
 
+                  {/* Attendance Card */}
                   {msg.dataPayload.type === "ATTENDANCE_STATUS" && (
                     <div className="p-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
                       <div>
@@ -208,6 +303,7 @@ export default function AiCopilotPage() {
                     </div>
                   )}
 
+                  {/* Payslip Card */}
                   {msg.dataPayload.type === "PAYSLIP_CARD" && (
                     <div className="p-3 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 flex items-center justify-between">
                       <div>
@@ -217,7 +313,7 @@ export default function AiCopilotPage() {
                         <div className="text-neutral-500 text-[11px]">Net Disbursed Amount</div>
                       </div>
                       <div className="text-base font-bold text-emerald-700 dark:text-emerald-400">
-                        ₹{Number(msg.dataPayload.netPay).toLocaleString("en-IN")}
+                        {Number(msg.dataPayload.netPay).toLocaleString()}
                       </div>
                     </div>
                   )}
@@ -302,7 +398,7 @@ export default function AiCopilotPage() {
           value={inputPrompt}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInputPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask a question about leaves, attendance, payroll, or company policies..."
+          placeholder="Ask a question or request an action (e.g. 'Apply for leave tomorrow')..."
           className="flex-1 border-none shadow-none focus:ring-0 text-sm bg-transparent px-3"
           disabled={loading}
         />
