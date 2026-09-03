@@ -1,11 +1,13 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { LearningEngine } from "./learning.engine.js";
+import type { PermissionCode } from "@vc-wms/shared-types";
 import type { CourseDifficulty } from "@prisma/client";
 import type {
   CreateTrainingCategorySchema,
@@ -35,6 +37,58 @@ export class LearningService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService
   ) {}
+
+  private canManageLearning(permissions: PermissionCode[] = []) {
+    return permissions.includes("lms.manage");
+  }
+
+  private async getActorEmployeeId(tenantId: string, membershipId: string) {
+    const membership = await this.prisma.tenantMembership.findFirst({
+      where: { tenantId, id: membershipId, status: "ACTIVE" },
+      select: { employeeId: true }
+    });
+    if (!membership?.employeeId) {
+      throw new ForbiddenException("An active employee profile is required for this learning action.");
+    }
+    return membership.employeeId;
+  }
+
+  private async assertEmployeeInTenant(tenantId: string, employeeId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { tenantId, id: employeeId, archivedAt: null },
+      select: { id: true }
+    });
+    if (!employee) throw new NotFoundException(`Employee not found: ${employeeId}`);
+  }
+
+  private async assertCourseInTenant(tenantId: string, courseId?: string) {
+    if (!courseId) return;
+    const course = await this.prisma.trainingCourse.findFirst({
+      where: { tenantId, id: courseId, deletedAt: null },
+      select: { id: true }
+    });
+    if (!course) throw new NotFoundException(`Course not found: ${courseId}`);
+  }
+
+  private async assertCategoryInTenant(tenantId: string, categoryId?: string) {
+    if (!categoryId) return;
+    const category = await this.prisma.trainingCategory.findFirst({
+      where: { tenantId, id: categoryId, deletedAt: null },
+      select: { id: true }
+    });
+    if (!category) throw new NotFoundException(`Category not found: ${categoryId}`);
+  }
+
+  private assertSelfOrManagerScope(
+    targetEmployeeId: string,
+    actorEmployeeId: string,
+    permissions: PermissionCode[],
+    message = "You can only access your own learning records."
+  ) {
+    if (!this.canManageLearning(permissions) && targetEmployeeId !== actorEmployeeId) {
+      throw new ForbiddenException(message);
+    }
+  }
 
   // ==========================================
   // 1. TRAINING CATEGORIES & COURSES
@@ -154,6 +208,8 @@ export class LearningService {
     userId: string,
     membershipId: string
   ) {
+    await this.assertCategoryInTenant(tenantId, dto.categoryId);
+
     const existing = await this.prisma.trainingCourse.findFirst({
       where: { tenantId, code: dto.code, deletedAt: null }
     });
@@ -280,8 +336,14 @@ export class LearningService {
     tenantId: string,
     dto: z.infer<typeof EnrollCourseSchema>,
     userId: string,
-    membershipId: string
+    membershipId: string,
+    permissions: PermissionCode[] = []
   ) {
+    await this.assertCourseInTenant(tenantId, dto.courseId);
+    await this.assertEmployeeInTenant(tenantId, dto.employeeId);
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    this.assertSelfOrManagerScope(dto.employeeId, actorEmployeeId, permissions, "You can only enroll yourself unless you manage learning.");
+
     const existing = await this.prisma.courseEnrollment.findUnique({
       where: {
         tenantId_courseId_employeeId: {
@@ -320,9 +382,19 @@ export class LearningService {
     return enrollment;
   }
 
-  async listEmployeeEnrollments(tenantId: string, employeeId: string) {
+  async listEmployeeEnrollments(
+    tenantId: string,
+    membershipId: string,
+    permissions: PermissionCode[] = [],
+    employeeId?: string
+  ) {
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    const targetEmployeeId = employeeId ?? actorEmployeeId;
+    this.assertSelfOrManagerScope(targetEmployeeId, actorEmployeeId, permissions);
+    await this.assertEmployeeInTenant(tenantId, targetEmployeeId);
+
     return this.prisma.courseEnrollment.findMany({
-      where: { tenantId, employeeId },
+      where: { tenantId, employeeId: targetEmployeeId },
       include: {
         course: {
           include: { category: true, modules: { include: { lessons: true } } }
@@ -338,7 +410,8 @@ export class LearningService {
     enrollmentId: string,
     dto: z.infer<typeof UpdateProgressSchema>,
     _userId: string,
-    _membershipId: string
+    membershipId: string,
+    permissions: PermissionCode[] = []
   ) {
     const enrollment = await this.prisma.courseEnrollment.findFirst({
       where: { tenantId, id: enrollmentId }
@@ -346,6 +419,8 @@ export class LearningService {
     if (!enrollment) {
       throw new NotFoundException(`Enrollment not found: ${enrollmentId}`);
     }
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    this.assertSelfOrManagerScope(enrollment.employeeId, actorEmployeeId, permissions, "You can only update your own learning progress.");
 
     const { progressPercent, isCompleted } = LearningEngine.calculateCourseProgress(
       dto.totalLessonsCount,
@@ -392,6 +467,8 @@ export class LearningService {
     userId: string,
     membershipId: string
   ) {
+    await Promise.all(dto.courseIds.map((courseId) => this.assertCourseInTenant(tenantId, courseId)));
+
     const existing = await this.prisma.learningPath.findFirst({
       where: { tenantId, slug: dto.slug, deletedAt: null }
     });
@@ -462,6 +539,8 @@ export class LearningService {
     userId: string,
     membershipId: string
   ) {
+    await this.assertCourseInTenant(tenantId, dto.courseId);
+
     const assessment = await this.prisma.assessment.create({
       data: {
         tenantId,
@@ -530,7 +609,8 @@ export class LearningService {
     tenantId: string,
     dto: z.infer<typeof SubmitAssessmentAttemptSchema>,
     userId: string,
-    membershipId: string
+    membershipId: string,
+    permissions: PermissionCode[] = []
   ) {
     const assessment = await this.prisma.assessment.findFirst({
       where: { tenantId, id: dto.assessmentId, deletedAt: null },
@@ -542,6 +622,21 @@ export class LearningService {
     });
     if (!assessment) {
       throw new NotFoundException(`Assessment not found: ${dto.assessmentId}`);
+    }
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    this.assertSelfOrManagerScope(dto.employeeId, actorEmployeeId, permissions, "You can only submit assessments for yourself.");
+    await this.assertEmployeeInTenant(tenantId, dto.employeeId);
+
+    if (dto.enrollmentId) {
+      const enrollment = await this.prisma.courseEnrollment.findFirst({
+        where: { tenantId, id: dto.enrollmentId, employeeId: dto.employeeId }
+      });
+      if (!enrollment) {
+        throw new NotFoundException(`Enrollment not found: ${dto.enrollmentId}`);
+      }
+      if (assessment.courseId && enrollment.courseId !== assessment.courseId) {
+        throw new BadRequestException("Assessment enrollment must belong to the same course.");
+      }
     }
 
     const previousAttemptsCount = await this.prisma.assessmentAttempt.count({
@@ -620,6 +715,8 @@ export class LearningService {
     userId: string,
     membershipId: string
   ) {
+    await this.assertCourseInTenant(tenantId, dto.courseId);
+
     const existing = await this.prisma.lmsCertification.findFirst({
       where: { tenantId, code: dto.code, deletedAt: null }
     });
@@ -657,13 +754,18 @@ export class LearningService {
     tenantId: string,
     dto: z.infer<typeof IssueCertificationSchema>,
     userId: string,
-    membershipId: string
+    membershipId: string,
+    permissions: PermissionCode[] = []
   ) {
     const cert = await this.prisma.lmsCertification.findFirst({
       where: { tenantId, id: dto.certificationId, deletedAt: null }
     });
     if (!cert) {
       throw new NotFoundException(`Certification not found: ${dto.certificationId}`);
+    }
+    await this.assertEmployeeInTenant(tenantId, dto.employeeId);
+    if (!this.canManageLearning(permissions)) {
+      throw new ForbiddenException("Only learning managers can issue certifications.");
     }
 
     const expiryDate = dto.expiryDate
@@ -714,11 +816,21 @@ export class LearningService {
     return issued;
   }
 
-  async listEmployeeCertifications(tenantId: string, employeeId?: string) {
+  async listEmployeeCertifications(
+    tenantId: string,
+    membershipId: string,
+    permissions: PermissionCode[] = [],
+    employeeId?: string
+  ) {
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    const targetEmployeeId = employeeId ?? actorEmployeeId;
+    this.assertSelfOrManagerScope(targetEmployeeId, actorEmployeeId, permissions, "You can only access your own certifications.");
+    await this.assertEmployeeInTenant(tenantId, targetEmployeeId);
+
     return this.prisma.employeeCertification.findMany({
       where: {
         tenantId,
-        ...(employeeId ? { employeeId } : {})
+        employeeId: targetEmployeeId
       },
       include: {
         certification: true,
@@ -791,7 +903,8 @@ export class LearningService {
     tenantId: string,
     dto: z.infer<typeof UpdateEmployeeSkillSchema>,
     userId: string,
-    _membershipId: string
+    membershipId: string,
+    permissions: PermissionCode[] = []
   ) {
     const skill = await this.prisma.skill.findFirst({
       where: { tenantId, id: dto.skillId, deletedAt: null }
@@ -799,6 +912,9 @@ export class LearningService {
     if (!skill) {
       throw new NotFoundException(`Skill not found: ${dto.skillId}`);
     }
+    await this.assertEmployeeInTenant(tenantId, dto.employeeId);
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    this.assertSelfOrManagerScope(dto.employeeId, actorEmployeeId, permissions, "You can only update your own skill profile.");
 
     const employeeSkill = await this.prisma.employeeSkill.upsert({
       where: {
@@ -833,7 +949,16 @@ export class LearningService {
     return employeeSkill;
   }
 
-  async getEmployeeSkillGapReport(tenantId: string, employeeId: string) {
+  async getEmployeeSkillGapReport(
+    tenantId: string,
+    membershipId: string,
+    permissions: PermissionCode[] = [],
+    employeeId: string
+  ) {
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    this.assertSelfOrManagerScope(employeeId, actorEmployeeId, permissions, "You can only access your own skill gap report.");
+    await this.assertEmployeeInTenant(tenantId, employeeId);
+
     const employeeSkills = await this.prisma.employeeSkill.findMany({
       where: { tenantId, employeeId },
       include: { skill: { include: { category: true } } }
@@ -982,17 +1107,33 @@ export class LearningService {
       totalEnrollments,
       completedEnrollments,
       activeCertifications,
-      totalSkillsAssessed
+      totalSkillsAssessed,
+      complianceEnrollments,
+      completedComplianceEnrollments,
+      learningWatchTime
     ] = await Promise.all([
       this.prisma.trainingCourse.count({ where: { tenantId, deletedAt: null } }),
       this.prisma.courseEnrollment.count({ where: { tenantId } }),
       this.prisma.courseEnrollment.count({ where: { tenantId, status: "COMPLETED" } }),
       this.prisma.employeeCertification.count({ where: { tenantId, status: "ACTIVE" } }),
-      this.prisma.employeeSkill.count({ where: { tenantId } })
+      this.prisma.employeeSkill.count({ where: { tenantId } }),
+      this.prisma.courseEnrollment.count({
+        where: { tenantId, course: { isCompliance: true, deletedAt: null } }
+      }),
+      this.prisma.courseEnrollment.count({
+        where: { tenantId, status: "COMPLETED", course: { isCompliance: true, deletedAt: null } }
+      }),
+      this.prisma.courseEnrollment.aggregate({
+        where: { tenantId },
+        _sum: { watchTimeSeconds: true }
+      })
     ]);
 
     const completionRatePercent =
       totalEnrollments > 0 ? Math.round((completedEnrollments / totalEnrollments) * 1000) / 10 : 0;
+    const complianceCoveragePercent =
+      complianceEnrollments > 0 ? Math.round((completedComplianceEnrollments / complianceEnrollments) * 1000) / 10 : 0;
+    const learningHoursLogged = Math.round(((learningWatchTime._sum.watchTimeSeconds ?? 0) / 3600) * 10) / 10;
 
     return {
       totalCourses,
@@ -1001,12 +1142,34 @@ export class LearningService {
       completionRatePercent,
       activeCertifications,
       totalSkillsAssessed,
-      complianceCoveragePercent: 94.2,
-      learningHoursLogged: Math.round(completedEnrollments * 1.5)
+      complianceCoveragePercent,
+      learningHoursLogged
     };
   }
 
   async getAiLearningRecommendations(tenantId: string, employeeId?: string) {
+    if (!employeeId) {
+      return {
+        employeeId: null,
+        recommendedCount: 0,
+        recommendations: []
+      };
+    }
+
+    const employee = await this.prisma.employee.findFirst({
+      where: { tenantId, id: employeeId, archivedAt: null },
+      select: { departmentId: true, designationId: true }
+    });
+    if (!employee) {
+      throw new NotFoundException(`Employee not found: ${employeeId}`);
+    }
+
+    const employeeSkills = await this.prisma.employeeSkill.findMany({
+      where: { tenantId, employeeId },
+      select: { currentProficiency: true, targetProficiency: true }
+    });
+    const skillGapsCount = employeeSkills.filter((skill) => skill.currentProficiency < skill.targetProficiency).length;
+
     const courses = await this.prisma.trainingCourse.findMany({
       where: { tenantId, isActive: true, deletedAt: null },
       take: 10
@@ -1023,9 +1186,9 @@ export class LearningService {
           designationId: c.designationId
         },
         {
-          departmentId: null,
-          designationId: null,
-          skillGapsCount: 2
+          departmentId: employee.departmentId,
+          designationId: employee.designationId,
+          skillGapsCount
         }
       );
 
@@ -1038,15 +1201,15 @@ export class LearningService {
         estimatedDurationMinutes: c.estimatedDurationMinutes,
         matchScorePercent: matchScore,
         reason: c.isCompliance
-          ? "Mandatory annual regulatory compliance refresher"
-          : "Recommended based on role competency benchmarks and career progression path"
+          ? "Compliance course available for the employee."
+          : "Matched from recorded department, designation, and skill gap signals."
       };
     });
 
     recommendations.sort((a, b) => b.matchScorePercent - a.matchScorePercent);
 
     return {
-      employeeId: employeeId ?? "all",
+      employeeId,
       recommendedCount: recommendations.length,
       recommendations
     };

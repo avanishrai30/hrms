@@ -99,19 +99,25 @@ export class PerformanceController {
   }
 
   @Post("goals")
-  @RequirePermissions("performance.view")
+  @RequirePermissions("performance.review")
   async createGoal(@Req() req: Request, @Body() body: unknown) {
     const tenant = requireTenantContext(req);
     const dto = CreateGoalSchema.parse(body);
-    return this.performanceService.createGoal(tenant.tenantId, dto, tenant.membershipId, tenant.userId, tenant.membershipId);
+    return this.performanceService.createGoal(
+      tenant.tenantId,
+      dto,
+      tenant.userId,
+      tenant.membershipId,
+      tenant.permissions
+    );
   }
 
   @Put("goals/:id")
-  @RequirePermissions("performance.view")
+  @RequirePermissions("performance.review")
   async updateGoal(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) {
     const tenant = requireTenantContext(req);
     const dto = UpdateGoalSchema.parse(body);
-    return this.performanceService.updateGoal(tenant.tenantId, id, dto, tenant.userId, tenant.membershipId);
+    return this.performanceService.updateGoal(tenant.tenantId, id, dto, tenant.userId, tenant.membershipId, tenant.permissions);
   }
 
   @Post("goals/:id/approve")
@@ -123,19 +129,19 @@ export class PerformanceController {
   }
 
   @Post("goals/:id/key-results")
-  @RequirePermissions("performance.view")
+  @RequirePermissions("performance.review")
   async createKeyResult(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) {
     const tenant = requireTenantContext(req);
     const dto = CreateKeyResultSchema.parse(body);
-    return this.performanceService.createKeyResult(tenant.tenantId, id, dto, tenant.userId, tenant.membershipId);
+    return this.performanceService.createKeyResult(tenant.tenantId, id, dto, tenant.userId, tenant.membershipId, tenant.permissions);
   }
 
   @Put("key-results/:id")
-  @RequirePermissions("performance.view")
+  @RequirePermissions("performance.review")
   async updateKeyResult(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) {
     const tenant = requireTenantContext(req);
     const dto = UpdateKeyResultSchema.parse(body);
-    return this.performanceService.updateKeyResult(tenant.tenantId, id, dto, tenant.userId, tenant.membershipId);
+    return this.performanceService.updateKeyResult(tenant.tenantId, id, dto, tenant.userId, tenant.membershipId, tenant.permissions);
   }
 
   // ==========================================
@@ -150,15 +156,21 @@ export class PerformanceController {
     @Query("fromEmployeeId") fromEmployeeId?: string
   ) {
     const tenant = requireTenantContext(req);
-    return this.performanceService.listFeedbacks(tenant.tenantId, toEmployeeId, fromEmployeeId);
+    return this.performanceService.listFeedbacks(
+      tenant.tenantId,
+      tenant.membershipId,
+      tenant.permissions,
+      toEmployeeId,
+      fromEmployeeId
+    );
   }
 
   @Post("feedback")
-  @RequirePermissions("performance.view")
+  @RequirePermissions("performance.review")
   async createFeedback(@Req() req: Request, @Body() body: unknown) {
     const tenant = requireTenantContext(req);
     const dto = CreateFeedbackSchema.parse(body);
-    return this.performanceService.createFeedback(tenant.tenantId, dto, tenant.membershipId, tenant.userId, tenant.membershipId);
+    return this.performanceService.createFeedback(tenant.tenantId, dto, tenant.userId, tenant.membershipId);
   }
 
   @Get("1on1")
@@ -173,19 +185,19 @@ export class PerformanceController {
   }
 
   @Post("1on1")
-  @RequirePermissions("performance.view")
+  @RequirePermissions("performance.review")
   async createOneOnOne(@Req() req: Request, @Body() body: unknown) {
     const tenant = requireTenantContext(req);
     const dto = CreateOneOnOneSchema.parse(body);
-    return this.performanceService.createOneOnOne(tenant.tenantId, dto, tenant.membershipId, tenant.userId, tenant.membershipId);
+    return this.performanceService.createOneOnOne(tenant.tenantId, dto, tenant.userId, tenant.membershipId, tenant.permissions);
   }
 
   @Put("1on1/:id")
-  @RequirePermissions("performance.view")
+  @RequirePermissions("performance.review")
   async updateOneOnOne(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) {
     const tenant = requireTenantContext(req);
     const dto = UpdateOneOnOneSchema.parse(body);
-    return this.performanceService.updateOneOnOne(tenant.tenantId, id, dto, tenant.userId, tenant.membershipId);
+    return this.performanceService.updateOneOnOne(tenant.tenantId, id, dto, tenant.userId, tenant.membershipId, tenant.permissions);
   }
 
   // ==========================================
@@ -252,7 +264,7 @@ export class PerformanceController {
   async submitManagerReview(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) {
     const tenant = requireTenantContext(req);
     const dto = SubmitManagerReviewSchema.parse(body);
-    return this.performanceService.submitManagerReview(tenant.tenantId, id, dto, tenant.userId, tenant.membershipId);
+    return this.performanceService.submitManagerReview(tenant.tenantId, id, dto, tenant.userId, tenant.membershipId, tenant.permissions);
   }
 
   @Post("reviews/:id/360-score")
@@ -264,9 +276,9 @@ export class PerformanceController {
       tenant.tenantId,
       id,
       dto,
-      tenant.membershipId,
       tenant.userId,
-      tenant.membershipId
+      tenant.membershipId,
+      tenant.permissions
     );
   }
 

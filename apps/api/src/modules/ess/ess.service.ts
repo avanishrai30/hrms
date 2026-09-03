@@ -678,9 +678,9 @@ export class EssService {
         joiningDate: e.joiningDate
       })),
       teamHealth: {
-        averageAttendancePercent: 95.8,
-        teamHappinessScore: 4.4,
-        goalsCompletionRate: 88.5
+        averageAttendancePercent: 0,
+        teamHappinessScore: 0,
+        goalsCompletionRate: 0
       }
     };
   }
@@ -845,4 +845,3 @@ export class EssService {
     });
   }
 }
-

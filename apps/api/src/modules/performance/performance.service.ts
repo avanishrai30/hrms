@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { OkrGoalEngine } from "./engines/okr-goal.engine.js";
@@ -21,6 +21,7 @@ import {
   type SuccessorReadiness,
   Prisma
 } from "@prisma/client";
+import type { PermissionCode } from "@vc-wms/shared-types";
 import type {
   AdjustCalibrationReviewDto,
   ApproveGoalDto,
@@ -79,6 +80,66 @@ export class PerformanceService {
       resourceId,
       metadata: (metadata ?? {}) as unknown as Prisma.InputJsonValue
     });
+  }
+
+  private canManagePerformance(permissions: PermissionCode[] = []) {
+    return permissions.includes("performance.manage") || permissions.includes("performance.calibration");
+  }
+
+  private async getActorEmployeeId(tenantId: string, membershipId: string) {
+    const membership = await this.prisma.tenantMembership.findFirst({
+      where: { tenantId, id: membershipId, status: "ACTIVE" },
+      select: { employeeId: true }
+    });
+    if (!membership?.employeeId) {
+      throw new ForbiddenException("An active employee profile is required for this performance action.");
+    }
+    return membership.employeeId;
+  }
+
+  private async assertEmployeeInTenant(tenantId: string, employeeId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { tenantId, id: employeeId, archivedAt: null },
+      select: { id: true, managerEmployeeId: true }
+    });
+    if (!employee) throw new NotFoundException("Employee not found");
+    return employee;
+  }
+
+  private async assertGoalScope(
+    tenantId: string,
+    goal: { employeeId: string },
+    actorEmployeeId: string,
+    permissions: PermissionCode[]
+  ) {
+    if (this.canManagePerformance(permissions) || goal.employeeId === actorEmployeeId) return;
+
+    const employee = await this.assertEmployeeInTenant(tenantId, goal.employeeId);
+    if (employee.managerEmployeeId !== actorEmployeeId) {
+      throw new ForbiddenException("You can only manage goals for yourself or direct reports.");
+    }
+  }
+
+  private async assertDirectReport(tenantId: string, employeeId: string, managerEmployeeId: string) {
+    const employee = await this.assertEmployeeInTenant(tenantId, employeeId);
+    if (employee.managerEmployeeId !== managerEmployeeId) {
+      throw new ForbiddenException("You can only perform this action for direct reports.");
+    }
+  }
+
+  private async assertCycleInTenant(tenantId: string, cycleId: string) {
+    const cycle = await this.prisma.goalCycle.findFirst({ where: { tenantId, id: cycleId }, select: { id: true } });
+    if (!cycle) throw new NotFoundException("Goal cycle not found");
+  }
+
+  private async assertReviewCycleInTenant(tenantId: string, cycleId: string) {
+    const cycle = await this.prisma.reviewCycle.findFirst({ where: { tenantId, id: cycleId }, select: { id: true } });
+    if (!cycle) throw new NotFoundException("Review cycle not found");
+  }
+
+  private async assertCompetencyInTenant(tenantId: string, competencyId: string) {
+    const competency = await this.prisma.competency.findFirst({ where: { tenantId, id: competencyId }, select: { id: true } });
+    if (!competency) throw new NotFoundException("Competency not found");
   }
 
   // ==========================================
@@ -188,11 +249,16 @@ export class PerformanceService {
   async createGoal(
     tenantId: string,
     dto: CreateGoalDto,
-    employeeId: string,
     userId: string,
-    membershipId: string
+    membershipId: string,
+    permissions: PermissionCode[] = []
   ) {
-    const targetEmployeeId = dto.employeeId || employeeId;
+    await this.assertCycleInTenant(tenantId, dto.cycleId);
+
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    const targetEmployeeId = dto.employeeId || actorEmployeeId;
+    await this.assertEmployeeInTenant(tenantId, targetEmployeeId);
+    await this.assertGoalScope(tenantId, { employeeId: targetEmployeeId }, actorEmployeeId, permissions);
 
     const goal = await this.prisma.goal.create({
       data: {
@@ -243,13 +309,16 @@ export class PerformanceService {
     id: string,
     dto: UpdateGoalDto,
     userId: string,
-    membershipId: string
+    membershipId: string,
+    permissions: PermissionCode[] = []
   ) {
     const goal = await this.prisma.goal.findFirst({
       where: { id, tenantId },
       include: { keyResults: true }
     });
     if (!goal) throw new NotFoundException("Goal not found");
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    await this.assertGoalScope(tenantId, goal, actorEmployeeId, permissions);
 
     const targetVal = dto.targetValue ?? goal.targetValue;
     const achievedVal = dto.achievedValue ?? goal.achievedValue;
@@ -343,10 +412,13 @@ export class PerformanceService {
     goalId: string,
     dto: CreateKeyResultDto,
     userId: string,
-    membershipId: string
+    membershipId: string,
+    permissions: PermissionCode[] = []
   ) {
     const goal = await this.prisma.goal.findFirst({ where: { id: goalId, tenantId } });
     if (!goal) throw new NotFoundException("Goal not found");
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    await this.assertGoalScope(tenantId, goal, actorEmployeeId, permissions);
 
     const progress = this.okrEngine.calculateKeyResultProgress({
       metricType: dto.metricType,
@@ -407,13 +479,16 @@ export class PerformanceService {
     id: string,
     dto: { currentValue: number; confidenceScore?: number },
     userId: string,
-    membershipId: string
+    membershipId: string,
+    permissions: PermissionCode[] = []
   ) {
     const kr = await this.prisma.keyResult.findUnique({
       where: { id },
       include: { goal: true }
     });
     if (!kr || kr.goal.tenantId !== tenantId) throw new NotFoundException("Key result not found");
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    await this.assertGoalScope(tenantId, kr.goal, actorEmployeeId, permissions);
 
     const progress = this.okrEngine.calculateKeyResultProgress({
       metricType: kr.metricType,
@@ -468,12 +543,30 @@ export class PerformanceService {
   // 2. CONTINUOUS FEEDBACK & 1:1 MEETINGS
   // ==========================================
 
-  async listFeedbacks(tenantId: string, toEmployeeId?: string, fromEmployeeId?: string) {
+  async listFeedbacks(
+    tenantId: string,
+    membershipId: string,
+    permissions: PermissionCode[] = [],
+    toEmployeeId?: string,
+    fromEmployeeId?: string
+  ) {
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    const canManage = this.canManagePerformance(permissions);
+
     return this.prisma.feedback.findMany({
       where: {
         tenantId,
         ...(toEmployeeId ? { toEmployeeId } : {}),
-        ...(fromEmployeeId ? { fromEmployeeId } : {})
+        ...(fromEmployeeId ? { fromEmployeeId } : {}),
+        ...(!canManage
+          ? {
+              OR: [
+                { fromEmployeeId: actorEmployeeId },
+                { toEmployeeId: actorEmployeeId, visibility: { in: ["EMPLOYEE_VISIBLE", "HR_VISIBLE"] } },
+                { toEmployee: { managerEmployeeId: actorEmployeeId }, visibility: "MANAGER_ONLY" }
+              ]
+            }
+          : {})
       },
       include: {
         fromEmployee: { select: { id: true, fullName: true, employeeCode: true } },
@@ -486,10 +579,12 @@ export class PerformanceService {
   async createFeedback(
     tenantId: string,
     dto: CreateFeedbackDto,
-    fromEmployeeId: string,
     userId: string,
     membershipId: string
   ) {
+    const fromEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    await this.assertEmployeeInTenant(tenantId, dto.toEmployeeId);
+
     const feedback = await this.prisma.feedback.create({
       data: {
         tenantId,
@@ -539,10 +634,16 @@ export class PerformanceService {
   async createOneOnOne(
     tenantId: string,
     dto: CreateOneOnOneDto,
-    managerId: string,
     userId: string,
-    membershipId: string
+    membershipId: string,
+    permissions: PermissionCode[] = []
   ) {
+    const managerId = await this.getActorEmployeeId(tenantId, membershipId);
+    await this.assertEmployeeInTenant(tenantId, dto.employeeId);
+    if (!this.canManagePerformance(permissions)) {
+      await this.assertDirectReport(tenantId, dto.employeeId, managerId);
+    }
+
     const meeting = await this.prisma.oneOnOne.create({
       data: {
         tenantId,
@@ -579,10 +680,15 @@ export class PerformanceService {
     id: string,
     dto: UpdateOneOnOneDto,
     userId: string,
-    membershipId: string
+    membershipId: string,
+    permissions: PermissionCode[] = []
   ) {
     const meeting = await this.prisma.oneOnOne.findFirst({ where: { id, tenantId } });
     if (!meeting) throw new NotFoundException("1:1 meeting not found");
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    if (!this.canManagePerformance(permissions) && meeting.managerId !== actorEmployeeId) {
+      throw new ForbiddenException("You can only update 1:1 meetings you manage.");
+    }
 
     const updated = await this.prisma.oneOnOne.update({
       where: { id },
@@ -748,6 +854,13 @@ export class PerformanceService {
     const review = await this.prisma.performanceReview.findFirst({ where: { id, tenantId } });
     if (!review) throw new NotFoundException("Performance review not found");
     if (review.isLocked) throw new BadRequestException("Review is locked");
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    if (actorEmployeeId !== review.employeeId) {
+      throw new ForbiddenException("Self assessment can only be submitted by the reviewed employee.");
+    }
+    if (dto.competencyRatings?.length) {
+      await Promise.all(dto.competencyRatings.map((comp) => this.assertCompetencyInTenant(tenantId, comp.competencyId)));
+    }
 
     // Upsert rater score for SELF
     await this.prisma.performanceReviewScore.deleteMany({
@@ -814,14 +927,22 @@ export class PerformanceService {
     id: string,
     dto: SubmitManagerReviewDto,
     userId: string,
-    membershipId: string
+    membershipId: string,
+    permissions: PermissionCode[] = []
   ) {
     const review = await this.prisma.performanceReview.findFirst({
       where: { id, tenantId },
-      include: { raterScores: true }
+      include: { employee: { select: { id: true, managerEmployeeId: true } }, raterScores: true }
     });
     if (!review) throw new NotFoundException("Performance review not found");
     if (review.isLocked) throw new BadRequestException("Review is locked");
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, membershipId);
+    if (!this.canManagePerformance(permissions) && review.employee.managerEmployeeId !== actorEmployeeId) {
+      throw new ForbiddenException("Manager reviews can only be submitted by the employee's reporting manager.");
+    }
+    if (dto.competencyRatings?.length) {
+      await Promise.all(dto.competencyRatings.map((comp) => this.assertCompetencyInTenant(tenantId, comp.competencyId)));
+    }
 
     // Upsert rater score for MANAGER
     await this.prisma.performanceReviewScore.deleteMany({
@@ -833,6 +954,7 @@ export class PerformanceService {
         tenantId,
         reviewId: id,
         raterType: "MANAGER",
+        raterId: actorEmployeeId,
         score: dto.managerScore,
         weightage: 40.0,
         comments: dto.managerComments
@@ -899,12 +1021,16 @@ export class PerformanceService {
     tenantId: string,
     id: string,
     dto: Submit360ScoreDto,
-    raterId: string | undefined,
     userId: string,
-    membershipId: string
+    membershipId: string,
+    permissions: PermissionCode[] = []
   ) {
     const review = await this.prisma.performanceReview.findFirst({ where: { id, tenantId } });
     if (!review) throw new NotFoundException("Performance review not found");
+    const raterId = await this.getActorEmployeeId(tenantId, membershipId);
+    if (!this.canManagePerformance(permissions) && dto.raterType === "MANAGER") {
+      await this.assertDirectReport(tenantId, review.employeeId, raterId);
+    }
 
     const raterScore = await this.prisma.performanceReviewScore.create({
       data: {

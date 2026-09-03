@@ -114,15 +114,14 @@ export class LearningController {
   async enrollCourse(@Req() req: Request, @Body() body: unknown) {
     const tenant = requireTenantContext(req);
     const dto = EnrollCourseSchema.parse(body);
-    return this.learningService.enrollCourse(tenant.tenantId, dto, tenant.userId, tenant.membershipId);
+    return this.learningService.enrollCourse(tenant.tenantId, dto, tenant.userId, tenant.membershipId, tenant.permissions);
   }
 
   @Get("enrollments/my")
   @RequirePermissions("lms.view")
   async getMyEnrollments(@Req() req: Request, @Query("employeeId") employeeId?: string) {
     const tenant = requireTenantContext(req);
-    const targetEmployeeId = employeeId ?? tenant.userId;
-    return this.learningService.listEmployeeEnrollments(tenant.tenantId, targetEmployeeId);
+    return this.learningService.listEmployeeEnrollments(tenant.tenantId, tenant.membershipId, tenant.permissions, employeeId);
   }
 
   @Put("enrollments/:id/progress")
@@ -130,7 +129,7 @@ export class LearningController {
   async updateProgress(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) {
     const tenant = requireTenantContext(req);
     const dto = UpdateProgressSchema.parse(body);
-    return this.learningService.updateProgress(tenant.tenantId, id, dto, tenant.userId, tenant.membershipId);
+    return this.learningService.updateProgress(tenant.tenantId, id, dto, tenant.userId, tenant.membershipId, tenant.permissions);
   }
 
   // ==========================================
@@ -184,7 +183,7 @@ export class LearningController {
   async submitAssessment(@Req() req: Request, @Body() body: unknown) {
     const tenant = requireTenantContext(req);
     const dto = SubmitAssessmentAttemptSchema.parse(body);
-    return this.learningService.submitAssessment(tenant.tenantId, dto, tenant.userId, tenant.membershipId);
+    return this.learningService.submitAssessment(tenant.tenantId, dto, tenant.userId, tenant.membershipId, tenant.permissions);
   }
 
   // ==========================================
@@ -211,14 +210,14 @@ export class LearningController {
   async issueCertification(@Req() req: Request, @Body() body: unknown) {
     const tenant = requireTenantContext(req);
     const dto = IssueCertificationSchema.parse(body);
-    return this.learningService.issueCertification(tenant.tenantId, dto, tenant.userId, tenant.membershipId);
+    return this.learningService.issueCertification(tenant.tenantId, dto, tenant.userId, tenant.membershipId, tenant.permissions);
   }
 
   @Get("certifications/employee")
   @RequirePermissions("lms.certifications")
   async listEmployeeCertifications(@Req() req: Request, @Query("employeeId") employeeId?: string) {
     const tenant = requireTenantContext(req);
-    return this.learningService.listEmployeeCertifications(tenant.tenantId, employeeId);
+    return this.learningService.listEmployeeCertifications(tenant.tenantId, tenant.membershipId, tenant.permissions, employeeId);
   }
 
   // ==========================================
@@ -260,14 +259,14 @@ export class LearningController {
   async updateEmployeeSkill(@Req() req: Request, @Body() body: unknown) {
     const tenant = requireTenantContext(req);
     const dto = UpdateEmployeeSkillSchema.parse(body);
-    return this.learningService.updateEmployeeSkill(tenant.tenantId, dto, tenant.userId, tenant.membershipId);
+    return this.learningService.updateEmployeeSkill(tenant.tenantId, dto, tenant.userId, tenant.membershipId, tenant.permissions);
   }
 
   @Get("skills/gap-report")
   @RequirePermissions("lms.skills")
   async getSkillGapReport(@Req() req: Request, @Query("employeeId") employeeId: string) {
     const tenant = requireTenantContext(req);
-    return this.learningService.getEmployeeSkillGapReport(tenant.tenantId, employeeId);
+    return this.learningService.getEmployeeSkillGapReport(tenant.tenantId, tenant.membershipId, tenant.permissions, employeeId);
   }
 
   // ==========================================
