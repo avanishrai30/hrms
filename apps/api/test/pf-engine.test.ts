@@ -9,7 +9,8 @@ describe("PfEngine (Task 30 - EPF & EPS Statutory Calculation)", () => {
       isPfCappedAtStatutoryWageCeiling: false,
       year: 2026,
       month: 4,
-      jurisdiction: "IN"
+      jurisdiction: "IN",
+      policyVersion: "IN_EPF_COMMITTED_LEGACY"
     });
 
     expect(res.pfWage).toBe(40000);
@@ -28,7 +29,8 @@ describe("PfEngine (Task 30 - EPF & EPS Statutory Calculation)", () => {
       isPfCappedAtStatutoryWageCeiling: true,
       year: 2026,
       month: 4,
-      jurisdiction: "IN"
+      jurisdiction: "IN",
+      policyVersion: "IN_EPF_COMMITTED_LEGACY"
     });
 
     expect(res.pfWage).toBe(15000);

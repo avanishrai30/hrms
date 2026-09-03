@@ -40,12 +40,13 @@ export interface ProrationResultItem {
 }
 
 /**
- * Statutory Policy Audit Snapshot (Task 05.4 - Blockers 6 & 7)
- * Strictly separates policy ceilings from actual employee wage basis.
+ * Statutory Policy Audit Snapshot (Task 05.6 - Blockers 3 & 4)
+ * Records tenant policy applicability separately from legal statutory effective date.
  */
 export interface StatutoryPolicySnapshot {
   jurisdiction: string;
   period: string; // "MM/YYYY"
+  policyAppliesFrom: string; // Tenant policy configuration applicability period (e.g. "2026-01")
 
   // PF Policy Metadata & Values
   pfPolicyVersion: string;
@@ -90,7 +91,7 @@ export interface ProrationResult {
 export class SalaryProrationEngine {
   /**
    * Computes prorated salary component breakdowns and net salary using authoritative
-   * arbitrary-precision Decimal arithmetic and period-effective statutory policy delegation.
+   * arbitrary-precision Decimal arithmetic and tenant-configured statutory policy delegation.
    */
   static calculateProration(params: {
     baseMonthlyCtc: number | Prisma.Decimal | string;
@@ -101,6 +102,9 @@ export class SalaryProrationEngine {
     year: number;
     month: number;
     jurisdiction: string;
+    pfPolicyVersion?: string;
+    esiPolicyVersion?: string;
+    policyAppliesFrom?: string;
     isPreviouslyCoveredInCycle?: boolean;
   }): ProrationResult {
     const {
@@ -112,10 +116,12 @@ export class SalaryProrationEngine {
       year,
       month,
       jurisdiction,
+      pfPolicyVersion = "IN_EPF_COMMITTED_LEGACY",
+      esiPolicyVersion = "IN_ESI_COMMITTED_LEGACY",
+      policyAppliesFrom,
       isPreviouslyCoveredInCycle = false
     } = params;
 
-    // Blockers 2 & 3: validate period and jurisdiction explicitly
     StatutoryPolicyRegistry.validatePeriod(year, month);
     if (!jurisdiction || typeof jurisdiction !== "string" || jurisdiction.trim() === "") {
       throw new BadRequestException("Payroll statutory jurisdiction is required.");
@@ -133,7 +139,6 @@ export class SalaryProrationEngine {
       throw new BadRequestException("Payable days cannot be negative.");
     }
 
-    // Blocker 6: handle workingDays === 0 explicitly before division
     const dailyRate = workingDays.greaterThan(0)
       ? PayrollMoney.round(PayrollMoney.div(baseMonthlyCtc, workingDays))
       : PayrollMoney.zero();
@@ -192,7 +197,9 @@ export class SalaryProrationEngine {
           isPfCappedAtStatutoryWageCeiling: true,
           year,
           month,
-          jurisdiction: normalizedJurisdiction
+          jurisdiction: normalizedJurisdiction,
+          policyVersion: pfPolicyVersion,
+          policyAppliesFrom
         })
       : null;
 
@@ -202,6 +209,8 @@ export class SalaryProrationEngine {
           year,
           month,
           jurisdiction: normalizedJurisdiction,
+          policyVersion: esiPolicyVersion,
+          policyAppliesFrom,
           isPreviouslyCoveredInCycle
         })
       : null;
@@ -218,7 +227,6 @@ export class SalaryProrationEngine {
         } else if (comp.category === "ESI" && esiResult) {
           proratedAmountDecimal = esiResult.employeeEsiContributionDecimal;
         } else if (comp.category === "PROFESSIONAL_TAX") {
-          // Blocker 9: PT is an explicitly configured compensation component
           proratedAmountDecimal = payableDays.greaterThan(0)
             ? baseAmountDecimal
             : PayrollMoney.zero();
@@ -297,10 +305,11 @@ export class SalaryProrationEngine {
       );
     }
 
-    // Blockers 6 & 7 (Task 05.5): Accurate snapshot distinguishing policy ceilings from employee wage basis and truthful provenance
+    // Blockers 3 & 4 (Task 05.6): Truthful snapshot with tenant policy applicability
     const statutoryPolicySnapshot: StatutoryPolicySnapshot = {
       jurisdiction: normalizedJurisdiction,
       period: `${String(month).padStart(2, "0")}/${year}`,
+      policyAppliesFrom: policyAppliesFrom ?? "NOT_CONFIGURED",
       pfPolicyVersion: pfResult ? pfResult.policy.version : "NOT_APPLIED",
       pfPolicyProvenance: pfResult ? pfResult.policy.provenance : "NOT_APPLIED",
       pfHistoricalValidity: pfResult ? pfResult.policy.historicalValidity : "NOT_APPLIED",

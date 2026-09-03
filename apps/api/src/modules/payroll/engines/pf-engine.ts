@@ -6,9 +6,9 @@ import {
 } from "./statutory-policy.registry.js";
 
 /**
- * EMPLOYEES' PROVIDENT FUND (EPF & EPS) ENGINE (Task 05.4)
+ * EMPLOYEES' PROVIDENT FUND (EPF & EPS) ENGINE (Task 05.6)
  * Calculates configured statutory PF contributions using authoritative Decimal arithmetic
- * and period-effective statutory policy.
+ * and tenant-configured statutory policy.
  */
 export interface PfCalculationInput {
   basicMonthlySalary: Prisma.Decimal | number | string;
@@ -18,6 +18,8 @@ export interface PfCalculationInput {
   year?: number;
   month?: number;
   jurisdiction?: string;
+  policyVersion?: string;
+  policyAppliesFrom?: string;
 }
 
 export interface PfCalculationResult {
@@ -52,7 +54,9 @@ export class PfEngine {
       StatutoryPolicyRegistry.getPfPolicy({
         year: input.year!,
         month: input.month!,
-        jurisdiction: input.jurisdiction!
+        jurisdiction: input.jurisdiction!,
+        policyVersion: input.policyVersion!,
+        policyAppliesFrom: input.policyAppliesFrom
       });
 
     const basicDecimal = PayrollMoney.requireDecimal(input.basicMonthlySalary, "Basic Salary");

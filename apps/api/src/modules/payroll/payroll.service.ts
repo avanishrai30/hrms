@@ -74,7 +74,15 @@ export class PayrollService {
     actorMembershipId?: string
   ) {
     const { month, year, notes } = input;
-    const { currency, jurisdiction } = await this.getTenantPayrollConfig(tenantId);
+    const { currency, jurisdiction, pfPolicyVersion, esiPolicyVersion, policyAppliesFrom } =
+      await this.getTenantPayrollConfig(tenantId);
+
+    const periodIso = `${year}-${String(month).padStart(2, "0")}`;
+    if (periodIso < policyAppliesFrom) {
+      throw new BadRequestException(
+        `Payroll period ${periodIso} precedes configured statutory policy applicability period (${policyAppliesFrom}).`
+      );
+    }
 
     // Check if payroll run already exists for the month
     const existing = await this.prisma.payrollRun.findUnique({
@@ -261,7 +269,10 @@ export class PayrollService {
         components,
         year,
         month,
-        jurisdiction
+        jurisdiction,
+        pfPolicyVersion,
+        esiPolicyVersion,
+        policyAppliesFrom
       });
 
       totalEmployees += 1;
@@ -290,12 +301,15 @@ export class PayrollService {
           holidayDays: payableResult.holidayDays,
           leavesCount: empLeaves.length
         },
-        // Blockers 4 & 13: Preserve exact precision, currency, and statutory policy snapshot
+        // Blockers 4 & 13 (Task 05.6): Preserve exact precision, currency, and statutory policy snapshot
         compensationSnapshot: {
           monthlyCtc: activeComp.monthlyCtc.toString(),
           annualCtc: activeComp.annualCtc.toString(),
           currency: activeComp.currency,
           jurisdiction,
+          pfPolicyVersion,
+          esiPolicyVersion,
+          policyAppliesFrom,
           statutoryPolicySnapshot: prorationResult.statutoryPolicySnapshot,
           components: components.map((c) => ({
             ...c,
@@ -935,7 +949,10 @@ export class PayrollService {
     }
 
     const metadata = (settings.metadata as Record<string, unknown>) ?? {};
+    const payrollMeta = (metadata.payroll as Record<string, unknown>) ?? {};
+
     const rawJurisdiction =
+      (payrollMeta.statutoryJurisdiction as string) ||
       (metadata.statutoryJurisdiction as string) ||
       (metadata.jurisdiction as string);
 
@@ -943,16 +960,52 @@ export class PayrollService {
       throw new BadRequestException("Payroll statutory jurisdiction is not configured for this tenant.");
     }
 
-    const trimmed = rawJurisdiction.trim().toUpperCase();
-    if (!/^[A-Z]{2}$/.test(trimmed)) {
+    const jurisdiction = rawJurisdiction.trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(jurisdiction)) {
       throw new BadRequestException(
         `Invalid statutory jurisdiction "${rawJurisdiction}". Statutory jurisdiction must be a 2-letter ISO code.`
       );
     }
 
+    const pfPolicyVersion =
+      (payrollMeta.pfPolicyVersion as string) ||
+      (metadata.pfPolicyVersion as string) ||
+      (metadata.statutoryPfPolicyVersion as string);
+
+    if (!pfPolicyVersion || typeof pfPolicyVersion !== "string" || pfPolicyVersion.trim() === "") {
+      throw new BadRequestException("Tenant statutory PF policy version is not configured.");
+    }
+
+    const esiPolicyVersion =
+      (payrollMeta.esiPolicyVersion as string) ||
+      (metadata.esiPolicyVersion as string) ||
+      (metadata.statutoryEsiPolicyVersion as string);
+
+    if (!esiPolicyVersion || typeof esiPolicyVersion !== "string" || esiPolicyVersion.trim() === "") {
+      throw new BadRequestException("Tenant statutory ESI policy version is not configured.");
+    }
+
+    const policyAppliesFrom =
+      (payrollMeta.policyAppliesFrom as string) ||
+      (metadata.policyAppliesFrom as string) ||
+      (metadata.statutoryPolicyAppliesFrom as string);
+
+    if (
+      !policyAppliesFrom ||
+      typeof policyAppliesFrom !== "string" ||
+      !/^\d{4}-(0[1-9]|1[0-2])$/.test(policyAppliesFrom.trim())
+    ) {
+      throw new BadRequestException(
+        "Tenant statutory policy applicability period is not configured or invalid (expected format YYYY-MM)."
+      );
+    }
+
     return {
       currency: settings.currency,
-      jurisdiction: trimmed
+      jurisdiction,
+      pfPolicyVersion: pfPolicyVersion.trim(),
+      esiPolicyVersion: esiPolicyVersion.trim(),
+      policyAppliesFrom: policyAppliesFrom.trim()
     };
   }
 

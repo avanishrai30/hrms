@@ -10,7 +10,7 @@ import { PfEngine } from "../src/modules/payroll/engines/pf-engine.js";
 import { EsiEngine } from "../src/modules/payroll/engines/esi-engine.js";
 import { StatutoryPolicyRegistry } from "../src/modules/payroll/engines/statutory-policy.registry.js";
 
-describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5)", () => {
+describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.6)", () => {
   describe("1. Strict Money Parsing & Deliberate Zero (Blockers 5 & 14)", () => {
     it("rejects null, undefined, empty string, non-numeric strings, and NaN with BadRequestException", () => {
       expect(() => PayrollMoney.requireDecimal(null, "amount")).toThrow(BadRequestException);
@@ -52,7 +52,10 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5
         components,
         year: 2026,
         month: 9,
-        jurisdiction: "IN"
+        jurisdiction: "IN",
+        pfPolicyVersion: "IN_EPF_COMMITTED_LEGACY",
+        esiPolicyVersion: "IN_ESI_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-01"
       });
 
       expect(result.dailyRate).toBe(0);
@@ -87,7 +90,10 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5
         components,
         year: 2026,
         month: 9,
-        jurisdiction: "IN"
+        jurisdiction: "IN",
+        pfPolicyVersion: "IN_EPF_COMMITTED_LEGACY",
+        esiPolicyVersion: "IN_ESI_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-01"
       });
 
       expect(result.grossSalaryDecimal.toFixed(2)).toBe("41129.03");
@@ -100,7 +106,9 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5
         isPfCappedAtStatutoryWageCeiling: true,
         year: 2026,
         month: 9,
-        jurisdiction: "IN"
+        jurisdiction: "IN",
+        policyVersion: "IN_EPF_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-01"
       });
 
       expect(res.employeePfContributionDecimal.toFixed(2)).toBe("1799.98");
@@ -114,7 +122,9 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5
         grossMonthlyWages: new Prisma.Decimal("20999.75"),
         year: 2026,
         month: 9,
-        jurisdiction: "IN"
+        jurisdiction: "IN",
+        policyVersion: "IN_ESI_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-01"
       });
 
       expect(res.isEligible).toBe(true);
@@ -126,48 +136,101 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5
     });
   });
 
-  describe("4. Statutory Policy Provenance & Validation (Task 05.5)", () => {
+  describe("4. Statutory Policy Configuration & Validation (Task 05.6)", () => {
     it("rejects missing or invalid payroll year", () => {
       // @ts-expect-error Testing missing year
-      expect(() => StatutoryPolicyRegistry.getPfPolicy({ month: 9, jurisdiction: "IN" })).toThrow(BadRequestException);
-      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: NaN, month: 9, jurisdiction: "IN" })).toThrow(BadRequestException);
-      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 1800, month: 9, jurisdiction: "IN" })).toThrow(BadRequestException);
+      expect(() => StatutoryPolicyRegistry.getPfPolicy({ month: 9, jurisdiction: "IN", policyVersion: "IN_EPF_COMMITTED_LEGACY" })).toThrow(BadRequestException);
+      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: NaN, month: 9, jurisdiction: "IN", policyVersion: "IN_EPF_COMMITTED_LEGACY" })).toThrow(BadRequestException);
+      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 1800, month: 9, jurisdiction: "IN", policyVersion: "IN_EPF_COMMITTED_LEGACY" })).toThrow(BadRequestException);
     });
 
     it("rejects missing or invalid payroll month (outside 1..12)", () => {
       // @ts-expect-error Testing missing month
-      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, jurisdiction: "IN" })).toThrow(BadRequestException);
-      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 0, jurisdiction: "IN" })).toThrow(BadRequestException);
-      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 13, jurisdiction: "IN" })).toThrow(BadRequestException);
+      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, jurisdiction: "IN", policyVersion: "IN_EPF_COMMITTED_LEGACY" })).toThrow(BadRequestException);
+      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 0, jurisdiction: "IN", policyVersion: "IN_EPF_COMMITTED_LEGACY" })).toThrow(BadRequestException);
+      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 13, jurisdiction: "IN", policyVersion: "IN_EPF_COMMITTED_LEGACY" })).toThrow(BadRequestException);
     });
 
     it("rejects missing or empty statutory jurisdiction without defaulting to IN", () => {
-      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 9, jurisdiction: "" })).toThrow(BadRequestException);
+      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 9, jurisdiction: "", policyVersion: "IN_EPF_COMMITTED_LEGACY" })).toThrow(BadRequestException);
       // @ts-expect-error Testing undefined jurisdiction
-      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 9 })).toThrow(BadRequestException);
+      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 9, policyVersion: "IN_EPF_COMMITTED_LEGACY" })).toThrow(BadRequestException);
+    });
+
+    it("rejects missing policy version", () => {
+      // @ts-expect-error Testing missing policyVersion
+      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 9, jurisdiction: "IN" })).toThrow(BadRequestException);
+      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 9, jurisdiction: "IN", policyVersion: "" })).toThrow(BadRequestException);
+    });
+
+    it("rejects unknown policy version rather than falling back to policies[0]", () => {
+      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 9, jurisdiction: "IN", policyVersion: "NON_EXISTENT_POLICY" })).toThrow(
+        /Statutory policy version "NON_EXISTENT_POLICY" is not registered for jurisdiction "IN"/
+      );
     });
 
     it("fails cleanly for unsupported statutory jurisdiction", () => {
-      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 9, jurisdiction: "US" })).toThrow(
+      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 9, jurisdiction: "US", policyVersion: "IN_EPF_COMMITTED_LEGACY" })).toThrow(
         /No statutory policy is configured for jurisdiction "US"/
       );
-      expect(() => StatutoryPolicyRegistry.getEsiPolicy({ year: 2026, month: 9, jurisdiction: "GB" })).toThrow(
+      expect(() => StatutoryPolicyRegistry.getEsiPolicy({ year: 2026, month: 9, jurisdiction: "GB", policyVersion: "IN_ESI_COMMITTED_LEGACY" })).toThrow(
         /No statutory policy is configured for jurisdiction "GB"/
       );
     });
 
-    it("fails closed when historical period precedes known product baseline without invented dates", () => {
-      // Legacy unverified policy does not pretend historical legal validity for older periods
-      expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2010, month: 1, jurisdiction: "IN" })).toThrow(
-        /Statutory policy history is not configured for this payroll period \(2010-01\)/
-      );
-      expect(() => StatutoryPolicyRegistry.getEsiPolicy({ year: 2015, month: 5, jurisdiction: "IN" })).toThrow(
-        /Statutory policy history is not configured for this payroll period \(2015-05\)/
-      );
+    it("enforces tenant statutory policy applicability period (policyAppliesFrom)", () => {
+      // Period before applicability period fails closed
+      expect(() =>
+        StatutoryPolicyRegistry.getPfPolicy({
+          year: 2026,
+          month: 5,
+          jurisdiction: "IN",
+          policyVersion: "IN_EPF_COMMITTED_LEGACY",
+          policyAppliesFrom: "2026-06"
+        })
+      ).toThrow(/Payroll period 2026-05 precedes configured statutory policy applicability period \(2026-06\)/);
+
+      // Period exactly at applicability period succeeds
+      const exact = StatutoryPolicyRegistry.getPfPolicy({
+        year: 2026,
+        month: 6,
+        jurisdiction: "IN",
+        policyVersion: "IN_EPF_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-06"
+      });
+      expect(exact.version).toBe("IN_EPF_COMMITTED_LEGACY");
+
+      // Period after applicability period succeeds
+      const after = StatutoryPolicyRegistry.getPfPolicy({
+        year: 2026,
+        month: 7,
+        jurisdiction: "IN",
+        policyVersion: "IN_EPF_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-06"
+      });
+      expect(after.version).toBe("IN_EPF_COMMITTED_LEGACY");
+    });
+
+    it("proves year < 2026 synthetic boundary is removed (earlier year succeeds if tenant applicability permits)", () => {
+      // If a tenant explicitly configured applicability from 2024-01, year 2024 is permitted
+      const policy2024 = StatutoryPolicyRegistry.getPfPolicy({
+        year: 2024,
+        month: 5,
+        jurisdiction: "IN",
+        policyVersion: "IN_EPF_COMMITTED_LEGACY",
+        policyAppliesFrom: "2024-01"
+      });
+      expect(policy2024.version).toBe("IN_EPF_COMMITTED_LEGACY");
     });
 
     it("proves production registry calculation constants match legacy source commit 35606c2", () => {
-      const pfPolicy = StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 9, jurisdiction: "IN" });
+      const pfPolicy = StatutoryPolicyRegistry.getPfPolicy({
+        year: 2026,
+        month: 9,
+        jurisdiction: "IN",
+        policyVersion: "IN_EPF_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-01"
+      });
       expect(pfPolicy.version).toBe("IN_EPF_COMMITTED_LEGACY");
       expect(pfPolicy.provenance).toBe("LEGACY_COMMITTED_ENGINE");
       expect(pfPolicy.historicalValidity).toBe("UNVERIFIED");
@@ -181,7 +244,13 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5
       expect(pfPolicy.maxEdliContribution.toFixed(2)).toBe("75.00");
       expect(pfPolicy.adminRate.toString()).toBe("0.005");
 
-      const esiPolicy = StatutoryPolicyRegistry.getEsiPolicy({ year: 2026, month: 9, jurisdiction: "IN" });
+      const esiPolicy = StatutoryPolicyRegistry.getEsiPolicy({
+        year: 2026,
+        month: 9,
+        jurisdiction: "IN",
+        policyVersion: "IN_ESI_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-01"
+      });
       expect(esiPolicy.version).toBe("IN_ESI_COMMITTED_LEGACY");
       expect(esiPolicy.provenance).toBe("LEGACY_COMMITTED_ENGINE");
       expect(esiPolicy.historicalValidity).toBe("UNVERIFIED");
@@ -248,7 +317,7 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5
   });
 
   describe("6. Statutory Audit Snapshot Correctness & Truthful Provenance", () => {
-    it("distinguishes policy wage ceiling from actual employee wage basis and records unverified provenance", () => {
+    it("distinguishes policy wage ceiling from actual employee wage basis and records tenant applicability", () => {
       // Employee basic = ₹10,000 (below policy ceiling ₹15,000)
       const components: CompensationItemSnapshot[] = [
         { name: "Basic", code: "BASIC", type: "EARNING", category: "BASIC", monthlyAmount: 10000 },
@@ -263,12 +332,16 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5
         components,
         year: 2026,
         month: 9,
-        jurisdiction: "IN"
+        jurisdiction: "IN",
+        pfPolicyVersion: "IN_EPF_COMMITTED_LEGACY",
+        esiPolicyVersion: "IN_ESI_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-01"
       });
 
       const snap = result.statutoryPolicySnapshot;
       expect(snap.jurisdiction).toBe("IN");
       expect(snap.period).toBe("09/2026");
+      expect(snap.policyAppliesFrom).toBe("2026-01");
 
       // Truthful provenance: no unsourced effective dates
       expect(snap.pfPolicyProvenance).toBe("LEGACY_COMMITTED_ENGINE");
@@ -301,6 +374,9 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5
         year: 2026,
         month: 9,
         jurisdiction: "IN",
+        pfPolicyVersion: "IN_EPF_COMMITTED_LEGACY",
+        esiPolicyVersion: "IN_ESI_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-01",
         isPreviouslyCoveredInCycle: true
       });
       expect(covered.statutoryPolicySnapshot.esiContinuationCycleApplied).toBe(true);
@@ -315,6 +391,9 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5
         year: 2026,
         month: 9,
         jurisdiction: "IN",
+        pfPolicyVersion: "IN_EPF_COMMITTED_LEGACY",
+        esiPolicyVersion: "IN_ESI_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-01",
         isPreviouslyCoveredInCycle: false
       });
       expect(uncovered.statutoryPolicySnapshot.esiContinuationCycleApplied).toBe(false);
@@ -336,7 +415,10 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5
         components,
         year: 2026,
         month: 9,
-        jurisdiction: "IN"
+        jurisdiction: "IN",
+        pfPolicyVersion: "IN_EPF_COMMITTED_LEGACY",
+        esiPolicyVersion: "IN_ESI_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-01"
       });
       expect(zeroDays.totalDeductions).toBe(0);
 
@@ -347,7 +429,10 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5
         components,
         year: 2026,
         month: 9,
-        jurisdiction: "IN"
+        jurisdiction: "IN",
+        pfPolicyVersion: "IN_EPF_COMMITTED_LEGACY",
+        esiPolicyVersion: "IN_ESI_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-01"
       });
       expect(activeDays.totalDeductions).toBe(300);
     });
@@ -365,7 +450,10 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5
         ],
         year: 2026,
         month: 9,
-        jurisdiction: "IN"
+        jurisdiction: "IN",
+        pfPolicyVersion: "IN_EPF_COMMITTED_LEGACY",
+        esiPolicyVersion: "IN_ESI_COMMITTED_LEGACY",
+        policyAppliesFrom: "2026-01"
       };
 
       const res1 = SalaryProrationEngine.calculateProration(params);

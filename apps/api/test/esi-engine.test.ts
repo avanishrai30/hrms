@@ -7,7 +7,8 @@ describe("EsiEngine (Task 30 - ESIC Statutory Calculation)", () => {
       grossMonthlyWages: 20000,
       year: 2026,
       month: 4,
-      jurisdiction: "IN"
+      jurisdiction: "IN",
+      policyVersion: "IN_ESI_COMMITTED_LEGACY"
     });
 
     expect(res.isEligible).toBe(true);
@@ -21,7 +22,8 @@ describe("EsiEngine (Task 30 - ESIC Statutory Calculation)", () => {
       grossMonthlyWages: 35000,
       year: 2026,
       month: 4,
-      jurisdiction: "IN"
+      jurisdiction: "IN",
+      policyVersion: "IN_ESI_COMMITTED_LEGACY"
     });
 
     expect(res.isEligible).toBe(false);

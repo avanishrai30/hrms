@@ -10,7 +10,12 @@ function makeService(overrides: Record<string, unknown> = {}) {
     tenantSettings: {
       findUnique: vi.fn().mockResolvedValue({
         currency: "USD",
-        metadata: { statutoryJurisdiction: "IN" }
+        metadata: {
+          statutoryJurisdiction: "IN",
+          pfPolicyVersion: "IN_EPF_COMMITTED_LEGACY",
+          esiPolicyVersion: "IN_ESI_COMMITTED_LEGACY",
+          policyAppliesFrom: "2026-01"
+        }
       })
     },
     payrollRun: {
@@ -111,6 +116,108 @@ describe("Payroll service hardening", () => {
     ).rejects.toThrow(new BadRequestException('Invalid statutory jurisdiction "India". Statutory jurisdiction must be a 2-letter ISO code.'));
 
     expect(prisma.payrollRun.create).not.toHaveBeenCalled();
+  });
+
+  it("requires tenant statutory PF policy version before generating payroll", async () => {
+    const { service, prisma } = makeService({
+      tenantSettings: {
+        findUnique: vi.fn().mockResolvedValue({
+          currency: "USD",
+          metadata: { statutoryJurisdiction: "IN" }
+        })
+      }
+    });
+
+    await expect(
+      service.generatePayrollRun("tenant-A", { month: 4, year: 2026 }, "user-1")
+    ).rejects.toThrow(new BadRequestException("Tenant statutory PF policy version is not configured."));
+
+    expect(prisma.payrollRun.create).not.toHaveBeenCalled();
+  });
+
+  it("requires tenant statutory ESI policy version before generating payroll", async () => {
+    const { service, prisma } = makeService({
+      tenantSettings: {
+        findUnique: vi.fn().mockResolvedValue({
+          currency: "USD",
+          metadata: { statutoryJurisdiction: "IN", pfPolicyVersion: "IN_EPF_COMMITTED_LEGACY" }
+        })
+      }
+    });
+
+    await expect(
+      service.generatePayrollRun("tenant-A", { month: 4, year: 2026 }, "user-1")
+    ).rejects.toThrow(new BadRequestException("Tenant statutory ESI policy version is not configured."));
+
+    expect(prisma.payrollRun.create).not.toHaveBeenCalled();
+  });
+
+  it("requires tenant statutory policy applicability period before generating payroll", async () => {
+    const { service, prisma } = makeService({
+      tenantSettings: {
+        findUnique: vi.fn().mockResolvedValue({
+          currency: "USD",
+          metadata: {
+            statutoryJurisdiction: "IN",
+            pfPolicyVersion: "IN_EPF_COMMITTED_LEGACY",
+            esiPolicyVersion: "IN_ESI_COMMITTED_LEGACY"
+          }
+        })
+      }
+    });
+
+    await expect(
+      service.generatePayrollRun("tenant-A", { month: 4, year: 2026 }, "user-1")
+    ).rejects.toThrow(new BadRequestException("Tenant statutory policy applicability period is not configured or invalid (expected format YYYY-MM)."));
+
+    expect(prisma.payrollRun.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects payroll run before tenant policy applicability period", async () => {
+    const { service, prisma } = makeService({
+      tenantSettings: {
+        findUnique: vi.fn().mockResolvedValue({
+          currency: "USD",
+          metadata: {
+            statutoryJurisdiction: "IN",
+            pfPolicyVersion: "IN_EPF_COMMITTED_LEGACY",
+            esiPolicyVersion: "IN_ESI_COMMITTED_LEGACY",
+            policyAppliesFrom: "2026-06"
+          }
+        })
+      }
+    });
+
+    await expect(
+      service.generatePayrollRun("tenant-A", { month: 4, year: 2026 }, "user-1")
+    ).rejects.toThrow(new BadRequestException("Payroll period 2026-04 precedes configured statutory policy applicability period (2026-06)."));
+
+    expect(prisma.payrollRun.create).not.toHaveBeenCalled();
+  });
+
+  it("proves tenant A policy config cannot affect tenant B", async () => {
+    const findUniqueMock = vi.fn().mockImplementation(({ where }: { where: { tenantId: string } }) => {
+      if (where.tenantId === "tenant-A") {
+        return Promise.resolve({
+          currency: "USD",
+          metadata: {
+            statutoryJurisdiction: "IN",
+            pfPolicyVersion: "IN_EPF_COMMITTED_LEGACY",
+            esiPolicyVersion: "IN_ESI_COMMITTED_LEGACY",
+            policyAppliesFrom: "2026-01"
+          }
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    const { service } = makeService({
+      tenantSettings: { findUnique: findUniqueMock }
+    });
+
+    await expect(
+      service.generatePayrollRun("tenant-B", { month: 4, year: 2026 }, "user-1")
+    ).rejects.toThrow(new BadRequestException("Tenant currency must be configured before payroll generation."));
   });
 
   it("rejects active employees without effective compensation instead of silently skipping them", async () => {
