@@ -33,7 +33,7 @@ export type ToolExecutionResult = ToolExecutionProposal | ToolExecutionSuccess;
 
 @Injectable()
 export class AiToolRegistryService {
-  private readonly secretKey = process.env.JWT_SECRET || "ai-tool-confirmation-secret-fallback";
+  private readonly secretKey = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || "";
   private readonly pendingProposals = new Map<string, {
     tenantId: string;
     userId: string;
