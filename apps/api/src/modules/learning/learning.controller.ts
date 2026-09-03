@@ -33,7 +33,7 @@ import {
   RecordSessionAttendanceSchema
 } from "./learning.schemas.js";
 
-@Controller("api/v1/learning")
+@Controller(["learning", "api/v1/learning"])
 export class LearningController {
   constructor(private readonly learningService: LearningService) {}
 

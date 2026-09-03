@@ -25,7 +25,7 @@ interface AuthenticatedEmployeeRequest extends Request {
   employee?: { id?: string };
 }
 
-@Controller("api/v1/helpdesk")
+@Controller(["helpdesk", "api/v1/helpdesk"])
 export class HelpdeskController {
   constructor(private readonly helpdeskService: HelpdeskService) {}
 

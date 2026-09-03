@@ -7,6 +7,7 @@ import {
   Logger
 } from "@nestjs/common";
 import type { Request, Response } from "express";
+import crypto from "node:crypto";
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -17,13 +18,26 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
+    const requestId =
+      (request?.headers?.["x-request-id"] as string) ||
+      (request as unknown as { id?: string })?.id ||
+      crypto.randomUUID();
+
+    if (typeof response?.setHeader === "function") {
+      response.setHeader("x-request-id", requestId);
+    }
+
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = "Internal server error";
     let code: string | undefined = undefined;
 
     const isProduction = process.env.NODE_ENV === "production";
 
-    if (exception instanceof HttpException) {
+    if (this.isJwtError(exception)) {
+      status = HttpStatus.UNAUTHORIZED;
+      message = "Your session has expired. Please sign in again.";
+      code = "UNAUTHORIZED";
+    } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       const res = exception.getResponse();
       if (typeof res === "string") {
@@ -69,11 +83,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     if (status >= 500) {
       this.logger.error(
-        `[${method}] ${url} -> ${status}: ${message}`,
+        `[req:${requestId}] [${method}] ${url} -> ${status}: ${message}`,
         exception instanceof Error ? exception.stack : undefined
       );
     } else {
-      this.logger.warn(`[${method}] ${url} -> ${status}: ${message}`);
+      this.logger.warn(`[req:${requestId}] [${method}] ${url} -> ${status}: ${message}`);
     }
 
     response.status(status).json({
@@ -81,6 +95,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: url,
       message,
+      requestId,
       ...(code ? { code } : {})
     });
   }
@@ -89,5 +104,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     if (typeof error !== "object" || error === null) return false;
     const name = (error as { name?: string }).name;
     return typeof name === "string" && name.startsWith("PrismaClient");
+  }
+
+  private isJwtError(error: unknown): boolean {
+    if (typeof error !== "object" || error === null) return false;
+    const name = (error as { name?: string }).name;
+    return name === "TokenExpiredError" || name === "JsonWebTokenError" || name === "NotBeforeError";
   }
 }

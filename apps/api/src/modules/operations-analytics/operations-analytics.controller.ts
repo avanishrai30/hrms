@@ -4,7 +4,7 @@ import { OperationsAnalyticsService } from "./operations-analytics.service.js";
 import { RequirePermissions } from "../rbac/permissions.decorator.js";
 import { requireTenantContext } from "../common/tenant-context.js";
 
-@Controller("api/v1/operations")
+@Controller(["operations", "api/v1/operations"])
 export class OperationsAnalyticsController {
   constructor(private readonly analyticsService: OperationsAnalyticsService) {}
 

@@ -26,7 +26,7 @@ interface AuthenticatedEmployeeRequest extends Request {
   employee?: { id?: string };
 }
 
-@Controller("api/v1/visitor")
+@Controller(["visitor", "api/v1/visitor"])
 export class VisitorController {
   constructor(private readonly visitorService: VisitorService) {}
 

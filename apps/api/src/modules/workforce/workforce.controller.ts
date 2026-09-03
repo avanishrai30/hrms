@@ -24,7 +24,7 @@ import {
   CreateSkillForecastSchema
 } from "./workforce.schemas.js";
 
-@Controller("api/v1/workforce")
+@Controller(["workforce", "api/v1/workforce"])
 export class WorkforceController {
   constructor(private readonly workforceService: WorkforceService) {}
 

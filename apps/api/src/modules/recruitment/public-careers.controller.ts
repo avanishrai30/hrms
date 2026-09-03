@@ -14,7 +14,7 @@ import {
 } from "./recruitment.schemas.js";
 
 @Public()
-@Controller("api/v1/public/careers")
+@Controller(["public/careers", "api/v1/public/careers"])
 export class PublicCareersController {
   constructor(private readonly recruitmentService: RecruitmentService) {}
 

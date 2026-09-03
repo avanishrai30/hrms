@@ -26,7 +26,7 @@ import {
 } from "./engagement.schemas.js";
 import { EngagementService } from "./engagement.service.js";
 
-@Controller("api/v1/engagement")
+@Controller(["engagement", "api/v1/engagement"])
 export class EngagementController {
   constructor(private readonly engagementService: EngagementService) {}
 

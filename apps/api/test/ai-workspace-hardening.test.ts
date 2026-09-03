@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AiContextBuilderService } from "../src/modules/ai/services/ai-context-builder.service.js";
 import { AiToolRegistryService } from "../src/modules/ai/tools/ai-tool-registry.service.js";
 import { AiService } from "../src/modules/ai/ai.service.js";
-import { collectPermissions, hasPermission } from "@vc-wms/auth";
 
 describe("Task 09 — AI Workspace Hardening & Security Tests", () => {
   const tenantA = "11111111-1111-1111-1111-111111111111";

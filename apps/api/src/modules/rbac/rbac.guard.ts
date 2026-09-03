@@ -34,18 +34,26 @@ export class RbacGuard implements CanActivate {
     }
 
     if (platformRequired) {
-      request.platformUser = this.jwtService.verify<PlatformJwtPayload>(token, {
-        secret: process.env.JWT_ACCESS_SECRET
-      });
+      try {
+        request.platformUser = this.jwtService.verify<PlatformJwtPayload>(token, {
+          secret: process.env.JWT_ACCESS_SECRET
+        });
+      } catch {
+        throw new UnauthorizedException("Platform session is invalid or has expired.");
+      }
       if (request.platformUser.typ !== "platform") {
         throw new ForbiddenException("Platform access is required.");
       }
       return true;
     }
 
-    request.user = this.jwtService.verify<TenantJwtPayload>(token, {
-      secret: process.env.JWT_ACCESS_SECRET
-    });
+    try {
+      request.user = this.jwtService.verify<TenantJwtPayload>(token, {
+        secret: process.env.JWT_ACCESS_SECRET
+      });
+    } catch {
+      throw new UnauthorizedException("Session is invalid or has expired.");
+    }
     if (request.user.typ !== "tenant") {
       throw new ForbiddenException("Tenant access is required.");
     }

@@ -30,7 +30,7 @@ import {
   VerifyPreboardingTaskSchema
 } from "./recruitment.schemas.js";
 
-@Controller("api/v1/recruitment")
+@Controller(["recruitment", "api/v1/recruitment"])
 export class RecruitmentController {
   constructor(private readonly recruitmentService: RecruitmentService) {}
 

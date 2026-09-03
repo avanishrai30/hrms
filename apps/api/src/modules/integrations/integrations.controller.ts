@@ -33,7 +33,7 @@ import {
 } from "./integrations.schemas.js";
 import { IntegrationsService } from "./integrations.service.js";
 
-@Controller("api/v1/integrations")
+@Controller(["integrations", "api/v1/integrations"])
 export class IntegrationsController {
   constructor(private readonly integrationsService: IntegrationsService) {}
 

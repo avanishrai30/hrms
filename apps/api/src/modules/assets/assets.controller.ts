@@ -27,7 +27,7 @@ import {
 } from "./assets.schemas.js";
 import type { AssetCategory, AssetStatus } from "@prisma/client";
 
-@Controller("api/v1/assets")
+@Controller(["assets", "api/v1/assets"])
 export class AssetsController {
   constructor(private readonly assetsService: AssetsService) {}
 

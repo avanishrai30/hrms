@@ -26,7 +26,7 @@ import {
 } from "./compensation.schemas.js";
 import { CompensationService } from "./compensation.service.js";
 
-@Controller("api/v1/compensation")
+@Controller(["compensation", "api/v1/compensation"])
 export class CompensationController {
   constructor(
     private readonly compensationService: CompensationService,

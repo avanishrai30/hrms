@@ -44,22 +44,56 @@ function normalizeApiError(status: number, body: string) {
   return "Something went wrong.";
 }
 
-async function refreshAccessToken() {
-  const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-    method: "POST",
-    credentials: "include",
-    cache: "no-store"
-  });
-  if (!response.ok) return null;
-  const body = (await response.json()) as { accessToken?: string };
-  if (!body.accessToken) return null;
-  setAccessToken(body.accessToken);
-  return body.accessToken;
+let activeRefreshPromise: Promise<string | null> | null = null;
+
+export async function refreshAccessToken(): Promise<string | null> {
+  if (activeRefreshPromise) {
+    return activeRefreshPromise;
+  }
+
+  activeRefreshPromise = (async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store"
+      });
+      if (!response.ok) {
+        setAccessToken(null);
+        if (typeof document !== "undefined") {
+          document.cookie = "aiavro_session=; path=/; max-age=0";
+        }
+        return null;
+      }
+      const body = (await response.json()) as { accessToken?: string };
+      if (!body.accessToken) {
+        setAccessToken(null);
+        if (typeof document !== "undefined") {
+          document.cookie = "aiavro_session=; path=/; max-age=0";
+        }
+        return null;
+      }
+      setAccessToken(body.accessToken);
+      if (typeof document !== "undefined") {
+        document.cookie = `aiavro_session=1; path=/; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
+      }
+      return body.accessToken;
+    } catch {
+      return null;
+    } finally {
+      activeRefreshPromise = null;
+    }
+  })();
+
+  return activeRefreshPromise;
 }
 
 function notifySessionExpired(path: string) {
   if (path.startsWith("/auth/")) return;
   if (typeof window === "undefined") return;
+  if (typeof document !== "undefined") {
+    document.cookie = "aiavro_session=; path=/; max-age=0";
+  }
   window.dispatchEvent(new Event("aiavro:session-expired"));
 }
 

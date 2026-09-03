@@ -19,7 +19,7 @@ import {
 } from "./compliance.schemas.js";
 import { ComplianceService } from "./compliance.service.js";
 
-@Controller("api/v1/compliance")
+@Controller(["compliance", "api/v1/compliance"])
 export class ComplianceController {
   constructor(private readonly complianceService: ComplianceService) {}
 

@@ -36,7 +36,7 @@ import {
 } from "./payroll.schemas.js";
 import { PayrollService } from "./payroll.service.js";
 
-@Controller("api/v1/payroll")
+@Controller(["payroll", "api/v1/payroll"])
 export class PayrollController {
   constructor(private readonly payrollService: PayrollService) {}
 

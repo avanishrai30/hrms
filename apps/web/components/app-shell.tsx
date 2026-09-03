@@ -33,6 +33,7 @@ import {
 import type { PermissionCode } from "@vc-wms/shared-types";
 import { useSessionStore } from "../lib/session-store";
 import { useEmployeeProfile } from "../lib/queries/use-dashboard-queries";
+import { apiRequest, refreshAccessToken } from "../lib/api";
 import {
   SidebarProvider,
   Sidebar,
@@ -169,7 +170,12 @@ function NavUserSection() {
   const { clear } = useSessionStore();
   const { data: profile } = useEmployeeProfile();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await apiRequest("/auth/logout", { method: "POST" });
+    } catch {
+      // Ignore network errors during logout
+    }
     clear();
     router.push("/login" as Route);
   };
@@ -249,15 +255,47 @@ function NavUserSection() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { permissions, hydrateFromStorage, isHydrated } = useSessionStore();
+  const router = useRouter();
+  const { permissions, hydrateFromStorage, isHydrated, accessToken } = useSessionStore();
   const { data: profile } = useEmployeeProfile();
   const [isDark, setIsDark] = useState(false);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
 
   React.useEffect(() => {
-    if (!isHydrated) {
-      hydrateFromStorage();
+    let active = true;
+
+    async function checkAuth() {
+      if (!isHydrated) {
+        hydrateFromStorage();
+      }
+
+      const token = useSessionStore.getState().accessToken;
+      if (token) {
+        if (active) setIsAuthChecking(false);
+        return;
+      }
+
+      // If no token in memory/storage, attempt a single refresh
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        useSessionStore.getState().hydrateFromStorage();
+        if (active) setIsAuthChecking(false);
+        return;
+      }
+
+      if (active) {
+        useSessionStore.getState().clear();
+        const safeNext = pathname && pathname.startsWith("/") && !pathname.startsWith("//") ? pathname : "/dashboard";
+        router.replace(`/login?next=${encodeURIComponent(safeNext)}` as Route);
+      }
     }
-  }, [hydrateFromStorage, isHydrated]);
+
+    checkAuth();
+
+    return () => {
+      active = false;
+    };
+  }, [hydrateFromStorage, isHydrated, pathname, router]);
 
   const toggleTheme = () => {
     setIsDark(!isDark);
@@ -270,6 +308,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const name = profile?.fullName || "";
   const initial = name.trim().length > 0 ? name.trim().charAt(0).toUpperCase() : null;
+
+  if (isAuthChecking || !accessToken) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <span className="text-xs text-muted-foreground font-medium">Verifying session…</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -318,17 +367,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       <DropdownMenuItem asChild>
                         <Link href={"/attendance" as Route} className="cursor-pointer">Log Attendance</Link>
                       </DropdownMenuItem>
-                      {permissions.includes("employees.read") && (
+                      {permissions.includes("employees.create") && (
                         <DropdownMenuItem asChild>
                           <Link href={"/employees" as Route} className="cursor-pointer">Add Employee</Link>
                         </DropdownMenuItem>
                       )}
-                      {permissions.includes("recruitment.read") && (
+                      {permissions.includes("recruitment.manage") && (
                         <DropdownMenuItem asChild>
                           <Link href={"/ats" as Route} className="cursor-pointer">Create Requisition</Link>
                         </DropdownMenuItem>
                       )}
-                      {permissions.includes("location.view") && (
+                      {permissions.includes("location.create") && (
                         <DropdownMenuItem asChild>
                           <Link href={"/locations" as Route} className="cursor-pointer">Create Location</Link>
                         </DropdownMenuItem>

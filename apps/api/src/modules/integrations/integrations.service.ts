@@ -4,6 +4,7 @@ import { AiService } from "../ai/ai.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { QueueService } from "../queue/queue.service.js";
+import { validateSsrfUrl } from "../common/ssrf-validator.js";
 import {
   ApiCredentialEngine,
   ApiRateLimitEngine,
@@ -163,11 +164,26 @@ export class IntegrationsService {
     return this.prisma.apiUsageLog.create({ data: { tenantId, ...dto } });
   }
 
-  listWebhooks(tenantId: string) {
-    return this.prisma.apiWebhook.findMany({ where: { tenantId, deletedAt: null }, include: { subscriptions: { take: 10, orderBy: { createdAt: "desc" } } }, orderBy: { createdAt: "desc" } });
+  async listWebhooks(tenantId: string) {
+    const webhooks = await this.prisma.apiWebhook.findMany({
+      where: { tenantId, deletedAt: null },
+      include: { subscriptions: { take: 10, orderBy: { createdAt: "desc" } } },
+      orderBy: { createdAt: "desc" }
+    });
+    return webhooks.map((wh) => {
+      const copy = { ...wh };
+      delete (copy as { secretHash?: string }).secretHash;
+      return copy;
+    });
   }
 
   async createWebhook(tenantId: string, actor: Actor, dto: CreateWebhookDto) {
+    try {
+      await validateSsrfUrl(dto.url);
+    } catch (err: unknown) {
+      throw new BadRequestException((err as Error).message || "Invalid or prohibited webhook destination URL.");
+    }
+
     const secret = this.credentials.createSecret("whsec");
     const webhook = await this.prisma.apiWebhook.create({
       data: {
@@ -181,7 +197,9 @@ export class IntegrationsService {
       }
     });
     await this.audit(tenantId, actor, "integrations.webhook.created", "api_webhook", webhook.id, { id: webhook.id, events: webhook.events });
-    return { webhook, signingSecret: secret.raw };
+    const safeWebhook = { ...webhook };
+    delete (safeWebhook as { secretHash?: string }).secretHash;
+    return { webhook: safeWebhook, signingSecret: secret.raw };
   }
 
   async emitWebhookEvent(tenantId: string, event: string, payload: Record<string, unknown>) {

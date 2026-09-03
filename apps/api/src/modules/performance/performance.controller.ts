@@ -43,7 +43,7 @@ import {
   UpdateReviewCycleStageSchema
 } from "./performance.schemas.js";
 
-@Controller("api/v1/performance")
+@Controller(["performance", "api/v1/performance"])
 export class PerformanceController {
   constructor(private readonly performanceService: PerformanceService) {}
 

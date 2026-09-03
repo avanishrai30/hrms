@@ -5,8 +5,10 @@ import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./modules/app.module.js";
 import { GlobalExceptionFilter } from "./modules/common/global-exception.filter.js";
+import { validateEnvironment } from "./modules/common/env-validation.js";
 
 async function bootstrap(): Promise<void> {
+  validateEnvironment();
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix("api/v1");
   app.use(cookieParser());

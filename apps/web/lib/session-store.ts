@@ -35,6 +35,10 @@ export const useSessionStore = create<SessionState>((set) => ({
   },
   setSession: (accessToken, tenantName, permissions) => {
     setAccessToken(accessToken);
+    if (typeof document !== "undefined") {
+      const isHttps = typeof location !== "undefined" && location.protocol === "https:";
+      document.cookie = `aiavro_session=1; path=/; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+    }
     set({
       accessToken,
       tenantName,
@@ -45,6 +49,9 @@ export const useSessionStore = create<SessionState>((set) => ({
   setBranding: (branding) => set({ branding, tenantName: branding.displayName }),
   clear: () => {
     setAccessToken(null);
+    if (typeof document !== "undefined") {
+      document.cookie = "aiavro_session=; path=/; max-age=0";
+    }
     set({ accessToken: null, permissions: [], branding: null, isHydrated: true });
   }
 }));

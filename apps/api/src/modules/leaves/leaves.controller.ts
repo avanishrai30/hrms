@@ -28,7 +28,7 @@ import {
   updateLeavePolicySchema
 } from "./leaves.schemas.js";
 
-@Controller("api/v1/leaves")
+@Controller(["leaves", "api/v1/leaves"])
 export class LeavesController {
   constructor(
     private readonly leavesService: LeavesService,

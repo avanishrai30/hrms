@@ -21,7 +21,7 @@ import {
 } from "./payslips.schemas.js";
 import { PayslipsService } from "./payslips.service.js";
 
-@Controller("api/v1/payslips")
+@Controller(["payslips", "api/v1/payslips"])
 export class PayslipsController {
   constructor(private readonly payslipsService: PayslipsService) {}
 

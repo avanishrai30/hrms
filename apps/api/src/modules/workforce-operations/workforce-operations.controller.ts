@@ -28,7 +28,7 @@ import {
   FaceAttendanceVerificationSchema
 } from "./workforce-operations.schemas.js";
 
-@Controller("api/v1/attendance-ops")
+@Controller(["attendance-ops", "api/v1/attendance-ops"])
 export class WorkforceOperationsController {
   constructor(
     private readonly workforceOpsService: WorkforceOperationsService

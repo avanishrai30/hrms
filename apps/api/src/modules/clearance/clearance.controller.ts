@@ -17,7 +17,7 @@ import {
 } from "./clearance.schemas.js";
 import type { ClearanceStatus } from "@prisma/client";
 
-@Controller("api/v1/clearance")
+@Controller(["clearance", "api/v1/clearance"])
 export class ClearanceController {
   constructor(private readonly clearanceService: ClearanceService) {}
 
