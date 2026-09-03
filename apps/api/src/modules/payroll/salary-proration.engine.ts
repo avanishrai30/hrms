@@ -1,7 +1,12 @@
+import { BadRequestException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import type {
   SalaryComponentCategory,
   SalaryComponentType
 } from "@vc-wms/shared-types";
+import { PayrollMoney } from "./engines/payroll-money.js";
+import { PfEngine } from "./engines/pf-engine.js";
+import { EsiEngine } from "./engines/esi-engine.js";
 
 export interface CompensationItemSnapshot {
   componentId?: string | null;
@@ -9,7 +14,7 @@ export interface CompensationItemSnapshot {
   code: string;
   type: SalaryComponentType;
   category: SalaryComponentCategory;
-  monthlyAmount: number;
+  monthlyAmount: number | Prisma.Decimal;
   isTaxable?: boolean;
 }
 
@@ -17,7 +22,7 @@ export interface AdjustmentSnapshot {
   id?: string;
   type: string;
   title: string;
-  amount: number;
+  amount: number | Prisma.Decimal;
 }
 
 export interface ProrationResultItem {
@@ -28,6 +33,8 @@ export interface ProrationResultItem {
   category: SalaryComponentCategory;
   baseAmount: number;
   proratedAmount: number;
+  baseAmountDecimal: Prisma.Decimal;
+  proratedAmountDecimal: Prisma.Decimal;
   isTaxable: boolean;
 }
 
@@ -41,40 +48,77 @@ export interface ProrationResult {
   employerContributions: number;
   totalAdjustments: number;
   netSalary: number;
+  grossSalaryDecimal: Prisma.Decimal;
+  totalDeductionsDecimal: Prisma.Decimal;
+  employerContributionsDecimal: Prisma.Decimal;
+  totalAdjustmentsDecimal: Prisma.Decimal;
+  netSalaryDecimal: Prisma.Decimal;
   breakdownItems: ProrationResultItem[];
 }
 
 export class SalaryProrationEngine {
   /**
-   * Computes prorated salary component breakdowns and net salary.
+   * Computes prorated salary component breakdowns and net salary using authoritative
+   * arbitrary-precision Decimal arithmetic and explicit statutory policy delegation.
    */
   static calculateProration(params: {
-    baseMonthlyCtc: number;
-    workingDays: number;
-    payableDays: number;
+    baseMonthlyCtc: number | Prisma.Decimal;
+    workingDays: number | Prisma.Decimal;
+    payableDays: number | Prisma.Decimal;
     components: CompensationItemSnapshot[];
     adjustments?: AdjustmentSnapshot[];
   }): ProrationResult {
-    const { baseMonthlyCtc, workingDays, payableDays, components, adjustments = [] } = params;
+    const {
+      baseMonthlyCtc: rawCtc,
+      workingDays: rawWorkingDays,
+      payableDays: rawPayableDays,
+      components,
+      adjustments = []
+    } = params;
 
-    const dailyRate = workingDays > 0 ? Math.round((baseMonthlyCtc / workingDays) * 100) / 100 : 0;
-    const prorationFactor = workingDays > 0 ? Math.min(1.0, payableDays / workingDays) : 0;
+    const baseMonthlyCtc = PayrollMoney.toDecimal(rawCtc);
+    const workingDays = PayrollMoney.toDecimal(rawWorkingDays);
+    const payableDays = PayrollMoney.toDecimal(rawPayableDays);
+
+    if (workingDays.isNegative()) {
+      throw new BadRequestException("Working days cannot be negative.");
+    }
+    if (payableDays.isNegative()) {
+      throw new BadRequestException("Payable days cannot be negative.");
+    }
+
+    const dailyRate = workingDays.greaterThan(0)
+      ? PayrollMoney.round(PayrollMoney.div(baseMonthlyCtc, workingDays))
+      : new Prisma.Decimal(0);
 
     const breakdownItems: ProrationResultItem[] = [];
 
-    let proratedBasic = 0;
-    let proratedGross = 0;
-    let totalDeductions = 0;
-    let employerContributions = 0;
+    let proratedBasicDecimal = new Prisma.Decimal(0);
+    let proratedGrossDecimal = new Prisma.Decimal(0);
+    let totalDeductionsDecimal = new Prisma.Decimal(0);
+    let employerContributionsDecimal = new Prisma.Decimal(0);
 
     // Step 1: Prorate Earnings
     for (const comp of components) {
+      if (!comp.name || !comp.code || !comp.type || !comp.category) {
+        throw new BadRequestException(
+          `Corrupt salary component snapshot: missing required properties for code "${comp.code || "UNKNOWN"}".`
+        );
+      }
+
       if (comp.type === "EARNING") {
-        const proratedAmount = Math.round(comp.monthlyAmount * prorationFactor * 100) / 100;
+        const baseAmountDecimal = PayrollMoney.round(comp.monthlyAmount);
+        const proratedAmountDecimal = PayrollMoney.prorateComponent(
+          baseAmountDecimal,
+          payableDays,
+          workingDays
+        );
+
         if (comp.category === "BASIC") {
-          proratedBasic = proratedAmount;
+          proratedBasicDecimal = proratedAmountDecimal;
         }
-        proratedGross += proratedAmount;
+
+        proratedGrossDecimal = proratedGrossDecimal.add(proratedAmountDecimal);
 
         breakdownItems.push({
           componentId: comp.componentId,
@@ -82,31 +126,49 @@ export class SalaryProrationEngine {
           code: comp.code,
           type: comp.type,
           category: comp.category,
-          baseAmount: comp.monthlyAmount,
-          proratedAmount,
+          baseAmount: baseAmountDecimal.toNumber(),
+          proratedAmount: proratedAmountDecimal.toNumber(),
+          baseAmountDecimal,
+          proratedAmountDecimal,
           isTaxable: comp.isTaxable ?? true
         });
       }
     }
 
-    // Step 2: Calculate Prorated Deductions & Employer Contributions
+    // Step 2: Calculate Prorated Deductions & Employer Contributions via Authoritative Engines
     for (const comp of components) {
+      const baseAmountDecimal = PayrollMoney.round(comp.monthlyAmount);
+
       if (comp.type === "DEDUCTION") {
-        let proratedAmount = 0;
+        let proratedAmountDecimal = new Prisma.Decimal(0);
+
         if (comp.category === "PF") {
-          // 12% of Prorated Basic
-          proratedAmount = Math.round(proratedBasic * 0.12 * 100) / 100;
+          // Delegate to authoritative PfEngine with prorated basic wage
+          const pfResult = PfEngine.calculatePf({
+            basicMonthlySalary: proratedBasicDecimal.toNumber(),
+            isPfCappedAtStatutoryWageCeiling: true
+          });
+          proratedAmountDecimal = PayrollMoney.toDecimal(pfResult.employeePfContribution);
         } else if (comp.category === "ESI") {
-          // 0.75% of Gross if Gross <= 21000
-          proratedAmount = proratedGross <= 21000 ? Math.round(proratedGross * 0.0075 * 100) / 100 : 0;
+          // Delegate to authoritative EsiEngine with prorated gross wages
+          const esiResult = EsiEngine.calculateEsi({
+            grossMonthlyWages: proratedGrossDecimal.toNumber()
+          });
+          proratedAmountDecimal = PayrollMoney.toDecimal(esiResult.employeeEsiContribution);
         } else if (comp.category === "PROFESSIONAL_TAX") {
-          // PT is ₹200 if payable days > 0
-          proratedAmount = payableDays > 0 ? comp.monthlyAmount : 0;
+          // PT applies from employee-assigned compensation policy when payable days > 0
+          proratedAmountDecimal = payableDays.greaterThan(0)
+            ? baseAmountDecimal
+            : new Prisma.Decimal(0);
         } else {
-          proratedAmount = Math.round(comp.monthlyAmount * prorationFactor * 100) / 100;
+          proratedAmountDecimal = PayrollMoney.prorateComponent(
+            baseAmountDecimal,
+            payableDays,
+            workingDays
+          );
         }
 
-        totalDeductions += proratedAmount;
+        totalDeductionsDecimal = totalDeductionsDecimal.add(proratedAmountDecimal);
 
         breakdownItems.push({
           componentId: comp.componentId,
@@ -114,23 +176,39 @@ export class SalaryProrationEngine {
           code: comp.code,
           type: comp.type,
           category: comp.category,
-          baseAmount: comp.monthlyAmount,
-          proratedAmount,
+          baseAmount: baseAmountDecimal.toNumber(),
+          proratedAmount: proratedAmountDecimal.toNumber(),
+          baseAmountDecimal,
+          proratedAmountDecimal,
           isTaxable: false
         });
       } else if (comp.type === "EMPLOYER_CONTRIBUTION") {
-        let proratedAmount = 0;
+        let proratedAmountDecimal = new Prisma.Decimal(0);
+
         if (comp.category === "PF") {
-          // 12% of Prorated Basic
-          proratedAmount = Math.round(proratedBasic * 0.12 * 100) / 100;
+          // Delegate to PfEngine for employer PF match
+          const pfResult = PfEngine.calculatePf({
+            basicMonthlySalary: proratedBasicDecimal.toNumber(),
+            isPfCappedAtStatutoryWageCeiling: true
+          });
+          // Employer total PF contribution (EPF + EPS)
+          const totalEmployerPf = pfResult.employerEpfContribution + pfResult.employerEpsContribution;
+          proratedAmountDecimal = PayrollMoney.toDecimal(totalEmployerPf);
         } else if (comp.category === "ESI") {
-          // 3.25% of Gross if Gross <= 21000
-          proratedAmount = proratedGross <= 21000 ? Math.round(proratedGross * 0.0325 * 100) / 100 : 0;
+          // Delegate to EsiEngine for employer ESI match
+          const esiResult = EsiEngine.calculateEsi({
+            grossMonthlyWages: proratedGrossDecimal.toNumber()
+          });
+          proratedAmountDecimal = PayrollMoney.toDecimal(esiResult.employerEsiContribution);
         } else {
-          proratedAmount = Math.round(comp.monthlyAmount * prorationFactor * 100) / 100;
+          proratedAmountDecimal = PayrollMoney.prorateComponent(
+            baseAmountDecimal,
+            payableDays,
+            workingDays
+          );
         }
 
-        employerContributions += proratedAmount;
+        employerContributionsDecimal = employerContributionsDecimal.add(proratedAmountDecimal);
 
         breakdownItems.push({
           componentId: comp.componentId,
@@ -138,29 +216,48 @@ export class SalaryProrationEngine {
           code: comp.code,
           type: comp.type,
           category: comp.category,
-          baseAmount: comp.monthlyAmount,
-          proratedAmount,
+          baseAmount: baseAmountDecimal.toNumber(),
+          proratedAmount: proratedAmountDecimal.toNumber(),
+          baseAmountDecimal,
+          proratedAmountDecimal,
           isTaxable: false
         });
       }
     }
 
-    // Step 3: Compute Net Adjustments
-    const totalAdjustments = adjustments.reduce((acc, adj) => acc + adj.amount, 0);
+    // Step 3: Compute Net Adjustments using Decimal addition
+    let totalAdjustmentsDecimal = new Prisma.Decimal(0);
+    for (const adj of adjustments) {
+      totalAdjustmentsDecimal = totalAdjustmentsDecimal.add(PayrollMoney.toDecimal(adj.amount));
+    }
 
     // Step 4: Net Salary = Prorated Gross - Deductions + Adjustments
-    const netSalary = Math.max(0, Math.round((proratedGross - totalDeductions + totalAdjustments) * 100) / 100);
+    const netSalaryDecimal = proratedGrossDecimal
+      .sub(totalDeductionsDecimal)
+      .add(totalAdjustmentsDecimal);
+
+    // Blocker 11: Fail closed on negative net pay instead of silently clamping to zero
+    if (netSalaryDecimal.isNegative()) {
+      throw new BadRequestException(
+        `Calculated net salary cannot be negative (${netSalaryDecimal.toFixed(2)}). Total deductions (${totalDeductionsDecimal.toFixed(2)}) and negative adjustments exceed gross earnings (${proratedGrossDecimal.toFixed(2)}).`
+      );
+    }
 
     return {
-      baseMonthlyCtc,
-      dailyRate,
-      workingDays,
-      payableDays,
-      grossSalary: Math.round(proratedGross * 100) / 100,
-      totalDeductions: Math.round(totalDeductions * 100) / 100,
-      employerContributions: Math.round(employerContributions * 100) / 100,
-      totalAdjustments: Math.round(totalAdjustments * 100) / 100,
-      netSalary,
+      baseMonthlyCtc: baseMonthlyCtc.toNumber(),
+      dailyRate: dailyRate.toNumber(),
+      workingDays: workingDays.toNumber(),
+      payableDays: payableDays.toNumber(),
+      grossSalary: proratedGrossDecimal.toNumber(),
+      totalDeductions: totalDeductionsDecimal.toNumber(),
+      employerContributions: employerContributionsDecimal.toNumber(),
+      totalAdjustments: totalAdjustmentsDecimal.toNumber(),
+      netSalary: netSalaryDecimal.toNumber(),
+      grossSalaryDecimal: proratedGrossDecimal,
+      totalDeductionsDecimal,
+      employerContributionsDecimal,
+      totalAdjustmentsDecimal,
+      netSalaryDecimal,
       breakdownItems
     };
   }

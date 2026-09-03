@@ -11,7 +11,7 @@ import {
   PayrollAdjustmentType,
   PayrollEmployeeStatus,
   PayrollRunStatus,
-  type Prisma
+  Prisma
 } from "@prisma/client";
 import { AuditService } from "../audit/audit.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -182,12 +182,12 @@ export class PayrollService {
       leavesByEmp.set(l.employeeId, list);
     }
 
-    // Calculate payroll for each employee
+    // Calculate payroll for each employee using authoritative Decimal aggregation
     let totalEmployees = 0;
-    let totalGross = 0;
-    let totalDeductions = 0;
-    let totalNet = 0;
-    let totalEmployerContributions = 0;
+    let totalGrossDecimal = new Prisma.Decimal(0);
+    let totalDeductionsDecimal = new Prisma.Decimal(0);
+    let totalNetDecimal = new Prisma.Decimal(0);
+    let totalEmployerContributionsDecimal = new Prisma.Decimal(0);
 
     const employeePayrollData: Array<{
       employeeId: string;
@@ -221,7 +221,8 @@ export class PayrollService {
         approvedLeaves: empLeaves.map((l) => ({
           startDate: l.startDate,
           endDate: l.endDate,
-          isPaid: l.leaveType?.isPaid ?? true,
+          // Blocker 9: Missing leaveType relation must fail closed (unpaid) instead of assuming paid
+          isPaid: l.leaveType ? l.leaveType.isPaid : false,
           totalDays: l.totalDays
         })),
         holidays: holidays.map((h) => ({
@@ -230,16 +231,28 @@ export class PayrollService {
         }))
       });
 
-      // Calculate Proration
-      const components = activeComp.items.map((it) => ({
-        componentId: it.componentId,
-        name: it.component?.name ?? "Component",
-        code: it.component?.code ?? "CODE",
-        type: it.component?.type ?? "EARNING",
-        category: it.component?.category ?? "CUSTOM",
-        monthlyAmount: it.monthlyAmount,
-        isTaxable: it.component?.isTaxable ?? true
-      }));
+      // Calculate Proration with strict component validation (Blocker 8)
+      const components = activeComp.items.map((it) => {
+        if (!it.component) {
+          throw new BadRequestException(
+            `Corrupt compensation item ${it.id}: associated salary component definition is missing.`
+          );
+        }
+        if (!it.component.name || !it.component.code || !it.component.type || !it.component.category) {
+          throw new BadRequestException(
+            `Corrupt salary component definition for item ${it.id}: name, code, type, or category is missing.`
+          );
+        }
+        return {
+          componentId: it.componentId,
+          name: it.component.name,
+          code: it.component.code,
+          type: it.component.type,
+          category: it.component.category,
+          monthlyAmount: it.monthlyAmount,
+          isTaxable: it.component.isTaxable
+        };
+      });
 
       const prorationResult = SalaryProrationEngine.calculateProration({
         baseMonthlyCtc: activeComp.monthlyCtc,
@@ -249,10 +262,12 @@ export class PayrollService {
       });
 
       totalEmployees += 1;
-      totalGross += prorationResult.grossSalary;
-      totalDeductions += prorationResult.totalDeductions;
-      totalNet += prorationResult.netSalary;
-      totalEmployerContributions += prorationResult.employerContributions;
+      totalGrossDecimal = totalGrossDecimal.add(prorationResult.grossSalaryDecimal);
+      totalDeductionsDecimal = totalDeductionsDecimal.add(prorationResult.totalDeductionsDecimal);
+      totalNetDecimal = totalNetDecimal.add(prorationResult.netSalaryDecimal);
+      totalEmployerContributionsDecimal = totalEmployerContributionsDecimal.add(
+        prorationResult.employerContributionsDecimal
+      );
 
       employeePayrollData.push({
         employeeId: emp.id,
@@ -272,11 +287,15 @@ export class PayrollService {
           holidayDays: payableResult.holidayDays,
           leavesCount: empLeaves.length
         },
+        // Blocker 13: Preserve exact precision and currency in compensation snapshot
         compensationSnapshot: {
-          monthlyCtc: activeComp.monthlyCtc,
-          annualCtc: activeComp.annualCtc,
+          monthlyCtc: activeComp.monthlyCtc.toString(),
+          annualCtc: activeComp.annualCtc.toString(),
           currency: activeComp.currency,
-          components
+          components: components.map((c) => ({
+            ...c,
+            monthlyAmount: c.monthlyAmount.toString()
+          }))
         }
       });
     }
@@ -290,10 +309,10 @@ export class PayrollService {
           year,
           status: PayrollRunStatus.GENERATED,
           totalEmployees,
-          totalGross: Math.round(totalGross * 100) / 100,
-          totalDeductions: Math.round(totalDeductions * 100) / 100,
-          totalNet: Math.round(totalNet * 100) / 100,
-          totalEmployerContributions: Math.round(totalEmployerContributions * 100) / 100,
+          totalGross: totalGrossDecimal.toDecimalPlaces(2).toNumber(),
+          totalDeductions: totalDeductionsDecimal.toDecimalPlaces(2).toNumber(),
+          totalNet: totalNetDecimal.toDecimalPlaces(2).toNumber(),
+          totalEmployerContributions: totalEmployerContributionsDecimal.toDecimalPlaces(2).toNumber(),
           currency,
           notes,
           createdByUserId: actorUserId
@@ -362,8 +381,8 @@ export class PayrollService {
         month,
         year,
         totalEmployees,
-        totalGross: Math.round(totalGross * 100) / 100,
-        totalNet: Math.round(totalNet * 100) / 100
+        totalGross: totalGrossDecimal.toDecimalPlaces(2).toNumber(),
+        totalNet: totalNetDecimal.toDecimalPlaces(2).toNumber()
       }
     });
 
@@ -389,6 +408,12 @@ export class PayrollService {
 
     if (run.status === PayrollRunStatus.LOCKED) {
       throw new BadRequestException("Locked payroll runs cannot be recalculated.");
+    }
+    if (run.status === PayrollRunStatus.APPROVED) {
+      throw new BadRequestException("Approved payroll runs cannot be recalculated. Revert approval or unlock first.");
+    }
+    if (run.status !== PayrollRunStatus.GENERATED && run.status !== PayrollRunStatus.DRAFT) {
+      throw new BadRequestException("Only draft or generated payroll runs can be recalculated.");
     }
 
     // Call generatePayrollRun to re-run and recalculate
@@ -433,6 +458,10 @@ export class PayrollService {
       throw new BadRequestException("Cannot add adjustments to a locked payroll run.");
     }
 
+    if (run.status === PayrollRunStatus.APPROVED) {
+      throw new BadRequestException("Cannot add adjustments to an approved payroll run. Revert approval first.");
+    }
+
     const runEmp = await this.prisma.payrollRunEmployee.findFirst({
       where: { id: input.payrollRunEmployeeId, payrollRunId: runId, tenantId }
     });
@@ -455,23 +484,33 @@ export class PayrollService {
         }
       });
 
-      // Update employee totals
-      const newTotalAdj = runEmp.totalAdjustments + input.amount;
-      const newNet = Math.max(0, runEmp.grossSalary - runEmp.totalDeductions + newTotalAdj);
+      // Update employee totals using safe Decimal arithmetic (Blocker 4 & 11)
+      const adjAmountDecimal = new Prisma.Decimal(input.amount);
+      const currentAdjDecimal = new Prisma.Decimal(runEmp.totalAdjustments);
+      const newTotalAdjDecimal = currentAdjDecimal.add(adjAmountDecimal);
+      const grossDecimal = new Prisma.Decimal(runEmp.grossSalary);
+      const deductionsDecimal = new Prisma.Decimal(runEmp.totalDeductions);
+      const newNetDecimal = grossDecimal.sub(deductionsDecimal).add(newTotalAdjDecimal);
+
+      if (newNetDecimal.isNegative()) {
+        throw new BadRequestException(
+          `Adjustment of ${adjAmountDecimal.toFixed(2)} would cause net salary to become negative (${newNetDecimal.toFixed(2)}) for employee ${runEmp.employeeId}. Deductions cannot exceed earnings.`
+        );
+      }
 
       await tx.payrollRunEmployee.update({
         where: { id: runEmp.id },
         data: {
-          totalAdjustments: Math.round(newTotalAdj * 100) / 100,
-          netSalary: Math.round(newNet * 100) / 100
+          totalAdjustments: newTotalAdjDecimal.toDecimalPlaces(2).toNumber(),
+          netSalary: newNetDecimal.toDecimalPlaces(2).toNumber()
         }
       });
 
-      // Update run totals
+      // Update run totals with precise decimal increment
       await tx.payrollRun.update({
         where: { id: runId },
         data: {
-          totalNet: { increment: input.amount }
+          totalNet: { increment: adjAmountDecimal.toDecimalPlaces(2).toNumber() }
         }
       });
 

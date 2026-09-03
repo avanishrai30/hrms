@@ -1,8 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { formatMoney } from "./money";
 import { getAuthorizedCommandRoutes, COMMAND_ROUTES } from "../components/search-dialog";
+import {
+  canReadPayroll,
+  canManagePayroll,
+  canLockPayroll,
+  canAccessCompensation,
+  isAllowedPayrollTransition
+} from "./payroll-policy";
 
-describe("AIavro Payroll & Financial Integrity Tests (Task 05.1)", () => {
+describe("AIavro Payroll & Financial Integrity Tests (Task 05.2)", () => {
   describe("1. Money Utility & Truthful Precision (Blocker 1 & 3)", () => {
     it("formats real zero with currency symbol and precision without collapsing to em-dash", () => {
       expect(formatMoney(0, "INR")).toBe("₹0.00");
@@ -28,7 +35,7 @@ describe("AIavro Payroll & Financial Integrity Tests (Task 05.1)", () => {
     });
   });
 
-  describe("2. Compensation & Payroll RBAC Gating (Blocker 6 & 7)", () => {
+  describe("2. Compensation & Payroll RBAC Gating (Blocker 6, 7, 15, 16)", () => {
     it("restricts command palette payroll routes to authorized permissions", () => {
       const payrollRoutes = COMMAND_ROUTES.filter((r) => r.href.startsWith("/payroll"));
       expect(payrollRoutes.length).toBeGreaterThan(0);
@@ -42,48 +49,44 @@ describe("AIavro Payroll & Financial Integrity Tests (Task 05.1)", () => {
       expect(payrollUserRoutes.some((r) => r.href === "/payroll")).toBe(true);
     });
 
-    it("evaluates action-level gates strictly", () => {
-      const canGeneratePayroll = (perms: string[]) => perms.includes("payroll.manage");
-      const canApprovePayroll = (perms: string[]) => perms.includes("payroll.manage");
-      const canLockPayroll = (perms: string[]) => perms.includes("payroll.lock");
-      const canViewCompensation = (perms: string[]) => perms.includes("compensation.read") || perms.includes("payroll.read");
+    it("evaluates actual production action-level permission gates", () => {
+      expect(canReadPayroll([])).toBe(false);
+      expect(canReadPayroll(["payroll.read"])).toBe(true);
 
-      expect(canGeneratePayroll(["payroll.read"])).toBe(false);
-      expect(canGeneratePayroll(["payroll.manage"])).toBe(true);
-
-      expect(canApprovePayroll(["payroll.read"])).toBe(false);
-      expect(canApprovePayroll(["payroll.manage"])).toBe(true);
+      expect(canManagePayroll(["payroll.read"])).toBe(false);
+      expect(canManagePayroll(["payroll.manage"])).toBe(true);
 
       expect(canLockPayroll(["payroll.manage"])).toBe(false);
       expect(canLockPayroll(["payroll.lock"])).toBe(true);
 
-      expect(canViewCompensation([])).toBe(false);
-      expect(canViewCompensation(["payroll.read"])).toBe(true);
-      expect(canViewCompensation(["compensation.read"])).toBe(true);
+      expect(canAccessCompensation([])).toBe(false);
+      expect(canAccessCompensation(["payroll.read"])).toBe(true);
+      expect(canAccessCompensation(["compensation.read"])).toBe(true);
     });
   });
 
-  describe("3. Payroll State Machine Validation (Blocker 8)", () => {
-    it("validates allowable status transitions according to backend rules", () => {
-      const canTransition = (from: string, action: string) => {
-        if (from === "LOCKED") return false;
-        if (from === "GENERATED" && ["APPROVE", "CANCEL", "RECALCULATE"].includes(action)) return true;
-        if (from === "APPROVED" && action === "LOCK") return true;
-        return false;
-      };
+  describe("3. Production Payroll State Machine Validation (Blocker 8 & 15)", () => {
+    it("validates allowable status transitions according to production state machine contract", () => {
+      expect(isAllowedPayrollTransition("GENERATED", "APPROVE")).toBe(true);
+      expect(isAllowedPayrollTransition("GENERATED", "CANCEL")).toBe(true);
+      expect(isAllowedPayrollTransition("GENERATED", "RECALCULATE")).toBe(true);
+      expect(isAllowedPayrollTransition("GENERATED", "LOCK")).toBe(false);
 
-      expect(canTransition("GENERATED", "APPROVE")).toBe(true);
-      expect(canTransition("GENERATED", "CANCEL")).toBe(true);
-      expect(canTransition("GENERATED", "RECALCULATE")).toBe(true);
-      expect(canTransition("GENERATED", "LOCK")).toBe(false);
+      expect(isAllowedPayrollTransition("DRAFT", "APPROVE")).toBe(true);
+      expect(isAllowedPayrollTransition("DRAFT", "CANCEL")).toBe(true);
+      expect(isAllowedPayrollTransition("DRAFT", "RECALCULATE")).toBe(true);
 
-      expect(canTransition("APPROVED", "LOCK")).toBe(true);
-      expect(canTransition("APPROVED", "CANCEL")).toBe(false);
-      expect(canTransition("APPROVED", "RECALCULATE")).toBe(false);
+      expect(isAllowedPayrollTransition("APPROVED", "LOCK")).toBe(true);
+      expect(isAllowedPayrollTransition("APPROVED", "CANCEL")).toBe(false);
+      expect(isAllowedPayrollTransition("APPROVED", "RECALCULATE")).toBe(false);
 
-      expect(canTransition("LOCKED", "APPROVE")).toBe(false);
-      expect(canTransition("LOCKED", "CANCEL")).toBe(false);
-      expect(canTransition("LOCKED", "RECALCULATE")).toBe(false);
+      expect(isAllowedPayrollTransition("LOCKED", "APPROVE")).toBe(false);
+      expect(isAllowedPayrollTransition("LOCKED", "CANCEL")).toBe(false);
+      expect(isAllowedPayrollTransition("LOCKED", "RECALCULATE")).toBe(false);
+      expect(isAllowedPayrollTransition("LOCKED", "LOCK")).toBe(false);
+
+      expect(isAllowedPayrollTransition("CANCELLED", "APPROVE")).toBe(false);
+      expect(isAllowedPayrollTransition("CANCELLED", "RECALCULATE")).toBe(false);
     });
   });
 });

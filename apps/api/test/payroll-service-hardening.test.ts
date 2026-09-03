@@ -26,6 +26,13 @@ function makeService(overrides: Record<string, unknown> = {}) {
     leaveRequest: { findMany: vi.fn().mockResolvedValue([]) },
     holiday: { findMany: vi.fn().mockResolvedValue([]) },
     payrollApproval: { create: vi.fn() },
+    payrollRunEmployee: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({})
+    },
+    payrollAdjustment: {
+      create: vi.fn().mockResolvedValue({ id: "adj-1" })
+    },
     payrollTaxDeclaration: {
       findFirst: vi.fn().mockResolvedValue({ id: "declaration-1", tenantId: "tenant-A" }),
       update: vi.fn().mockResolvedValue({ id: "declaration-1" })
@@ -174,5 +181,130 @@ describe("Payroll service hardening", () => {
         resourceId: "proof-1"
       })
     );
+  });
+
+  describe("State machine transitions and adjustment safety (Blocker 4 & 15)", () => {
+    it("allows GENERATED → APPROVED transition", async () => {
+      const { service, prisma } = makeService();
+      prisma.payrollRun.findFirst.mockResolvedValue({
+        id: "run-1",
+        tenantId: "tenant-A",
+        status: PayrollRunStatus.GENERATED
+      });
+
+      const res = await service.approvePayrollRun("tenant-A", "run-1", { note: "Approved" }, "user-1");
+      expect(res).toBeDefined();
+      expect(prisma.payrollApproval.create).toHaveBeenCalled();
+    });
+
+    it("allows GENERATED → CANCELLED transition", async () => {
+      const { service, prisma } = makeService();
+      prisma.payrollRun.findFirst.mockResolvedValue({
+        id: "run-1",
+        tenantId: "tenant-A",
+        status: PayrollRunStatus.GENERATED
+      });
+      prisma.payrollRun.update.mockResolvedValue({ id: "run-1", status: PayrollRunStatus.CANCELLED });
+
+      const res = await service.cancelPayrollRun("tenant-A", "run-1", "user-1");
+      expect(res.status).toBe(PayrollRunStatus.CANCELLED);
+    });
+
+    it("allows APPROVED → LOCKED transition", async () => {
+      const { service, prisma } = makeService();
+      prisma.payrollRun.findFirst.mockResolvedValue({
+        id: "run-1",
+        tenantId: "tenant-A",
+        status: PayrollRunStatus.APPROVED
+      });
+      prisma.payrollRun.update.mockResolvedValue({ id: "run-1", status: PayrollRunStatus.LOCKED });
+
+      const res = await service.lockPayrollRun("tenant-A", "run-1", { note: "Locking" }, "user-1");
+      expect(res.status).toBe(PayrollRunStatus.LOCKED);
+    });
+
+    it("rejects recalculation of APPROVED payroll run", async () => {
+      const { service, prisma } = makeService();
+      prisma.payrollRun.findFirst.mockResolvedValue({
+        id: "run-1",
+        tenantId: "tenant-A",
+        status: PayrollRunStatus.APPROVED
+      });
+
+      await expect(
+        service.recalculatePayrollRun("tenant-A", "run-1", "user-1")
+      ).rejects.toThrow(new BadRequestException("Approved payroll runs cannot be recalculated. Revert approval or unlock first."));
+    });
+
+    it("rejects recalculation of LOCKED payroll run", async () => {
+      const { service, prisma } = makeService();
+      prisma.payrollRun.findFirst.mockResolvedValue({
+        id: "run-1",
+        tenantId: "tenant-A",
+        status: PayrollRunStatus.LOCKED
+      });
+
+      await expect(
+        service.recalculatePayrollRun("tenant-A", "run-1", "user-1")
+      ).rejects.toThrow(new BadRequestException("Locked payroll runs cannot be recalculated."));
+    });
+
+    it("rejects adjustments on an APPROVED payroll run", async () => {
+      const { service, prisma } = makeService();
+      prisma.payrollRun.findFirst.mockResolvedValue({
+        id: "run-1",
+        tenantId: "tenant-A",
+        status: PayrollRunStatus.APPROVED
+      });
+
+      await expect(
+        service.addAdjustment(
+          "tenant-A",
+          "run-1",
+          {
+            payrollRunEmployeeId: "bcefb050-0000-0000-0000-000000000001",
+            type: "BONUS",
+            title: "Bonus",
+            amount: 500,
+            reason: "Performance"
+          },
+          "user-1"
+        )
+      ).rejects.toThrow(new BadRequestException("Cannot add adjustments to an approved payroll run. Revert approval first."));
+    });
+
+    it("rejects adjustment if it would cause employee net salary to become negative", async () => {
+      const { service, prisma } = makeService();
+      prisma.payrollRun.findFirst.mockResolvedValue({
+        id: "run-1",
+        tenantId: "tenant-A",
+        status: PayrollRunStatus.GENERATED
+      });
+      prisma.payrollRunEmployee.findFirst.mockResolvedValue({
+        id: "bcefb050-0000-0000-0000-000000000001",
+        payrollRunId: "run-1",
+        tenantId: "tenant-A",
+        employeeId: "emp-1",
+        grossSalary: 1000,
+        totalDeductions: 800,
+        totalAdjustments: 0,
+        netSalary: 200
+      });
+
+      await expect(
+        service.addAdjustment(
+          "tenant-A",
+          "run-1",
+          {
+            payrollRunEmployeeId: "bcefb050-0000-0000-0000-000000000001",
+            type: "PENALTY",
+            title: "Equipment Penalty",
+            amount: -300, // 200 - 300 = -100 (negative!)
+            reason: "Loss"
+          },
+          "user-1"
+        )
+      ).rejects.toThrow(/would cause net salary to become negative/);
+    });
   });
 });
