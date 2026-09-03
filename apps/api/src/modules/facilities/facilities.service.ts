@@ -45,6 +45,29 @@ export class FacilitiesService {
     });
   }
 
+  private async resolveTenantEmployeeId(
+    tenantId: string,
+    employeeId: string,
+    actorContext: { userId?: string; membershipId?: string },
+    label = "Employee"
+  ) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+      select: { id: true }
+    });
+    if (employee) return employee.id;
+
+    if (actorContext.membershipId && actorContext.userId === employeeId) {
+      const membership = await this.prisma.tenantMembership.findFirst({
+        where: { id: actorContext.membershipId, tenantId },
+        select: { employeeId: true }
+      });
+      if (membership?.employeeId) return membership.employeeId;
+    }
+
+    throw new NotFoundException(`${label} with ID "${employeeId}" not found`);
+  }
+
   // -------------------------------------------------------------
   // 1. FACILITIES & ROOM BOOKINGS
   // -------------------------------------------------------------
@@ -126,6 +149,7 @@ export class FacilitiesService {
     employeeId: string,
     dto: BookFacilityDto
   ) {
+    const resolvedEmployeeId = await this.resolveTenantEmployeeId(tenantId, employeeId, actorContext);
     const start = new Date(dto.startTime);
     const end = new Date(dto.endTime);
 
@@ -162,7 +186,7 @@ export class FacilitiesService {
       data: {
         tenantId,
         facilityId: dto.facilityId,
-        employeeId,
+        employeeId: resolvedEmployeeId,
         title: dto.title,
         startTime: start,
         endTime: end,
@@ -386,6 +410,7 @@ export class FacilitiesService {
     employeeId: string,
     dto: BookVehicleDto
   ) {
+    const resolvedEmployeeId = await this.resolveTenantEmployeeId(tenantId, employeeId, actorContext);
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id: dto.vehicleId, tenantId }
     });
@@ -400,7 +425,7 @@ export class FacilitiesService {
       data: {
         tenantId,
         vehicleId: dto.vehicleId,
-        employeeId,
+        employeeId: resolvedEmployeeId,
         purpose: dto.purpose,
         destination: dto.destination,
         startTime: start,

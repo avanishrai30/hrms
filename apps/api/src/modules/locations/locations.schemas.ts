@@ -24,11 +24,11 @@ export const createLocationSchema = z.object({
   name: z.string().min(2),
   code: z.string().min(2).regex(/^[A-Z0-9_-]+$/i, "Code must be alphanumeric with optional dashes or underscores"),
   description: z.string().optional(),
-  type: locationTypeSchema.default("OFFICE"),
+  type: locationTypeSchema,
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
-  radiusMeters: z.number().int().positive().default(100),
-  maxAccuracyMeters: z.number().int().positive().default(100),
+  radiusMeters: z.number().int().min(10).max(5000),
+  maxAccuracyMeters: z.number().int().min(1).max(500),
   isActive: z.boolean().default(true)
 });
 

@@ -1,6 +1,9 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import React, { useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import {
   MapPin,
   Plus,
@@ -40,63 +43,61 @@ const LOCATION_TYPES: NonNullable<CreateLocationInput["type"]>[] = [
   "CUSTOM"
 ];
 
+const createLocationFormSchema = z.object({
+  name: z.string().min(2, "Location name is required."),
+  code: z.string().min(2, "Location code is required.").regex(/^[A-Z0-9_-]+$/i, "Use letters, numbers, dashes, or underscores."),
+  type: z.enum(["OFFICE", "FACTORY", "WAREHOUSE", "RETAIL_OUTLET", "DISTRIBUTION_CENTER", "CUSTOM"], {
+    required_error: "Facility type is required."
+  }),
+  description: z.string().optional(),
+  latitude: z.coerce.number().min(-90, "Latitude must be between -90 and 90.").max(90, "Latitude must be between -90 and 90."),
+  longitude: z.coerce.number().min(-180, "Longitude must be between -180 and 180.").max(180, "Longitude must be between -180 and 180."),
+  radiusMeters: z.coerce.number().int().min(10, "Radius must be at least 10 meters.").max(5000, "Radius cannot exceed 5000 meters."),
+  maxAccuracyMeters: z.coerce.number().int().min(1, "Accuracy must be at least 1 meter.").max(500, "Accuracy cannot exceed 500 meters.")
+});
+
+type CreateLocationForm = z.infer<typeof createLocationFormSchema>;
+
 export default function WorkLocationsPage() {
   const gate = usePermissionGate(["location.view"]);
   const canCreate = useHasPermission("location.create");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [type, setType] = useState<CreateLocationInput["type"]>(undefined);
-  const [description, setDescription] = useState("");
-  const [latitude, setLatitude] = useState("");
-  const [longitude, setLongitude] = useState("");
-  const [radiusMeters, setRadiusMeters] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const form = useForm<CreateLocationForm>({
+    resolver: zodResolver(createLocationFormSchema),
+    defaultValues: {
+      name: "",
+      code: "",
+      description: "",
+      type: "" as CreateLocationForm["type"]
+    }
+  });
 
   const { data: locations = [], isLoading, isError, refetch } = useLocations(undefined, gate.isAuthorized);
   const createMutation = useCreateLocationMutation();
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || !code.trim()) {
-      setFormError("Please provide location name and code.");
-      return;
-    }
-
-    const latNum = parseFloat(latitude);
-    const lngNum = parseFloat(longitude);
-
-    if (isNaN(latNum) || isNaN(lngNum)) {
-      setFormError("Valid numeric Latitude and Longitude coordinates are required.");
-      return;
-    }
-
-    if (latNum < -90 || latNum > 90 || lngNum < -180 || lngNum > 180) {
-      setFormError("Latitude must be between -90 and 90, and Longitude between -180 and 180.");
-      return;
-    }
-
+  const handleCreate = async (values: CreateLocationForm) => {
     try {
       setFormError(null);
       await createMutation.mutateAsync({
-        name: name.trim(),
-        code: code.trim().toUpperCase(),
-        type,
-        description: description.trim() ? description.trim() : undefined,
-        latitude: latNum,
-        longitude: lngNum,
-        radiusMeters: radiusMeters.trim() ? parseInt(radiusMeters, 10) : undefined
+        name: values.name.trim(),
+        code: values.code.trim().toUpperCase(),
+        type: values.type,
+        description: values.description?.trim() ? values.description.trim() : undefined,
+        latitude: values.latitude,
+        longitude: values.longitude,
+        radiusMeters: values.radiusMeters,
+        maxAccuracyMeters: values.maxAccuracyMeters
       });
 
       setIsModalOpen(false);
-      setName("");
-      setCode("");
-      setType(undefined);
-      setDescription("");
-      setLatitude("");
-      setLongitude("");
-      setRadiusMeters("");
+      form.reset({
+        name: "",
+        code: "",
+        description: "",
+        type: "" as CreateLocationForm["type"]
+      });
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : "Failed to create location.");
     }
@@ -220,7 +221,7 @@ export default function WorkLocationsPage() {
             <DialogDescription>Define a workplace site with precise geofenced coordinates.</DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleCreate} className="space-y-3 py-2">
+          <form onSubmit={form.handleSubmit(handleCreate)} className="space-y-3 py-2">
             {formError && (
               <div className="p-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-xs text-destructive flex items-center gap-2">
                 <AlertCircle className="size-4 shrink-0" />
@@ -232,21 +233,25 @@ export default function WorkLocationsPage() {
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-muted-foreground">Location Name *</label>
                 <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Bangalore Campus"
+                  {...form.register("name")}
+                  placeholder="Workplace name"
                   required
                 />
+                {form.formState.errors.name ? <p className="text-[11px] text-destructive">{form.formState.errors.name.message}</p> : null}
               </div>
 
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-muted-foreground">Location Code *</label>
                 <Input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="e.g. BLR-01"
+                  {...form.register("code", {
+                    onChange: (event) => {
+                      event.target.value = event.target.value.toUpperCase();
+                    }
+                  })}
+                  placeholder="LOCATION-01"
                   required
                 />
+                {form.formState.errors.code ? <p className="text-[11px] text-destructive">{form.formState.errors.code.message}</p> : null}
               </div>
             </div>
 
@@ -254,17 +259,17 @@ export default function WorkLocationsPage() {
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-muted-foreground">Facility Type</label>
                 <select
-                  value={type ?? ""}
-                  onChange={(e) => setType(e.target.value ? e.target.value as CreateLocationInput["type"] : undefined)}
+                  {...form.register("type")}
                   className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
-                  <option value="">Backend default: OFFICE</option>
+                  <option value="">Select facility type</option>
                   {LOCATION_TYPES.map((t) => (
                     <option key={t} value={t}>
                       {t.replace(/_/g, " ")}
                     </option>
                   ))}
                 </select>
+                {form.formState.errors.type ? <p className="text-[11px] text-destructive">{form.formState.errors.type.message}</p> : null}
               </div>
 
               <div className="space-y-1">
@@ -273,10 +278,10 @@ export default function WorkLocationsPage() {
                   type="number"
                   min="10"
                   max="5000"
-                  value={radiusMeters}
-                  onChange={(e) => setRadiusMeters(e.target.value)}
-                  placeholder="Backend default: 100 m"
+                  {...form.register("radiusMeters")}
+                  placeholder="Enter radius"
                 />
+                {form.formState.errors.radiusMeters ? <p className="text-[11px] text-destructive">{form.formState.errors.radiusMeters.message}</p> : null}
               </div>
             </div>
 
@@ -286,11 +291,11 @@ export default function WorkLocationsPage() {
                 <Input
                   type="number"
                   step="any"
-                  value={latitude}
-                  onChange={(e) => setLatitude(e.target.value)}
+                  {...form.register("latitude")}
                   placeholder="Enter latitude"
                   required
                 />
+                {form.formState.errors.latitude ? <p className="text-[11px] text-destructive">{form.formState.errors.latitude.message}</p> : null}
               </div>
 
               <div className="space-y-1">
@@ -298,20 +303,32 @@ export default function WorkLocationsPage() {
                 <Input
                   type="number"
                   step="any"
-                  value={longitude}
-                  onChange={(e) => setLongitude(e.target.value)}
+                  {...form.register("longitude")}
                   placeholder="Enter longitude"
                   required
                 />
+                {form.formState.errors.longitude ? <p className="text-[11px] text-destructive">{form.formState.errors.longitude.message}</p> : null}
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-muted-foreground">Max GPS Accuracy (m) *</label>
+              <Input
+                type="number"
+                min="1"
+                max="500"
+                {...form.register("maxAccuracyMeters")}
+                placeholder="Enter accepted device accuracy"
+                required
+              />
+              {form.formState.errors.maxAccuracyMeters ? <p className="text-[11px] text-destructive">{form.formState.errors.maxAccuracyMeters.message}</p> : null}
             </div>
 
             <div className="space-y-1">
               <label className="text-[11px] font-semibold text-muted-foreground">Description</label>
               <Input
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="HQ corporate campus & engineering labs"
+                {...form.register("description")}
+                placeholder="Operational notes for this workplace"
               />
             </div>
 

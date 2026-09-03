@@ -324,35 +324,16 @@ export class LocationsService {
       orderBy: [{ isPriority: "desc" }, { createdAt: "desc" }]
     });
 
-    if (assignments.length > 0) {
-      return assignments.map((a) => ({
-        id: a.location.id,
-        name: a.location.name,
-        code: a.location.code,
-        latitude: a.location.latitude,
-        longitude: a.location.longitude,
-        radiusMeters: a.location.radiusMeters,
-        maxAccuracyMeters: a.location.maxAccuracyMeters,
-        isActive: a.location.isActive,
-        isPriority: a.isPriority
-      }));
-    }
-
-    // Fallback: If no explicit assignment, return all active tenant locations
-    const allLocations = await this.prisma.location.findMany({
-      where: { tenantId, isActive: true }
-    });
-
-    return allLocations.map((l) => ({
-      id: l.id,
-      name: l.name,
-      code: l.code,
-      latitude: l.latitude,
-      longitude: l.longitude,
-      radiusMeters: l.radiusMeters,
-      maxAccuracyMeters: l.maxAccuracyMeters,
-      isActive: l.isActive,
-      isPriority: false
+    return assignments.map((a) => ({
+      id: a.location.id,
+      name: a.location.name,
+      code: a.location.code,
+      latitude: a.location.latitude,
+      longitude: a.location.longitude,
+      radiusMeters: a.location.radiusMeters,
+      maxAccuracyMeters: a.location.maxAccuracyMeters,
+      isActive: a.location.isActive,
+      isPriority: a.isPriority
     }));
   }
 

@@ -45,6 +45,29 @@ export class VisitorService {
     });
   }
 
+  private async resolveTenantEmployeeId(
+    tenantId: string,
+    employeeId: string,
+    actorContext: { userId?: string; membershipId?: string },
+    label = "Employee"
+  ) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+      select: { id: true }
+    });
+    if (employee) return employee.id;
+
+    if (actorContext.membershipId && actorContext.userId === employeeId) {
+      const membership = await this.prisma.tenantMembership.findFirst({
+        where: { id: actorContext.membershipId, tenantId },
+        select: { employeeId: true }
+      });
+      if (membership?.employeeId) return membership.employeeId;
+    }
+
+    throw new NotFoundException(`${label} with ID "${employeeId}" not found`);
+  }
+
   // -------------------------------------------------------------
   // 1. VISITOR MANAGEMENT
   // -------------------------------------------------------------
@@ -68,6 +91,8 @@ export class VisitorService {
     actorContext: { userId?: string; membershipId?: string },
     dto: PreRegisterVisitorDto
   ) {
+    const hostId = await this.resolveTenantEmployeeId(tenantId, dto.hostId, actorContext, "Host employee");
+
     // Upsert visitor
     const visitor = await this.prisma.visitor.upsert({
       where: { tenantId_phone: { tenantId, phone: dto.phone } },
@@ -96,7 +121,7 @@ export class VisitorService {
       data: {
         tenantId,
         visitorId: visitor.id,
-        hostId: dto.hostId,
+        hostId,
         purpose: dto.purpose,
         status: "PRE_REGISTERED" as VisitorStatus,
         passCode,
@@ -138,6 +163,7 @@ export class VisitorService {
         throw new NotFoundException(`Visit with ID "${dto.visitId}" not found`);
       }
     } else if (dto.phone && dto.name && dto.hostId) {
+      const hostId = await this.resolveTenantEmployeeId(tenantId, dto.hostId, actorContext, "Host employee");
       // Walk-in visitor
       const visitor = await this.prisma.visitor.upsert({
         where: { tenantId_phone: { tenantId, phone: dto.phone } },
@@ -157,7 +183,7 @@ export class VisitorService {
         data: {
           tenantId,
           visitorId: visitor.id,
-          hostId: dto.hostId,
+          hostId,
           purpose: dto.purpose || "Meeting",
           status: "PRE_REGISTERED" as VisitorStatus,
           passCode,
@@ -258,6 +284,7 @@ export class VisitorService {
     requesterId: string,
     dto: CreateGatePassDto
   ) {
+    const resolvedRequesterId = await this.resolveTenantEmployeeId(tenantId, requesterId, actorContext, "Requester employee");
     const count = await this.prisma.gatePass.count({ where: { tenantId } });
     const passNumber = `GP-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
 
@@ -266,7 +293,7 @@ export class VisitorService {
         tenantId,
         passNumber,
         type: dto.type as GatePassType,
-        requesterId,
+        requesterId: resolvedRequesterId,
         itemDescription: dto.itemDescription,
         quantity: dto.quantity,
         serialNumbers: dto.serialNumbers || [],

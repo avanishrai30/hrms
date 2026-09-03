@@ -10,19 +10,30 @@ describe("Locations Schemas", () => {
   describe("createLocationSchema", () => {
     it("validates a complete location payload", () => {
       const parsed = createLocationSchema.parse({
-        name: "Bangalore HQ",
-        code: "BLR-HQ",
-        description: "Main development center",
-        type: "OFFICE",
-        latitude: 12.9716,
-        longitude: 77.5946,
+        name: "Production Campus",
+        code: "PROD-CAMPUS",
+        description: "Primary production site",
+        type: "FACTORY",
+        latitude: 40.7128,
+        longitude: -74.006,
         radiusMeters: 150,
         maxAccuracyMeters: 50,
         isActive: true
       });
 
-      expect(parsed.code).toBe("BLR-HQ");
+      expect(parsed.code).toBe("PROD-CAMPUS");
       expect(parsed.radiusMeters).toBe(150);
+    });
+
+    it("requires explicit geofence configuration without hidden defaults", () => {
+      expect(() =>
+        createLocationSchema.parse({
+          name: "Unconfigured Location",
+          code: "UNCONFIGURED",
+          latitude: 40.7128,
+          longitude: -74.006
+        })
+      ).toThrow();
     });
 
     it("rejects invalid latitude or longitude", () => {
@@ -31,7 +42,10 @@ describe("Locations Schemas", () => {
           name: "Invalid Loc",
           code: "INV-01",
           latitude: 95.0, // > 90
-          longitude: 77.0
+          longitude: -74.0,
+          type: "OFFICE",
+          radiusMeters: 100,
+          maxAccuracyMeters: 50
         })
       ).toThrow();
     });
@@ -41,8 +55,11 @@ describe("Locations Schemas", () => {
         createLocationSchema.parse({
           name: "Invalid Code",
           code: "BLR@#$",
-          latitude: 12.0,
-          longitude: 77.0
+          latitude: 40.7,
+          longitude: -74.0,
+          type: "OFFICE",
+          radiusMeters: 100,
+          maxAccuracyMeters: 50
         })
       ).toThrow();
     });
@@ -70,11 +87,11 @@ describe("Locations Schemas", () => {
   describe("verifyGpsSchema", () => {
     it("validates GPS coordinate payload", () => {
       const parsed = verifyGpsSchema.parse({
-        latitude: 12.9716,
-        longitude: 77.5946,
+        latitude: 40.7128,
+        longitude: -74.006,
         accuracy: 12.5
       });
-      expect(parsed.latitude).toBe(12.9716);
+      expect(parsed.latitude).toBe(40.7128);
       expect(parsed.accuracy).toBe(12.5);
     });
   });

@@ -44,6 +44,66 @@ export class WorkforceOperationsService {
     private readonly audit: AuditService
   ) {}
 
+  private async assertEmployeeInTenant(tenantId: string, employeeId: string, label = "Employee") {
+    const employee = await this.prisma.employee.findFirst({
+      where: { tenantId, id: employeeId },
+      select: { id: true }
+    });
+    if (!employee) {
+      throw new NotFoundException(`${label} not found: ${employeeId}`);
+    }
+  }
+
+  private async assertLocationInTenant(tenantId: string, locationId: string) {
+    const location = await this.prisma.location.findFirst({
+      where: { tenantId, id: locationId },
+      select: { id: true }
+    });
+    if (!location) {
+      throw new NotFoundException(`Location not found: ${locationId}`);
+    }
+  }
+
+  private async assertDepartmentInTenant(tenantId: string, departmentId: string) {
+    const department = await this.prisma.department.findFirst({
+      where: { tenantId, id: departmentId },
+      select: { id: true }
+    });
+    if (!department) {
+      throw new NotFoundException(`Department not found: ${departmentId}`);
+    }
+  }
+
+  private async assertShiftInTenant(tenantId: string, shiftId: string) {
+    const shift = await this.prisma.shift.findFirst({
+      where: { tenantId, id: shiftId },
+      select: { id: true }
+    });
+    if (!shift) {
+      throw new NotFoundException(`Shift not found: ${shiftId}`);
+    }
+  }
+
+  private async assertAttendanceInTenant(tenantId: string, attendanceId: string) {
+    const attendance = await this.prisma.attendance.findFirst({
+      where: { tenantId, id: attendanceId },
+      select: { id: true }
+    });
+    if (!attendance) {
+      throw new NotFoundException(`Attendance record not found: ${attendanceId}`);
+    }
+  }
+
+  private async assertGatePassInTenant(tenantId: string, gatePassId: string) {
+    const gatePass = await this.prisma.gatePass.findFirst({
+      where: { tenantId, id: gatePassId },
+      select: { id: true }
+    });
+    if (!gatePass) {
+      throw new NotFoundException(`Gate pass not found: ${gatePassId}`);
+    }
+  }
+
   // ==========================================
   // 1. SHIFT MANAGEMENT & ROSTER SWAPS
   // ==========================================
@@ -91,6 +151,13 @@ export class WorkforceOperationsService {
     if (!validation.isValid) {
       throw new BadRequestException(validation.errorReason);
     }
+
+    await Promise.all([
+      this.assertEmployeeInTenant(tenantId, requesterEmployeeId, "Requester employee"),
+      this.assertEmployeeInTenant(tenantId, dto.targetEmployeeId, "Target employee"),
+      this.assertShiftInTenant(tenantId, dto.sourceShiftId),
+      this.assertShiftInTenant(tenantId, dto.targetShiftId)
+    ]);
 
     const swap = await this.prisma.shiftSwapRequest.create({
       data: {
@@ -147,12 +214,25 @@ export class WorkforceOperationsService {
 
     // If approved, update active roster assignments for the day
     if (isApproved) {
+      const swapDate = new Date(swap.swapDate);
       await this.prisma.shiftAssignment.updateMany({
-        where: { tenantId, employeeId: swap.requesterEmployeeId, shiftId: swap.sourceShiftId },
+        where: {
+          tenantId,
+          employeeId: swap.requesterEmployeeId,
+          shiftId: swap.sourceShiftId,
+          startsOn: { lte: swapDate },
+          OR: [{ endsOn: null }, { endsOn: { gte: swapDate } }]
+        },
         data: { shiftId: swap.targetShiftId }
       });
       await this.prisma.shiftAssignment.updateMany({
-        where: { tenantId, employeeId: swap.targetEmployeeId, shiftId: swap.targetShiftId },
+        where: {
+          tenantId,
+          employeeId: swap.targetEmployeeId,
+          shiftId: swap.targetShiftId,
+          startsOn: { lte: swapDate },
+          OR: [{ endsOn: null }, { endsOn: { gte: swapDate } }]
+        },
         data: { shiftId: swap.sourceShiftId }
       });
     }
@@ -195,6 +275,9 @@ export class WorkforceOperationsService {
     });
     if (existing) {
       throw new BadRequestException(`Device serial '${dto.serialNumber}' is already registered.`);
+    }
+    if (dto.siteLocationId) {
+      await this.assertLocationInTenant(tenantId, dto.siteLocationId);
     }
 
     const device = await this.prisma.biometricDevice.create({
@@ -240,12 +323,16 @@ export class WorkforceOperationsService {
     if (!device) {
       throw new NotFoundException(`Biometric device not found: ${id}`);
     }
+    if (dto.siteLocationId) {
+      await this.assertLocationInTenant(tenantId, dto.siteLocationId);
+    }
 
     const updated = await this.prisma.biometricDevice.update({
       where: { id },
       data: {
         deviceName: dto.deviceName,
         status: dto.status as BiometricDeviceStatus | undefined,
+        siteLocationId: dto.siteLocationId,
         ipAddress: dto.ipAddress,
         port: dto.port
       }
@@ -273,6 +360,9 @@ export class WorkforceOperationsService {
     });
     if (!device) {
       throw new NotFoundException(`Device not found: ${dto.deviceId}`);
+    }
+    if (dto.employeeId) {
+      await this.assertEmployeeInTenant(tenantId, dto.employeeId);
     }
 
     // Normalized punch & dedup
@@ -389,6 +479,11 @@ export class WorkforceOperationsService {
     userId: string,
     membershipId: string
   ) {
+    await this.assertEmployeeInTenant(tenantId, employeeId);
+    if (dto.attendanceId) {
+      await this.assertAttendanceInTenant(tenantId, dto.attendanceId);
+    }
+
     const otCalculation = OvertimeEngine.calculateOvertimePay({
       overtimeType: dto.overtimeType,
       workedOvertimeMinutes: dto.requestedMinutes,
@@ -492,6 +587,11 @@ export class WorkforceOperationsService {
     tenantId: string,
     dto: z.infer<typeof CreateAttendanceAnomalySchema>
   ) {
+    await this.assertEmployeeInTenant(tenantId, dto.employeeId);
+    if (dto.attendanceId) {
+      await this.assertAttendanceInTenant(tenantId, dto.attendanceId);
+    }
+
     return this.prisma.attendanceAnomaly.create({
       data: {
         tenantId,
@@ -561,6 +661,13 @@ export class WorkforceOperationsService {
     userId: string,
     membershipId: string
   ) {
+    if (dto.siteLocationId) {
+      await this.assertLocationInTenant(tenantId, dto.siteLocationId);
+    }
+    if (dto.gatePassId) {
+      await this.assertGatePassInTenant(tenantId, dto.gatePassId);
+    }
+
     const totalCost = dto.totalHours * dto.hourlyRate;
 
     const record = await this.prisma.contractorAttendance.create({
@@ -610,6 +717,13 @@ export class WorkforceOperationsService {
     userId: string,
     membershipId: string
   ) {
+    if (new Date(dto.endDate).getTime() < new Date(dto.startDate).getTime()) {
+      throw new BadRequestException("Schedule end date cannot be before start date.");
+    }
+    if (dto.departmentId) {
+      await this.assertDepartmentInTenant(tenantId, dto.departmentId);
+    }
+
     const coveragePercent =
       dto.targetHeadcount > 0
         ? Math.round((dto.scheduledHeadcount / dto.targetHeadcount) * 1000) / 10

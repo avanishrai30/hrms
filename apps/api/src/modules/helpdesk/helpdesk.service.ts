@@ -45,6 +45,51 @@ export class HelpdeskService {
     });
   }
 
+  private async resolveTenantEmployeeId(
+    tenantId: string,
+    employeeId: string,
+    actorContext: { userId?: string; membershipId?: string },
+    label = "Employee"
+  ) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+      select: { id: true }
+    });
+    if (employee) return employee.id;
+
+    if (actorContext.membershipId && actorContext.userId === employeeId) {
+      const membership = await this.prisma.tenantMembership.findFirst({
+        where: { id: actorContext.membershipId, tenantId },
+        select: { employeeId: true }
+      });
+      if (membership?.employeeId) return membership.employeeId;
+    }
+
+    throw new NotFoundException(`${label} with ID "${employeeId}" not found`);
+  }
+
+  private async assertOptionalEmployeeInTenant(tenantId: string, employeeId: string | null | undefined) {
+    if (!employeeId) return;
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+      select: { id: true }
+    });
+    if (!employee) {
+      throw new NotFoundException(`Employee with ID "${employeeId}" not found`);
+    }
+  }
+
+  private async assertOptionalAssetInTenant(tenantId: string, assetId: string | null | undefined) {
+    if (!assetId) return;
+    const asset = await this.prisma.asset.findFirst({
+      where: { id: assetId, tenantId },
+      select: { id: true }
+    });
+    if (!asset) {
+      throw new NotFoundException(`Asset with ID "${assetId}" not found`);
+    }
+  }
+
   async listTickets(
     tenantId: string,
     filters?: {
@@ -123,6 +168,12 @@ export class HelpdeskService {
     employeeId: string,
     dto: CreateTicketDto
   ) {
+    const resolvedEmployeeId = await this.resolveTenantEmployeeId(tenantId, employeeId, actorContext);
+    await Promise.all([
+      this.assertOptionalEmployeeInTenant(tenantId, dto.assigneeId),
+      this.assertOptionalAssetInTenant(tenantId, dto.assetId)
+    ]);
+
     const count = await this.prisma.ticket.count({ where: { tenantId } });
     const ticketNumber = `TICK-${String(count + 1).padStart(5, "0")}`;
 
@@ -139,7 +190,7 @@ export class HelpdeskService {
         category: dto.category as TicketCategory,
         priority,
         source: dto.source as TicketSource,
-        createdById: employeeId,
+        createdById: resolvedEmployeeId,
         assigneeId: dto.assigneeId,
         assetId: dto.assetId,
         responseDueAt,
@@ -168,6 +219,7 @@ export class HelpdeskService {
     dto: UpdateTicketDto
   ) {
     const existing = await this.getTicketById(tenantId, id);
+    await this.assertOptionalEmployeeInTenant(tenantId, dto.assigneeId);
 
     const data: Prisma.TicketUpdateInput = {
       ...(dto.title && { title: dto.title }),
@@ -219,12 +271,13 @@ export class HelpdeskService {
     dto: AddTicketCommentDto
   ) {
     const ticket = await this.getTicketById(tenantId, ticketId);
+    const resolvedEmployeeId = await this.resolveTenantEmployeeId(tenantId, employeeId, actorContext, "Comment author");
 
     const comment = await this.prisma.ticketComment.create({
       data: {
         tenantId,
         ticketId,
-        authorId: employeeId,
+        authorId: resolvedEmployeeId,
         message: dto.message,
         isInternal: dto.isInternal
       }

@@ -264,7 +264,7 @@ export default function LocationAssignmentsPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-zinc-500">No workforce assigned yet (defaults to all company staff).</td>
+                  <td colSpan={5} className="p-8 text-center text-zinc-500">No workforce assigned yet.</td>
                 </tr>
               )}
             </tbody>

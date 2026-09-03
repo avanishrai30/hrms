@@ -193,13 +193,20 @@ export interface CreateTeamInput {
 export interface CreateLocationInput {
   name: string;
   code: string;
-  type?: ("FACTORY" | "OFFICE" | "WAREHOUSE" | "RETAIL_OUTLET" | "DISTRIBUTION_CENTER" | "CUSTOM") | undefined;
+  type: "FACTORY" | "OFFICE" | "WAREHOUSE" | "RETAIL_OUTLET" | "DISTRIBUTION_CENTER" | "CUSTOM";
   description?: string | undefined;
   latitude: number;
   longitude: number;
-  radiusMeters?: number | undefined;
-  maxAccuracyMeters?: number | undefined;
+  radiusMeters: number;
+  maxAccuracyMeters: number;
   isActive?: boolean | undefined;
+}
+
+interface LocationListResponse {
+  locations: LocationView[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 // ==================== QUERY KEYS ====================
@@ -350,7 +357,10 @@ export function useLocations(filter?: Record<string, unknown> | undefined, enabl
   const path = `/locations${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
   return useQuery({
     queryKey: peopleKeys.locations(filter),
-    queryFn: () => apiRequest<LocationView[]>(path),
+    queryFn: async () => {
+      const response = await apiRequest<LocationListResponse>(path);
+      return response.locations;
+    },
     enabled,
     staleTime: 5 * 60 * 1000
   });
