@@ -4,11 +4,11 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
-COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm install --frozen-lockfile || pnpm install
 RUN pnpm --filter @vc-wms/api prisma:generate
 # Build the API together with all of its workspace dependencies so runtime
 # package exports resolve to compiled JavaScript rather than TypeScript source.
