@@ -1,57 +1,93 @@
-/**
- * TASK 30 — EMPLOYEES' STATE INSURANCE (ESI) ENGINE
- * Calculates statutory ESI coverage and contributions (Employee 0.75%, Employer 3.25% on gross wages up to ₹21,000 ceiling).
- */
+import { Prisma } from "@prisma/client";
+import { PayrollMoney } from "./payroll-money.js";
+import {
+  StatutoryPolicyRegistry,
+  type EsiPolicy
+} from "./statutory-policy.registry.js";
 
+/**
+ * TASK 30 & TASK 05.3 — EMPLOYEES' STATE INSURANCE (ESI) ENGINE
+ * Calculates statutory ESI contributions using authoritative Decimal arithmetic
+ * and versioned, period-effective statutory policy.
+ */
 export interface EsiCalculationInput {
-  grossMonthlyWages: number;
-  isDisabilityCovered?: boolean; // Ceiling is ₹25,000 for employees with disabilities
+  grossMonthlyWages: Prisma.Decimal | number | string;
+  isDisabilityCovered?: boolean;
   isPreviouslyCoveredInCycle?: boolean;
+  policy?: EsiPolicy;
+  year?: number;
+  month?: number;
+  jurisdiction?: string;
 }
 
 export interface EsiCalculationResult {
   isEligible: boolean;
   grossWageBasis: number;
-  employeeEsiContribution: number; // 0.75%
-  employerEsiContribution: number; // 3.25%
+  employeeEsiContribution: number;
+  employerEsiContribution: number;
   totalMonthlyEsiDeposit: number;
+  // Authoritative Decimal fields
+  grossWageBasisDecimal: Prisma.Decimal;
+  employeeEsiContributionDecimal: Prisma.Decimal;
+  employerEsiContributionDecimal: Prisma.Decimal;
+  totalMonthlyEsiDepositDecimal: Prisma.Decimal;
+  policyVersion: string;
 }
 
 export class EsiEngine {
-  static readonly STATUTORY_GROSS_CEILING = 21000;
-  static readonly DISABILITY_GROSS_CEILING = 25000;
-
   /**
-   * Evaluate ESI eligibility and calculate exact contribution shares.
+   * Evaluate ESI eligibility and calculate exact contribution shares using Decimal arithmetic.
    */
   static calculateEsi(input: EsiCalculationInput): EsiCalculationResult {
+    const policy =
+      input.policy ??
+      StatutoryPolicyRegistry.getEsiPolicy(input.year, input.month, input.jurisdiction);
+
+    const grossDecimal = PayrollMoney.requireDecimal(input.grossMonthlyWages, "Gross Monthly Wages");
+
     const ceiling = input.isDisabilityCovered
-      ? this.DISABILITY_GROSS_CEILING
-      : this.STATUTORY_GROSS_CEILING;
+      ? policy.disabilityCeiling
+      : policy.wageCeiling;
 
     const isEligible =
-      input.grossMonthlyWages <= ceiling || (input.isPreviouslyCoveredInCycle ?? false);
+      grossDecimal.lessThanOrEqualTo(ceiling) || (input.isPreviouslyCoveredInCycle ?? false);
 
     if (!isEligible) {
       return {
         isEligible: false,
-        grossWageBasis: input.grossMonthlyWages,
+        grossWageBasis: grossDecimal.toNumber(),
         employeeEsiContribution: 0,
         employerEsiContribution: 0,
-        totalMonthlyEsiDeposit: 0
+        totalMonthlyEsiDeposit: 0,
+        grossWageBasisDecimal: grossDecimal,
+        employeeEsiContributionDecimal: PayrollMoney.zero(),
+        employerEsiContributionDecimal: PayrollMoney.zero(),
+        totalMonthlyEsiDepositDecimal: PayrollMoney.zero(),
+        policyVersion: policy.version
       };
     }
 
-    const employeeEsiContribution = Math.round(input.grossMonthlyWages * 0.0075 * 100) / 100;
-    const employerEsiContribution = Math.round(input.grossMonthlyWages * 0.0325 * 100) / 100;
-    const totalMonthlyEsiDeposit = Math.round((employeeEsiContribution + employerEsiContribution) * 100) / 100;
+    const employeeEsiContributionDecimal = PayrollMoney.round(
+      grossDecimal.mul(policy.employeeRate)
+    );
+    const employerEsiContributionDecimal = PayrollMoney.round(
+      grossDecimal.mul(policy.employerRate)
+    );
+    const totalMonthlyEsiDepositDecimal = employeeEsiContributionDecimal.add(
+      employerEsiContributionDecimal
+    );
 
     return {
       isEligible: true,
-      grossWageBasis: input.grossMonthlyWages,
-      employeeEsiContribution,
-      employerEsiContribution,
-      totalMonthlyEsiDeposit
+      grossWageBasis: grossDecimal.toNumber(),
+      employeeEsiContribution: employeeEsiContributionDecimal.toNumber(),
+      employerEsiContribution: employerEsiContributionDecimal.toNumber(),
+      totalMonthlyEsiDeposit: totalMonthlyEsiDepositDecimal.toNumber(),
+      grossWageBasisDecimal: grossDecimal,
+      employeeEsiContributionDecimal,
+      employerEsiContributionDecimal,
+      totalMonthlyEsiDepositDecimal,
+      policyVersion: policy.version
     };
   }
 }

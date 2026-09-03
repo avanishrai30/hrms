@@ -258,7 +258,9 @@ export class PayrollService {
         baseMonthlyCtc: activeComp.monthlyCtc,
         workingDays: payableResult.workingDays,
         payableDays: payableResult.payableDays,
-        components
+        components,
+        year,
+        month
       });
 
       totalEmployees += 1;
@@ -287,11 +289,12 @@ export class PayrollService {
           holidayDays: payableResult.holidayDays,
           leavesCount: empLeaves.length
         },
-        // Blocker 13: Preserve exact precision and currency in compensation snapshot
+        // Blockers 4 & 13: Preserve exact precision, currency, and statutory policy snapshot
         compensationSnapshot: {
           monthlyCtc: activeComp.monthlyCtc.toString(),
           annualCtc: activeComp.annualCtc.toString(),
           currency: activeComp.currency,
+          statutoryPolicySnapshot: prorationResult.statutoryPolicySnapshot,
           components: components.map((c) => ({
             ...c,
             monthlyAmount: c.monthlyAmount.toString()
@@ -541,8 +544,16 @@ export class PayrollService {
       where: { id: runId, tenantId }
     });
 
-    if (!run || run.status === PayrollRunStatus.LOCKED) {
-      throw new BadRequestException("Cannot remove adjustments from this payroll run.");
+    if (!run) {
+      throw new NotFoundException("Payroll run not found.");
+    }
+
+    if (run.status === PayrollRunStatus.LOCKED) {
+      throw new BadRequestException("Cannot remove adjustments from a locked payroll run.");
+    }
+
+    if (run.status === PayrollRunStatus.APPROVED) {
+      throw new BadRequestException("Cannot remove adjustments from an approved payroll run. Revert approval first.");
     }
 
     const adj = await this.prisma.payrollAdjustment.findFirst({
@@ -561,21 +572,31 @@ export class PayrollService {
       await this.prisma.$transaction(async (tx) => {
         await tx.payrollAdjustment.delete({ where: { id: adjustmentId } });
 
-        const newTotalAdj = runEmp.totalAdjustments - adj.amount;
-        const newNet = Math.max(0, runEmp.grossSalary - runEmp.totalDeductions + newTotalAdj);
+        const adjAmountDecimal = new Prisma.Decimal(adj.amount);
+        const currentAdjDecimal = new Prisma.Decimal(runEmp.totalAdjustments);
+        const newTotalAdjDecimal = currentAdjDecimal.sub(adjAmountDecimal);
+        const grossDecimal = new Prisma.Decimal(runEmp.grossSalary);
+        const deductionsDecimal = new Prisma.Decimal(runEmp.totalDeductions);
+        const newNetDecimal = grossDecimal.sub(deductionsDecimal).add(newTotalAdjDecimal);
+
+        if (newNetDecimal.isNegative()) {
+          throw new BadRequestException(
+            `Removing adjustment would cause net salary to become negative (${newNetDecimal.toFixed(2)}) for employee ${runEmp.employeeId}.`
+          );
+        }
 
         await tx.payrollRunEmployee.update({
           where: { id: runEmp.id },
           data: {
-            totalAdjustments: Math.round(newTotalAdj * 100) / 100,
-            netSalary: Math.round(newNet * 100) / 100
+            totalAdjustments: newTotalAdjDecimal.toDecimalPlaces(2).toNumber(),
+            netSalary: newNetDecimal.toDecimalPlaces(2).toNumber()
           }
         });
 
         await tx.payrollRun.update({
           where: { id: runId },
           data: {
-            totalNet: { decrement: adj.amount }
+            totalNet: { decrement: adjAmountDecimal.toDecimalPlaces(2).toNumber() }
           }
         });
       });
