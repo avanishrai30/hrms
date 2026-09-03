@@ -96,6 +96,23 @@ describe("Payroll service hardening", () => {
     expect(prisma.payrollRun.create).not.toHaveBeenCalled();
   });
 
+  it("rejects ambiguous non-ISO country names as statutory jurisdiction", async () => {
+    const { service, prisma } = makeService({
+      tenantSettings: {
+        findUnique: vi.fn().mockResolvedValue({
+          currency: "USD",
+          metadata: { statutoryJurisdiction: "India" }
+        })
+      }
+    });
+
+    await expect(
+      service.generatePayrollRun("tenant-A", { month: 4, year: 2026 }, "user-1")
+    ).rejects.toThrow(new BadRequestException('Invalid statutory jurisdiction "India". Statutory jurisdiction must be a 2-letter ISO code.'));
+
+    expect(prisma.payrollRun.create).not.toHaveBeenCalled();
+  });
+
   it("rejects active employees without effective compensation instead of silently skipping them", async () => {
     const { service, prisma } = makeService();
     prisma.employee.findMany.mockResolvedValue([

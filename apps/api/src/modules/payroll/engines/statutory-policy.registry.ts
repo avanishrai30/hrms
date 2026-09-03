@@ -3,7 +3,9 @@ import { Prisma } from "@prisma/client";
 
 export interface PfPolicy {
   version: string;
-  effectiveFrom: string; // "YYYY-MM-DD"
+  effectiveFrom: string | null;
+  provenance: "LEGACY_COMMITTED_ENGINE";
+  historicalValidity: "UNVERIFIED";
   jurisdiction: string;  // e.g. "IN"
   wageCeiling: Prisma.Decimal;
   employeeRate: Prisma.Decimal;
@@ -17,7 +19,9 @@ export interface PfPolicy {
 
 export interface EsiPolicy {
   version: string;
-  effectiveFrom: string; // "YYYY-MM-DD"
+  effectiveFrom: string | null;
+  provenance: "LEGACY_COMMITTED_ENGINE";
+  historicalValidity: "UNVERIFIED";
   jurisdiction: string;  // e.g. "IN"
   wageCeiling: Prisma.Decimal;
   disabilityCeiling: Prisma.Decimal;
@@ -32,21 +36,26 @@ export interface PolicyResolutionParams {
 }
 
 /**
- * Statutory Policy Registry (Task 05.4)
+ * Statutory Policy Registry (Task 05.5)
  *
- * Provides provenanced, effective-dated statutory calculation rules.
- * All production policies are derived strictly from legacy committed engine constants.
- * Historical and unsupported periods fail closed without synthetic defaults.
+ * Provides provenanced statutory calculation rules.
+ * All calculation constants are sourced from legacy committed engine implementations (commit 35606c2).
+ * Historical effective dates were NOT defined in the legacy source files and are explicitly
+ * recorded as null with historicalValidity: "UNVERIFIED".
+ * Historical periods prior to product adoption boundary fail closed.
  */
 export class StatutoryPolicyRegistry {
   /**
-   * Authoritative production PF policies.
-   * PROVENANCE: Legacy committed constants in PfEngine (Task 30 / commit 35606c2).
+   * Authoritative production PF policy.
+   * PROVENANCE: Calculation constants sourced from legacy committed PfEngine (Task 30 / commit 35606c2).
+   * Note: The legacy source did NOT define an effective date or explicit jurisdiction metadata field.
    */
   private static readonly PF_POLICIES: PfPolicy[] = [
     {
       version: "IN_EPF_COMMITTED_LEGACY",
-      effectiveFrom: "2014-09-01",
+      effectiveFrom: null,
+      provenance: "LEGACY_COMMITTED_ENGINE",
+      historicalValidity: "UNVERIFIED",
       jurisdiction: "IN",
       wageCeiling: new Prisma.Decimal("15000.00"),
       employeeRate: new Prisma.Decimal("0.12"),
@@ -60,13 +69,16 @@ export class StatutoryPolicyRegistry {
   ];
 
   /**
-   * Authoritative production ESI policies.
-   * PROVENANCE: Legacy committed constants in EsiEngine (Task 30 / commit 35606c2).
+   * Authoritative production ESI policy.
+   * PROVENANCE: Calculation constants sourced from legacy committed EsiEngine (Task 30 / commit 35606c2).
+   * Note: The legacy source did NOT define an effective date or explicit jurisdiction metadata field.
    */
   private static readonly ESI_POLICIES: EsiPolicy[] = [
     {
       version: "IN_ESI_COMMITTED_LEGACY",
-      effectiveFrom: "2019-07-01",
+      effectiveFrom: null,
+      provenance: "LEGACY_COMMITTED_ENGINE",
+      historicalValidity: "UNVERIFIED",
       jurisdiction: "IN",
       wageCeiling: new Prisma.Decimal("21000.00"),
       disabilityCeiling: new Prisma.Decimal("25000.00"),
@@ -104,12 +116,16 @@ export class StatutoryPolicyRegistry {
   /**
    * Pure policy resolver helper for testing and custom injection.
    * Resolves the effective rule set in effect for the given period.
-   * Fails closed if jurisdiction is missing/unsupported or period precedes earliest effectiveFrom.
+   * Fails closed if jurisdiction is missing/unsupported or period has unverified history.
    */
-  static resolveEffectivePolicy<T extends { effectiveFrom: string; jurisdiction: string; version: string }>(
-    policies: T[],
-    params: PolicyResolutionParams
-  ): T {
+  static resolveEffectivePolicy<
+    T extends {
+      effectiveFrom?: string | null;
+      jurisdiction: string;
+      version: string;
+      historicalValidity?: string;
+    }
+  >(policies: T[], params: PolicyResolutionParams): T {
     const { year, month, jurisdiction } = params;
     this.validatePeriod(year, month);
 
@@ -120,9 +136,7 @@ export class StatutoryPolicyRegistry {
     const normalizedJurisdiction = jurisdiction.trim().toUpperCase();
     const periodIso = `${year}-${String(month).padStart(2, "0")}-01`;
 
-    const forJurisdiction = policies
-      .filter((p) => p.jurisdiction === normalizedJurisdiction)
-      .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+    const forJurisdiction = policies.filter((p) => p.jurisdiction === normalizedJurisdiction);
 
     if (forJurisdiction.length === 0) {
       throw new BadRequestException(
@@ -130,14 +144,37 @@ export class StatutoryPolicyRegistry {
       );
     }
 
-    const matched = forJurisdiction.find((p) => p.effectiveFrom <= periodIso);
-    if (!matched) {
+    // If policies define explicit historical effective dates (e.g. synthetic test fixtures):
+    const datedPolicies = forJurisdiction
+      .filter((p): p is T & { effectiveFrom: string } => typeof p.effectiveFrom === "string" && p.effectiveFrom.length > 0)
+      .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+
+    if (datedPolicies.length > 0) {
+      const matched = datedPolicies.find((p) => p.effectiveFrom <= periodIso);
+      if (!matched) {
+        throw new BadRequestException(
+          `No statutory policy is configured for jurisdiction "${normalizedJurisdiction}" for period ${year}-${String(month).padStart(2, "0")}.`
+        );
+      }
+      return matched;
+    }
+
+    // For unverified legacy policies without provenanced historical effective dates:
+    // Fail closed if period precedes product adoption boundary (year < 2026)
+    if (year < 2026) {
       throw new BadRequestException(
-        `No statutory policy is configured for jurisdiction "${normalizedJurisdiction}" for period ${year}-${String(month).padStart(2, "0")}.`
+        `Statutory policy history is not configured for this payroll period (${year}-${String(month).padStart(2, "0")}).`
       );
     }
 
-    return matched;
+    const fallback = forJurisdiction[0];
+    if (!fallback) {
+      throw new BadRequestException(
+        `No statutory policy is configured for jurisdiction "${normalizedJurisdiction}".`
+      );
+    }
+
+    return fallback;
   }
 
   /**

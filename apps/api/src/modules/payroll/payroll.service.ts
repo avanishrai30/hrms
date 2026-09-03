@@ -935,18 +935,24 @@ export class PayrollService {
     }
 
     const metadata = (settings.metadata as Record<string, unknown>) ?? {};
-    const statutoryJurisdiction =
+    const rawJurisdiction =
       (metadata.statutoryJurisdiction as string) ||
-      (metadata.jurisdiction as string) ||
-      (metadata.country as string);
+      (metadata.jurisdiction as string);
 
-    if (!statutoryJurisdiction || typeof statutoryJurisdiction !== "string" || statutoryJurisdiction.trim() === "") {
+    if (!rawJurisdiction || typeof rawJurisdiction !== "string" || rawJurisdiction.trim() === "") {
       throw new BadRequestException("Payroll statutory jurisdiction is not configured for this tenant.");
+    }
+
+    const trimmed = rawJurisdiction.trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(trimmed)) {
+      throw new BadRequestException(
+        `Invalid statutory jurisdiction "${rawJurisdiction}". Statutory jurisdiction must be a 2-letter ISO code.`
+      );
     }
 
     return {
       currency: settings.currency,
-      jurisdiction: statutoryJurisdiction.trim().toUpperCase()
+      jurisdiction: trimmed
     };
   }
 

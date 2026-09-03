@@ -49,7 +49,8 @@ export interface StatutoryPolicySnapshot {
 
   // PF Policy Metadata & Values
   pfPolicyVersion: string;
-  pfPolicyEffectiveFrom: string;
+  pfPolicyProvenance: string;
+  pfHistoricalValidity: string;
   pfPolicyWageCeiling: string;
   pfActualWageBasis: string;
   pfEmployeeRate: string;
@@ -57,7 +58,8 @@ export interface StatutoryPolicySnapshot {
 
   // ESI Policy Metadata & Values
   esiPolicyVersion: string;
-  esiPolicyEffectiveFrom: string;
+  esiPolicyProvenance: string;
+  esiHistoricalValidity: string;
   esiWageCeiling: string;
   esiDisabilityCeiling: string;
   esiActualWageBasis: string;
@@ -295,18 +297,20 @@ export class SalaryProrationEngine {
       );
     }
 
-    // Blockers 6 & 7: Accurate snapshot distinguishing policy ceilings from employee wage basis
+    // Blockers 6 & 7 (Task 05.5): Accurate snapshot distinguishing policy ceilings from employee wage basis and truthful provenance
     const statutoryPolicySnapshot: StatutoryPolicySnapshot = {
       jurisdiction: normalizedJurisdiction,
       period: `${String(month).padStart(2, "0")}/${year}`,
       pfPolicyVersion: pfResult ? pfResult.policy.version : "NOT_APPLIED",
-      pfPolicyEffectiveFrom: pfResult ? pfResult.policy.effectiveFrom : "N/A",
+      pfPolicyProvenance: pfResult ? pfResult.policy.provenance : "NOT_APPLIED",
+      pfHistoricalValidity: pfResult ? pfResult.policy.historicalValidity : "NOT_APPLIED",
       pfPolicyWageCeiling: pfResult ? pfResult.policy.wageCeiling.toFixed(2) : "0.00",
       pfActualWageBasis: pfResult ? pfResult.pfWageDecimal.toFixed(2) : "0.00",
       pfEmployeeRate: pfResult ? pfResult.policy.employeeRate.toString() : "0",
       pfEmployerTotalRate: pfResult ? pfResult.policy.employerTotalRate.toString() : "0",
       esiPolicyVersion: esiResult ? esiResult.policy.version : "NOT_APPLIED",
-      esiPolicyEffectiveFrom: esiResult ? esiResult.policy.effectiveFrom : "N/A",
+      esiPolicyProvenance: esiResult ? esiResult.policy.provenance : "NOT_APPLIED",
+      esiHistoricalValidity: esiResult ? esiResult.policy.historicalValidity : "NOT_APPLIED",
       esiWageCeiling: esiResult ? esiResult.policy.wageCeiling.toFixed(2) : "0.00",
       esiDisabilityCeiling: esiResult ? esiResult.policy.disabilityCeiling.toFixed(2) : "0.00",
       esiActualWageBasis: esiResult ? esiResult.grossWageBasisDecimal.toFixed(2) : "0.00",

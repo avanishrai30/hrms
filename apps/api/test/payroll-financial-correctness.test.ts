@@ -10,7 +10,7 @@ import { PfEngine } from "../src/modules/payroll/engines/pf-engine.js";
 import { EsiEngine } from "../src/modules/payroll/engines/esi-engine.js";
 import { StatutoryPolicyRegistry } from "../src/modules/payroll/engines/statutory-policy.registry.js";
 
-describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.4)", () => {
+describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.5)", () => {
   describe("1. Strict Money Parsing & Deliberate Zero (Blockers 5 & 14)", () => {
     it("rejects null, undefined, empty string, non-numeric strings, and NaN with BadRequestException", () => {
       expect(() => PayrollMoney.requireDecimal(null, "amount")).toThrow(BadRequestException);
@@ -126,7 +126,7 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.4
     });
   });
 
-  describe("4. Statutory Policy Provenance & Validation (Blockers 1, 2, 3, 4)", () => {
+  describe("4. Statutory Policy Provenance & Validation (Task 05.5)", () => {
     it("rejects missing or invalid payroll year", () => {
       // @ts-expect-error Testing missing year
       expect(() => StatutoryPolicyRegistry.getPfPolicy({ month: 9, jurisdiction: "IN" })).toThrow(BadRequestException);
@@ -156,40 +156,45 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.4
       );
     });
 
-    it("fails closed when period is before earliest known policy effective date", () => {
-      // Earliest PF policy effectiveFrom is 2014-09-01
+    it("fails closed when historical period precedes known product baseline without invented dates", () => {
+      // Legacy unverified policy does not pretend historical legal validity for older periods
       expect(() => StatutoryPolicyRegistry.getPfPolicy({ year: 2010, month: 1, jurisdiction: "IN" })).toThrow(
-        /No statutory policy is configured for jurisdiction "IN" for period 2010-01/
+        /Statutory policy history is not configured for this payroll period \(2010-01\)/
       );
-      // Earliest ESI policy effectiveFrom is 2019-07-01
       expect(() => StatutoryPolicyRegistry.getEsiPolicy({ year: 2015, month: 5, jurisdiction: "IN" })).toThrow(
-        /No statutory policy is configured for jurisdiction "IN" for period 2015-05/
+        /Statutory policy history is not configured for this payroll period \(2015-05\)/
       );
     });
 
-    it("resolves the exact effective date correctly", () => {
-      const pfPolicy = StatutoryPolicyRegistry.getPfPolicy({ year: 2014, month: 9, jurisdiction: "IN" });
-      expect(pfPolicy.version).toBe("IN_EPF_COMMITTED_LEGACY");
-      expect(pfPolicy.wageCeiling.toFixed(2)).toBe("15000.00");
-
-      const esiPolicy = StatutoryPolicyRegistry.getEsiPolicy({ year: 2019, month: 7, jurisdiction: "IN" });
-      expect(esiPolicy.version).toBe("IN_ESI_COMMITTED_LEGACY");
-      expect(esiPolicy.wageCeiling.toFixed(2)).toBe("21000.00");
-    });
-
-    it("proves production registry contains only provenance-backed legacy policies", () => {
+    it("proves production registry calculation constants match legacy source commit 35606c2", () => {
       const pfPolicy = StatutoryPolicyRegistry.getPfPolicy({ year: 2026, month: 9, jurisdiction: "IN" });
       expect(pfPolicy.version).toBe("IN_EPF_COMMITTED_LEGACY");
-      expect(pfPolicy.effectiveFrom).toBe("2014-09-01");
+      expect(pfPolicy.provenance).toBe("LEGACY_COMMITTED_ENGINE");
+      expect(pfPolicy.historicalValidity).toBe("UNVERIFIED");
+      expect(pfPolicy.effectiveFrom).toBeNull();
+      expect(pfPolicy.wageCeiling.toFixed(2)).toBe("15000.00");
+      expect(pfPolicy.employeeRate.toString()).toBe("0.12");
+      expect(pfPolicy.employerTotalRate.toString()).toBe("0.12");
+      expect(pfPolicy.epsRate.toString()).toBe("0.0833");
+      expect(pfPolicy.maxEpsContribution.toFixed(2)).toBe("1250.00");
+      expect(pfPolicy.edliRate.toString()).toBe("0.005");
+      expect(pfPolicy.maxEdliContribution.toFixed(2)).toBe("75.00");
+      expect(pfPolicy.adminRate.toString()).toBe("0.005");
 
       const esiPolicy = StatutoryPolicyRegistry.getEsiPolicy({ year: 2026, month: 9, jurisdiction: "IN" });
       expect(esiPolicy.version).toBe("IN_ESI_COMMITTED_LEGACY");
-      expect(esiPolicy.effectiveFrom).toBe("2019-07-01");
+      expect(esiPolicy.provenance).toBe("LEGACY_COMMITTED_ENGINE");
+      expect(esiPolicy.historicalValidity).toBe("UNVERIFIED");
+      expect(esiPolicy.effectiveFrom).toBeNull();
+      expect(esiPolicy.wageCeiling.toFixed(2)).toBe("21000.00");
+      expect(esiPolicy.disabilityCeiling.toFixed(2)).toBe("25000.00");
+      expect(esiPolicy.employeeRate.toString()).toBe("0.0075");
+      expect(esiPolicy.employerRate.toString()).toBe("0.0325");
     });
   });
 
-  describe("5. Test-Only Injected Policy Reproducibility (Blocker 5)", () => {
-    it("proves policy resolver correctly supersedes earlier policies using synthetic test fixtures", () => {
+  describe("5. Test-Only Injected Policy Reproducibility", () => {
+    it("proves policy resolver correctly supersedes earlier dated policies using synthetic test fixtures", () => {
       const syntheticPolicies = [
         {
           version: "SYNTH_V1",
@@ -212,7 +217,7 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.4
         jurisdiction: "TEST_REGION"
       });
       expect(p2022.version).toBe("SYNTH_V1");
-      expect(p2022.rate.toString()).toBe("0.05");
+      expect(p2022.rate.toFixed(2)).toBe("0.05");
 
       // Period in 2025 resolves V2
       const p2025 = StatutoryPolicyRegistry.resolveEffectivePolicy(syntheticPolicies, {
@@ -230,11 +235,20 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.4
         jurisdiction: "TEST_REGION"
       });
       expect(p2022Rerun.version).toBe("SYNTH_V1");
+
+      // Pre-dated period throws clean error without fallback to nearest/oldest
+      expect(() =>
+        StatutoryPolicyRegistry.resolveEffectivePolicy(syntheticPolicies, {
+          year: 2018,
+          month: 6,
+          jurisdiction: "TEST_REGION"
+        })
+      ).toThrow(/No statutory policy is configured for jurisdiction "TEST_REGION" for period 2018-06/);
     });
   });
 
-  describe("6. Statutory Audit Snapshot Correctness (Blockers 6, 7, 8)", () => {
-    it("distinguishes policy wage ceiling from actual employee wage basis in snapshot", () => {
+  describe("6. Statutory Audit Snapshot Correctness & Truthful Provenance", () => {
+    it("distinguishes policy wage ceiling from actual employee wage basis and records unverified provenance", () => {
       // Employee basic = ₹10,000 (below policy ceiling ₹15,000)
       const components: CompensationItemSnapshot[] = [
         { name: "Basic", code: "BASIC", type: "EARNING", category: "BASIC", monthlyAmount: 10000 },
@@ -255,6 +269,12 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.4
       const snap = result.statutoryPolicySnapshot;
       expect(snap.jurisdiction).toBe("IN");
       expect(snap.period).toBe("09/2026");
+
+      // Truthful provenance: no unsourced effective dates
+      expect(snap.pfPolicyProvenance).toBe("LEGACY_COMMITTED_ENGINE");
+      expect(snap.pfHistoricalValidity).toBe("UNVERIFIED");
+      expect(snap.esiPolicyProvenance).toBe("LEGACY_COMMITTED_ENGINE");
+      expect(snap.esiHistoricalValidity).toBe("UNVERIFIED");
 
       // Policy ceiling MUST be the actual policy ceiling (15000.00), NOT employee wage basis (10000.00)
       expect(snap.pfPolicyWageCeiling).toBe("15000.00");
@@ -302,7 +322,7 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.4
     });
   });
 
-  describe("7. Professional Tax Ownership (Blocker 9)", () => {
+  describe("7. Professional Tax Ownership", () => {
     it("treats PT as explicitly configured compensation component applying when payable days > 0", () => {
       const components: CompensationItemSnapshot[] = [
         { name: "Basic", code: "BASIC", type: "EARNING", category: "BASIC", monthlyAmount: 40000 },
@@ -333,7 +353,7 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.4
     });
   });
 
-  describe("8. Determinism & Serialization Round-Trip (Blocker 16)", () => {
+  describe("8. Determinism & Serialization Round-Trip", () => {
     it("is 100% deterministic across repeated runs", () => {
       const params = {
         baseMonthlyCtc: 50000,
@@ -355,7 +375,7 @@ describe("Payroll Financial Arithmetic & Statutory Policy Correctness (Task 05.4
       expect(res1.netSalaryDecimal.equals(res2.netSalaryDecimal)).toBe(true);
     });
 
-    it("Database Decimal round-trip not executed (PostgreSQL offline); Decimal serialization round-trip verified instead", () => {
+    it("Decimal serialization round-trip verified", () => {
       const exactAmount = new Prisma.Decimal("1234567.89");
       const serialized = exactAmount.toFixed(2);
       const restored = new Prisma.Decimal(serialized);
