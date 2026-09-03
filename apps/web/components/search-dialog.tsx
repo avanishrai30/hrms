@@ -17,8 +17,11 @@ import {
   Sparkles,
   Laptop,
   CheckCircle2,
-  FolderOpen
+  FolderOpen,
+  MapPin,
+  BarChart3
 } from "lucide-react";
+import { Button } from "./ui/button";
 import {
   CommandDialog,
   CommandInput,
@@ -40,24 +43,26 @@ interface RouteItem {
 }
 
 export const COMMAND_ROUTES: RouteItem[] = [
-  // Core
-  { title: "Home Dashboard", href: "/dashboard" as Route, icon: Home, section: "Core" },
-  { title: "AI Assistant", href: "/ai" as Route, icon: Sparkles, section: "Core" },
+  // Overview
+  { title: "Home Dashboard", href: "/dashboard" as Route, icon: Home, section: "Overview" },
+  { title: "AI Copilot Workspace", href: "/ai" as Route, icon: Sparkles, section: "Overview" },
+  { title: "AI Smart Insights", href: "/ai/insights" as Route, icon: Sparkles, section: "Overview" },
+  { title: "AI Workforce Predictions", href: "/ai/predictions" as Route, icon: Sparkles, section: "Overview" },
+  { title: "AI Automations", href: "/ai/automations" as Route, icon: Sparkles, section: "Overview" },
+  { title: "Analytics Hub", href: "/analytics" as Route, icon: BarChart3, section: "Overview" },
 
   // People & Org
   { title: "Workforce Directory", href: "/directory" as Route, icon: Building2, section: "People & Organization" },
-  { title: "Employees List", href: "/employees" as Route, icon: Users, section: "People & Organization", permission: "employees.read" },
-  { title: "Organization Structure", href: "/organization" as Route, icon: Building2, section: "People & Organization", permission: "organization.view" },
-  { title: "Org Chart Hierarchy", href: "/org-chart" as Route, icon: Briefcase, section: "People & Organization" },
-  { title: "Business Units", href: "/organization/business-units" as Route, icon: Building2, section: "People & Organization", permission: "organization.view" },
+  { title: "Employees Directory", href: "/employees" as Route, icon: Users, section: "People & Organization", permission: "employees.read" },
+  { title: "Organization Units", href: "/organization" as Route, icon: Briefcase, section: "People & Organization", permission: "organization.view" },
   { title: "Teams", href: "/organization/teams" as Route, icon: Users, section: "People & Organization", permission: "organization.view" },
-  { title: "Work Locations", href: "/locations" as Route, icon: Building2, section: "People & Organization", permission: "location.view" },
+  { title: "Org Hierarchy Chart", href: "/org-chart" as Route, icon: Briefcase, section: "People & Organization" },
+  { title: "Work Locations", href: "/locations" as Route, icon: MapPin, section: "People & Organization", permission: "location.view" },
 
-  // Time & Leave
+  // Time & Attendance
   { title: "Attendance Tracker", href: "/attendance" as Route, icon: Clock, section: "Time & Schedule" },
   { title: "Leave & Time Off", href: "/leave" as Route, icon: Calendar, section: "Time & Schedule" },
-  { title: "Apply Leave", href: "/leave/request" as Route, icon: Calendar, section: "Time & Schedule" },
-  { title: "Leave Calendar", href: "/leave/calendar" as Route, icon: Calendar, section: "Time & Schedule" },
+  { title: "Team Leave Calendar", href: "/leave/calendar" as Route, icon: Calendar, section: "Time & Schedule" },
 
   // Self Service
   { title: "My Profile", href: "/profile" as Route, icon: Users, section: "Self Service" },
@@ -66,24 +71,19 @@ export const COMMAND_ROUTES: RouteItem[] = [
   { title: "Service Requests", href: "/requests" as Route, icon: CheckCircle2, section: "Self Service" },
   { title: "Digital ID Card", href: "/id-card" as Route, icon: ShieldCheck, section: "Self Service" },
 
-  // Manager Workspace
-  { title: "Manager Overview", href: "/mss" as Route, icon: Users, section: "Manager Workspace", permission: "mss.read" },
-  { title: "My Direct Reports", href: "/mss/team" as Route, icon: Users, section: "Manager Workspace", permission: "mss.read" },
-  { title: "Pending Approvals", href: "/mss/approvals" as Route, icon: CheckCircle2, section: "Manager Workspace", permission: "mss.read" },
-
-  // Finance & Admin
-  { title: "Enterprise Payroll", href: "/payroll" as Route, icon: CreditCard, section: "Finance", permission: "payroll.read" },
-  { title: "Asset Management", href: "/assets" as Route, icon: Laptop, section: "Operations" },
-  { title: "Learning & LMS", href: "/learning" as Route, icon: GraduationCap, section: "Talent" },
-
-  // Talent Acquisition
+  // Management & Operations
   { title: "Talent Acquisition", href: "/ats" as Route, icon: Users, section: "Talent", permission: "recruitment.read" },
-  { title: "Job Requisitions", href: "/ats/jobs" as Route, icon: Briefcase, section: "Talent", permission: "recruitment.read" },
-  { title: "Candidates Database", href: "/ats/candidates" as Route, icon: Users, section: "Talent", permission: "candidates.read" },
-  { title: "Hiring Pipeline", href: "/ats/pipeline" as Route, icon: Sparkles, section: "Talent", permission: "applications.read" },
-  { title: "Interviews Schedule", href: "/ats/interviews" as Route, icon: Clock, section: "Talent", permission: "interviews.read" },
-  { title: "Offer Management", href: "/ats/offers" as Route, icon: CheckCircle2, section: "Talent", permission: "offers.read" },
-  { title: "Preboarding Tasks", href: "/ats/preboarding" as Route, icon: FolderOpen, section: "Talent", permission: "preboarding.read" }
+  { title: "Job Requisitions", href: "/ats" as Route, icon: Briefcase, section: "Talent", permission: "recruitment.read" },
+  { title: "Candidates Database", href: "/ats" as Route, icon: Users, section: "Talent", permission: "candidates.read" },
+  { title: "Hiring Pipeline", href: "/ats" as Route, icon: Sparkles, section: "Talent", permission: "applications.read" },
+  { title: "Interviews Schedule", href: "/ats" as Route, icon: Clock, section: "Talent", permission: "interviews.read" },
+  { title: "Offer Management", href: "/ats" as Route, icon: CheckCircle2, section: "Talent", permission: "offers.read" },
+  { title: "Preboarding Tasks", href: "/ats" as Route, icon: FolderOpen, section: "Talent", permission: "preboarding.read" },
+  { title: "Performance & OKRs", href: "/performance" as Route, icon: Sparkles, section: "Management" },
+  { title: "Learning LMS", href: "/learning" as Route, icon: GraduationCap, section: "Management" },
+  { title: "Enterprise Payroll", href: "/payroll" as Route, icon: CreditCard, section: "Management", permission: "payroll.read" },
+  { title: "Asset Management", href: "/assets" as Route, icon: Laptop, section: "Management" },
+  { title: "Platform Admin Center", href: "/admin" as Route, icon: ShieldCheck, section: "Management", permission: "tenant.settings.read" }
 ];
 
 export function SearchDialog() {
@@ -93,7 +93,7 @@ export function SearchDialog() {
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+      if ((e.key === "j" || e.key === "k") && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setOpen((o) => !o);
       }
@@ -112,23 +112,22 @@ export function SearchDialog() {
 
   return (
     <>
-      <button
+      <Button
         onClick={() => setOpen(true)}
-        className="flex h-8 w-64 items-center justify-between rounded-md border border-input bg-muted/40 px-2.5 text-xs text-muted-foreground shadow-xs transition hover:bg-muted hover:text-foreground"
+        variant="ghost"
+        className="h-8 px-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 gap-2 font-normal"
       >
-        <span className="flex items-center gap-2">
-          <Search className="h-3.5 w-3.5" />
-          <span>Search or command...</span>
-        </span>
-        <kbd className="pointer-events-none hidden select-none rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] font-medium opacity-100 sm:inline-block">
-          ⌘K
+        <Search className="size-4 shrink-0" />
+        <span className="hidden sm:inline text-xs">Search...</span>
+        <kbd className="inline-flex h-5 select-none items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+          <span className="text-xs">⌘</span>J
         </kbd>
-      </button>
+      </Button>
 
       <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="Type a command or search route..." />
+        <CommandInput placeholder="Search workforce, modules, and commands…" />
         <CommandList>
-          <CommandEmpty>No matching routes or commands found.</CommandEmpty>
+          <CommandEmpty>No results found.</CommandEmpty>
           {sections.map((section, idx) => (
             <React.Fragment key={section}>
               {idx > 0 && <CommandSeparator />}
@@ -143,7 +142,7 @@ export function SearchDialog() {
                         onSelect={() => handleSelect(item.href)}
                         className="flex items-center gap-2 px-3 py-2 cursor-pointer"
                       >
-                        <Icon className="h-4 w-4 text-muted-foreground" />
+                        <Icon className="size-4 text-muted-foreground" />
                         <span>{item.title}</span>
                       </CommandItem>
                     );

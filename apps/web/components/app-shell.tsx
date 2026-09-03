@@ -23,7 +23,12 @@ import {
   Moon,
   LogOut,
   CircleUser,
-  EllipsisVertical
+  EllipsisVertical,
+  ChevronRight,
+  PlusCircle,
+  Command,
+  MapPin,
+  BarChart3
 } from "lucide-react";
 import type { PermissionCode } from "@vc-wms/shared-types";
 import { useSessionStore } from "../lib/session-store";
@@ -40,10 +45,14 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
   SidebarTrigger,
   SidebarInset,
   useSidebar
 } from "./ui/sidebar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Separator } from "./ui/separator";
 import { SearchDialog } from "./search-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
@@ -58,16 +67,23 @@ import {
 } from "./ui/dropdown-menu";
 import { Button } from "./ui/button";
 
+interface NavSubItem {
+  href: Route;
+  label: string;
+  permission?: PermissionCode;
+}
+
 interface NavItem {
   href: Route;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   permission?: PermissionCode;
   badge?: string;
+  subItems?: NavSubItem[];
 }
 
 interface NavSection {
-  title: string;
+  title?: string;
   items: NavItem[];
 }
 
@@ -75,57 +91,74 @@ const navSections: NavSection[] = [
   {
     title: "Overview",
     items: [
-      { href: "/dashboard" as Route, label: "Home Dashboard", icon: Home },
-      { href: "/ai" as Route, label: "AI Copilot", icon: Sparkles },
-      { href: "/directory" as Route, label: "Workforce Directory", icon: Building2 }
+      { href: "/dashboard" as Route, label: "Home", icon: Home },
+      {
+        href: "/ai" as Route,
+        label: "AI Copilot",
+        icon: Sparkles,
+        subItems: [
+          { href: "/ai" as Route, label: "Workspace" },
+          { href: "/ai/insights" as Route, label: "Smart Insights" },
+          { href: "/ai/predictions" as Route, label: "Workforce Predictions" },
+          { href: "/ai/automations" as Route, label: "Automations" }
+        ]
+      },
+      { href: "/analytics" as Route, label: "Analytics", icon: BarChart3 }
     ]
   },
   {
-    title: "People & Organization",
+    title: "Workforce",
     items: [
+      { href: "/directory" as Route, label: "Directory", icon: Building2 },
       { href: "/employees" as Route, label: "Employees", icon: Users, permission: "employees.read" },
-      { href: "/organization" as Route, label: "Organization Structure", icon: Building2, permission: "organization.view" },
-      { href: "/org-chart" as Route, label: "Org Hierarchy Chart", icon: Briefcase },
-      { href: "/organization/business-units" as Route, label: "Business Units", icon: Building2, permission: "organization.view" },
-      { href: "/organization/teams" as Route, label: "Teams", icon: Users, permission: "organization.view" },
-      { href: "/locations" as Route, label: "Work Locations", icon: Building2, permission: "location.view" }
+      {
+        href: "/organization" as Route,
+        label: "Organization",
+        icon: Briefcase,
+        permission: "organization.view",
+        subItems: [
+          { href: "/organization" as Route, label: "Structure" },
+          { href: "/organization/teams" as Route, label: "Teams" },
+          { href: "/org-chart" as Route, label: "Hierarchy Chart" }
+        ]
+      },
+      { href: "/locations" as Route, label: "Locations", icon: MapPin, permission: "location.view" }
     ]
   },
   {
-    title: "Time & Schedule",
+    title: "Time & Leave",
     items: [
-      { href: "/attendance" as Route, label: "Attendance Tracker", icon: Clock },
-      { href: "/leave" as Route, label: "Leave & Time Off", icon: Calendar },
-      { href: "/leave/calendar" as Route, label: "Team Calendar", icon: Calendar }
+      { href: "/attendance" as Route, label: "Attendance", icon: Clock },
+      {
+        href: "/leave" as Route,
+        label: "Leave",
+        icon: Calendar,
+        subItems: [
+          { href: "/leave" as Route, label: "Balances & Requests" },
+          { href: "/leave/calendar" as Route, label: "Team Calendar" }
+        ]
+      }
     ]
   },
   {
-    title: "Employee Self Service",
+    title: "Self Service",
     items: [
-      { href: "/profile" as Route, label: "My Profile", icon: CircleUser },
-      { href: "/payslips" as Route, label: "My Payslips", icon: CreditCard },
-      { href: "/documents" as Route, label: "My Documents", icon: FolderOpen },
-      { href: "/requests" as Route, label: "Service Requests", icon: CheckCircle2 },
-      { href: "/id-card" as Route, label: "Digital ID Card", icon: ShieldCheck }
+      { href: "/profile" as Route, label: "Profile", icon: CircleUser },
+      { href: "/payslips" as Route, label: "Payslips", icon: CreditCard },
+      { href: "/documents" as Route, label: "Documents", icon: FolderOpen },
+      { href: "/requests" as Route, label: "Requests", icon: CheckCircle2 },
+      { href: "/id-card" as Route, label: "Digital ID", icon: ShieldCheck }
     ]
   },
   {
-    title: "Manager Workspace",
+    title: "Enterprise",
     items: [
-      { href: "/mss" as Route, label: "Manager Overview", icon: Users, permission: "mss.read" },
-      { href: "/mss/team" as Route, label: "Direct Reports", icon: Users, permission: "mss.read" },
-      { href: "/mss/approvals" as Route, label: "Pending Approvals", icon: CheckCircle2, permission: "mss.read" }
-    ]
-  },
-  {
-    title: "Enterprise Modules",
-    items: [
-      { href: "/ats" as Route, label: "Talent Acquisition", icon: Users, permission: "recruitment.read" },
-      { href: "/payroll" as Route, label: "Enterprise Payroll", icon: CreditCard, permission: "payroll.read" },
-      { href: "/performance" as Route, label: "Performance & OKRs", icon: Sparkles },
-      { href: "/learning" as Route, label: "Learning LMS", icon: GraduationCap },
-      { href: "/assets" as Route, label: "Asset Management", icon: Laptop },
-      { href: "/vendors" as Route, label: "Vendor Ecosystem", icon: ShieldCheck, permission: "vendors.manage" }
+      { href: "/ats" as Route, label: "Talent", icon: Users, permission: "recruitment.read" },
+      { href: "/payroll" as Route, label: "Payroll", icon: CreditCard, permission: "payroll.read" },
+      { href: "/performance" as Route, label: "Performance", icon: Sparkles },
+      { href: "/learning" as Route, label: "Learning", icon: GraduationCap },
+      { href: "/assets" as Route, label: "Assets", icon: Laptop },
+      { href: "/admin" as Route, label: "Admin Center", icon: ShieldCheck, permission: "tenant.settings.read" }
     ]
   }
 ];
@@ -241,21 +274,73 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider defaultOpen={true}>
       <Sidebar variant="sidebar" collapsible="icon">
-        {/* 1. Sidebar Brand Header */}
+        {/* 1. Sidebar Brand Header (Studio Admin Geometry) */}
         <SidebarHeader>
-          <div className="flex items-center gap-2.5 px-2 py-1.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-extrabold text-sm shadow-xs shrink-0">
-              A
-            </div>
-            <div className="flex flex-col min-w-0 group-data-[collapsible=icon]/sidebar-wrapper:hidden">
-              <span className="text-xs font-bold tracking-tight text-foreground truncate">AIavro HRMS</span>
-              <span className="text-[10px] text-muted-foreground truncate">VC Organics</span>
-            </div>
-          </div>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild size="lg">
+                <Link href={"/dashboard" as Route} prefetch={false}>
+                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">
+                    <Command className="size-4" />
+                  </div>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-semibold text-foreground">AIavro HRMS</span>
+                    <span className="truncate text-xs text-muted-foreground">VC Organics</span>
+                  </div>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarHeader>
 
         {/* 2. Grouped Navigation Content */}
         <SidebarContent>
+          {/* Quick Create Section */}
+          <SidebarGroup>
+            <SidebarGroupContent className="flex flex-col gap-2">
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <SidebarMenuButton
+                        tooltip="Quick Create"
+                        className="min-w-8 bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground cursor-pointer"
+                      >
+                        <PlusCircle className="size-4 shrink-0" />
+                        <span className="font-medium">Quick Create</span>
+                      </SidebarMenuButton>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent side="right" align="start" className="w-52 rounded-lg">
+                      <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">Actions</DropdownMenuLabel>
+                      <DropdownMenuItem asChild>
+                        <Link href={"/leave" as Route} className="cursor-pointer">Apply Leave</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href={"/attendance" as Route} className="cursor-pointer">Log Attendance</Link>
+                      </DropdownMenuItem>
+                      {permissions.includes("employees.read") && (
+                        <DropdownMenuItem asChild>
+                          <Link href={"/employees" as Route} className="cursor-pointer">Add Employee</Link>
+                        </DropdownMenuItem>
+                      )}
+                      {permissions.includes("recruitment.read") && (
+                        <DropdownMenuItem asChild>
+                          <Link href={"/ats" as Route} className="cursor-pointer">Create Requisition</Link>
+                        </DropdownMenuItem>
+                      )}
+                      {permissions.includes("location.view") && (
+                        <DropdownMenuItem asChild>
+                          <Link href={"/locations" as Route} className="cursor-pointer">Create Location</Link>
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          {/* Nav Sections */}
           {navSections.map((section) => {
             const filteredItems = section.items.filter((item) => {
               if (!item.permission) return true;
@@ -266,20 +351,72 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             return (
               <SidebarGroup key={section.title}>
-                <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
+                {section.title && (
+                  <SidebarGroupLabel className="text-xs font-medium text-muted-foreground/80">
+                    {section.title}
+                  </SidebarGroupLabel>
+                )}
                 <SidebarGroupContent>
                   <SidebarMenu>
                     {filteredItems.map((item) => {
                       const Icon = item.icon;
-                      const isActive =
+                      const hasSubs = Boolean(item.subItems && item.subItems.length > 0);
+                      const isParentActive =
                         pathname === item.href ||
-                        (item.href !== "/dashboard" && pathname?.startsWith(`${item.href}/`));
+                        (item.href !== "/dashboard" && pathname?.startsWith(`${item.href}`));
+
+                      if (hasSubs && item.subItems) {
+                        return (
+                          <Collapsible
+                            key={item.href}
+                            asChild
+                            defaultOpen={isParentActive}
+                            className="group/collapsible"
+                          >
+                            <SidebarMenuItem>
+                              <CollapsibleTrigger asChild>
+                                <SidebarMenuButton
+                                  tooltip={item.label}
+                                  isActive={isParentActive}
+                                >
+                                  <Icon className="size-4 shrink-0" />
+                                  <span>{item.label}</span>
+                                  <ChevronRight className="ml-auto size-3.5 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                                </SidebarMenuButton>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <SidebarMenuSub>
+                                  {item.subItems.map((sub) => {
+                                    const isSubActive = pathname === sub.href;
+                                    return (
+                                      <SidebarMenuSubItem key={sub.href}>
+                                        <SidebarMenuSubButton
+                                          asChild
+                                          isActive={isSubActive}
+                                        >
+                                          <Link href={sub.href} prefetch={false}>
+                                            <span>{sub.label}</span>
+                                          </Link>
+                                        </SidebarMenuSubButton>
+                                      </SidebarMenuSubItem>
+                                    );
+                                  })}
+                                </SidebarMenuSub>
+                              </CollapsibleContent>
+                            </SidebarMenuItem>
+                          </Collapsible>
+                        );
+                      }
 
                       return (
                         <SidebarMenuItem key={item.href}>
-                          <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
+                          <SidebarMenuButton
+                            asChild
+                            isActive={isParentActive}
+                            tooltip={item.label}
+                          >
                             <Link href={item.href} prefetch={false}>
-                              <Icon />
+                              <Icon className="size-4 shrink-0" />
                               <span>{item.label}</span>
                               {item.badge && (
                                 <span className="ml-auto rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
@@ -298,7 +435,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </SidebarContent>
 
-        {/* 3. Sidebar Footer with Exact NavUser */}
+        {/* 3. Sidebar Footer with NavUser */}
         <SidebarFooter>
           <NavUserSection />
         </SidebarFooter>
@@ -308,7 +445,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <SidebarInset>
         <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center justify-between border-b border-border bg-background/80 px-4 lg:px-6 backdrop-blur-md">
           <div className="flex items-center gap-2">
-            <SidebarTrigger />
+            <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="h-4" />
             <SearchDialog />
           </div>
@@ -321,7 +458,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
               aria-label="Toggle theme"
             >
-              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
 
             <Button
@@ -330,17 +467,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
               aria-label="Notifications"
             >
-              <Bell className="h-4 w-4" />
+              <Bell className="size-4" />
             </Button>
 
             <Separator orientation="vertical" className="h-4" />
 
             <div className="flex items-center gap-2 pl-1">
-              <Avatar className="h-7 w-7">
+              <Avatar className="h-7 w-7 rounded-lg">
                 {profile?.avatarUrl ? (
                   <AvatarImage src={profile.avatarUrl} alt={name} />
                 ) : null}
-                <AvatarFallback>
+                <AvatarFallback className="rounded-lg text-xs">
                   {initial || <CircleUser className="size-3.5 text-muted-foreground" />}
                 </AvatarFallback>
               </Avatar>
@@ -354,7 +491,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* 5. Page Content Container */}
+        {/* 5. Page Content Container (Studio Admin Content Rhythm) */}
         <div className="min-h-0 min-w-0 flex-1 p-4 md:p-6 overflow-x-hidden">
           {children}
         </div>

@@ -301,3 +301,51 @@ export const SidebarInset = React.forwardRef<HTMLDivElement, React.ComponentProp
   )
 );
 SidebarInset.displayName = "SidebarInset";
+
+export const SidebarMenuSub = React.forwardRef<HTMLUListElement, React.ComponentProps<"ul">>(
+  ({ className, ...props }, ref) => (
+    <ul
+      ref={ref}
+      data-slot="sidebar-menu-sub"
+      className={cn(
+        "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5 group-data-[collapsible=icon]:hidden",
+        className
+      )}
+      {...props}
+    />
+  )
+);
+SidebarMenuSub.displayName = "SidebarMenuSub";
+
+export const SidebarMenuSubItem = React.forwardRef<HTMLLIElement, React.ComponentProps<"li">>(
+  ({ className, ...props }, ref) => (
+    <li
+      ref={ref}
+      data-slot="sidebar-menu-sub-item"
+      className={cn("group/menu-sub-item relative", className)}
+      {...props}
+    />
+  )
+);
+SidebarMenuSubItem.displayName = "SidebarMenuSubItem";
+
+export const SidebarMenuSubButton = React.forwardRef<
+  HTMLAnchorElement,
+  React.ComponentProps<"a"> & { asChild?: boolean; size?: "sm" | "md"; isActive?: boolean }
+>(({ asChild = false, size: _size = "md", isActive = false, className, ...props }, ref) => {
+  const Comp = asChild ? Slot : "a";
+  return (
+    <Comp
+      ref={ref}
+      data-slot="sidebar-menu-sub-button"
+      data-active={isActive}
+      className={cn(
+        "flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground text-xs ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate",
+        isActive && "bg-sidebar-accent text-sidebar-accent-foreground font-medium",
+        className
+      )}
+      {...props}
+    />
+  );
+});
+SidebarMenuSubButton.displayName = "SidebarMenuSubButton";

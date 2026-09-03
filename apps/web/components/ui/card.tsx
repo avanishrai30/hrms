@@ -11,8 +11,8 @@ export function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-4 overflow-hidden rounded-xl border border-border bg-card p-5 text-sm text-card-foreground shadow-xs transition",
-        size === "sm" && "p-3.5 gap-2.5",
+        "group/card flex flex-col gap-4 overflow-hidden rounded-xl border border-border bg-card py-4 text-sm text-card-foreground shadow-xs transition",
+        size === "sm" && "py-3 gap-3",
         className
       )}
       {...props}
@@ -25,7 +25,7 @@ export function CardHeader({ className, ...props }: React.ComponentProps<"div">)
     <div
       data-slot="card-header"
       className={cn(
-        "flex flex-col gap-1.5 has-data-[slot=card-action]:grid has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-action]:items-start",
+        "group/card-header grid auto-rows-min items-start gap-1 px-4 has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto]",
         className
       )}
       {...props}
@@ -47,7 +47,7 @@ export function CardDescription({ className, ...props }: React.ComponentProps<"d
   return (
     <div
       data-slot="card-description"
-      className={cn("text-xs text-muted-foreground", className)}
+      className={cn("text-sm text-muted-foreground", className)}
       {...props}
     />
   );
@@ -67,7 +67,7 @@ export function CardContent({ className, ...props }: React.ComponentProps<"div">
   return (
     <div
       data-slot="card-content"
-      className={cn("p-0 text-sm", className)}
+      className={cn("px-4 text-sm", className)}
       {...props}
     />
   );
@@ -77,7 +77,7 @@ export function CardFooter({ className, ...props }: React.ComponentProps<"div">)
   return (
     <div
       data-slot="card-footer"
-      className={cn("flex items-center pt-2", className)}
+      className={cn("flex items-center rounded-b-xl border-t border-border bg-muted/30 px-4 py-3", className)}
       {...props}
     />
   );

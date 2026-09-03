@@ -64,7 +64,6 @@ export default function AttendanceAnalyticsPage() {
 
   const totalLate = data?.dailyTrends?.reduce((acc, d) => acc + d.late, 0) ?? 0;
   const totalAbsent = data?.dailyTrends?.reduce((acc, d) => acc + d.absent, 0) ?? 0;
-  const totalPresent = data?.dailyTrends?.reduce((acc, d) => acc + d.present, 0) ?? 0;
   const latestDaily = data?.dailyTrends?.length ? data.dailyTrends[data.dailyTrends.length - 1] : null;
 
   // Compute heatmap cell lookup
