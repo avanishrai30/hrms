@@ -9,9 +9,11 @@ export interface AnalyticsFilterState {
   businessUnit: string;
 }
 
-interface AnalyticsFilterBarProps {
-  filters: AnalyticsFilterState;
-  onFilterChange: (filters: AnalyticsFilterState) => void;
+export interface AnalyticsFilterBarProps {
+  filters?: AnalyticsFilterState;
+  state?: AnalyticsFilterState;
+  onFilterChange?: (filters: AnalyticsFilterState) => void;
+  onChange?: (filters: AnalyticsFilterState) => void;
   onRefresh: () => void;
   isLoading?: boolean;
   departments?: string[];
@@ -19,8 +21,10 @@ interface AnalyticsFilterBarProps {
 }
 
 export function AnalyticsFilterBar({
-  filters,
-  onFilterChange,
+  filters: propFilters,
+  state: propState,
+  onFilterChange: propOnFilterChange,
+  onChange: propOnChange,
   onRefresh,
   isLoading = false,
   departments = [
@@ -40,26 +44,33 @@ export function AnalyticsFilterBar({
     "Corporate & Shared Services"
   ]
 }: AnalyticsFilterBarProps) {
-  const [localRange, setLocalRange] = useState(filters.dateRange);
-  const [localDept, setLocalDept] = useState(filters.department);
-  const [localBu, setLocalBu] = useState(filters.businessUnit);
+  const currentFilters = propFilters ?? propState ?? {
+    dateRange: "Current Month",
+    department: "All Departments",
+    businessUnit: "All Business Units"
+  };
+  const notifyChange = propOnFilterChange ?? propOnChange ?? (() => {});
+
+  const [localRange, setLocalRange] = useState(currentFilters.dateRange);
+  const [localDept, setLocalDept] = useState(currentFilters.department);
+  const [localBu, setLocalBu] = useState(currentFilters.businessUnit);
 
   const handleRangeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setLocalRange(val);
-    onFilterChange({ ...filters, dateRange: val });
+    notifyChange({ ...currentFilters, dateRange: val });
   };
 
   const handleDeptChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setLocalDept(val);
-    onFilterChange({ ...filters, department: val });
+    notifyChange({ ...currentFilters, department: val });
   };
 
   const handleBuChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setLocalBu(val);
-    onFilterChange({ ...filters, businessUnit: val });
+    notifyChange({ ...currentFilters, businessUnit: val });
   };
 
   const handleReset = () => {
@@ -71,7 +82,7 @@ export function AnalyticsFilterBar({
     setLocalRange(defaultState.dateRange);
     setLocalDept(defaultState.department);
     setLocalBu(defaultState.businessUnit);
-    onFilterChange(defaultState);
+    notifyChange(defaultState);
   };
 
   const isFiltered =

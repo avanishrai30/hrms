@@ -20,6 +20,7 @@ export interface ExecutiveAnalyticsResult {
     netSalary: number;
     averageSalary: number;
     employerContributions: number;
+    currency?: string;
   };
   statutoryLiabilities: {
     totalPf: number;
@@ -120,7 +121,17 @@ export interface LeaveAnalyticsResult {
 }
 
 export interface PayrollAnalyticsResult {
-  costTrends: Array<{ month: number; year: number; totalGross: number; totalNet: number; totalDeductions: number; totalEmployerContributions: number; totalCost: number }>;
+  currency: string;
+  costTrends: Array<{
+    month: number;
+    year: number;
+    totalGross: number;
+    totalNet: number;
+    totalDeductions: number;
+    totalEmployerContributions: number;
+    totalCost: number;
+    currency?: string;
+  }>;
   departmentCostBreakdown: Array<{ departmentName: string; grossCost: number; netCost: number; employeeCount: number; averageCostPerEmployee: number }>;
   salaryBands: Array<{ band: string; count: number; totalCost: number; percentage: number }>;
   allowanceComponentBreakdown: Array<{ componentName: string; code: string; totalAmount: number; percentage: number }>;
@@ -363,13 +374,13 @@ export class AnalyticsEngine {
     const faceMatchPercentage =
       faceVerifications.length > 0
         ? Math.round((matchedVerifications / faceVerifications.length) * 1000) / 10
-        : 99.2;
+        : 0;
 
     const passedLiveness = livenessVerifications.filter((l) => l.status === "PASSED").length;
     const livenessSuccessPercentage =
       livenessVerifications.length > 0
         ? Math.round((passedLiveness / livenessVerifications.length) * 1000) / 10
-        : 98.8;
+        : 0;
 
     return {
       headcount: {
@@ -389,7 +400,8 @@ export class AnalyticsEngine {
         grossSalary: totalGross,
         netSalary: totalNet,
         averageSalary,
-        employerContributions: totalEmployerContributions
+        employerContributions: totalEmployerContributions,
+        currency: latestPayrollRun?.currency ?? "USD"
       },
       statutoryLiabilities: {
         totalPf,
@@ -504,11 +516,18 @@ export class AnalyticsEngine {
     }
 
     // Department growth
-    const departmentGrowth = departments.map((d) => ({
-      departmentName: d.name,
-      count: d._count.employees,
-      growthRate: d._count.employees > 0 ? 5.2 : 0
-    }));
+    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    const departmentGrowth = departments.map((d) => {
+      const hiresInDept = employees.filter((e) => e.departmentId === d.id && e.joiningDate >= twelveMonthsAgo).length;
+      const count = d._count.employees;
+      const prevCount = Math.max(1, count - hiresInDept);
+      const growthRate = count > 0 ? Math.round(((count - prevCount) / prevCount) * 1000) / 10 : 0;
+      return {
+        departmentName: d.name,
+        count,
+        growthRate
+      };
+    });
 
     // Manager Span Analysis
     const managerReportsMap = new Map<string, number>();
@@ -777,8 +796,8 @@ export class AnalyticsEngine {
     const totalVerifications = faceVerifications.length;
     const matchedCount = faceVerifications.filter((v) => v.status === "MATCHED").length;
     const biometricMatchStats = {
-      successRate: totalVerifications > 0 ? Math.round((matchedCount / totalVerifications) * 1000) / 10 : 99.2,
-      failureRate: totalVerifications > 0 ? Math.round(((totalVerifications - matchedCount) / totalVerifications) * 1000) / 10 : 0.8,
+      successRate: totalVerifications > 0 ? Math.round((matchedCount / totalVerifications) * 1000) / 10 : 0,
+      failureRate: totalVerifications > 0 ? Math.round(((totalVerifications - matchedCount) / totalVerifications) * 1000) / 10 : 0,
       totalAttempts: totalVerifications
     };
 
@@ -789,7 +808,7 @@ export class AnalyticsEngine {
       failureRate:
         livenessVerifications.length > 0
           ? Math.round((failedLiveness.length / livenessVerifications.length) * 1000) / 10
-          : 1.2,
+          : 0,
       breakdown: [
         { reason: "Blink not detected", count: Math.floor(failedLiveness.length * 0.5) },
         { reason: "Multiple faces", count: Math.floor(failedLiveness.length * 0.3) },
@@ -834,7 +853,8 @@ export class AnalyticsEngine {
       leaveBalances,
       leaveTypes,
       departments,
-      employees
+      employees,
+      latestPayroll
     ] = await Promise.all([
       this.prisma.leaveRequest.findMany({
         where: { tenantId },
@@ -852,7 +872,12 @@ export class AnalyticsEngine {
         include: { _count: { select: { employees: true } } }
       }),
       this.prisma.employee.findMany({
-        where: { tenantId, status: "ACTIVE" }
+        where: { tenantId, status: "ACTIVE" },
+        select: { id: true, departmentId: true }
+      }),
+      this.prisma.payrollRun.findFirst({
+        where: { tenantId },
+        orderBy: [{ year: "desc" }, { month: "desc" }]
       })
     ]);
 
@@ -904,7 +929,9 @@ export class AnalyticsEngine {
       }
     }
 
-    const estimatedDailyCost = 2000;
+    const estimatedDailyCost = latestPayroll && latestPayroll.totalGross > 0
+      ? Math.round(latestPayroll.totalGross / Math.max(1, employees.length * 30))
+      : 0;
     const leaveCostAnalysis = {
       paidDaysCount,
       unpaidDaysCount,
@@ -1044,6 +1071,7 @@ export class AnalyticsEngine {
       totalDeductions: number;
       totalEmployerContributions: number;
       totalCost: number;
+      currency?: string;
     }> = [];
 
     for (const run of runs) {
@@ -1054,7 +1082,8 @@ export class AnalyticsEngine {
         totalNet: run.totalNet,
         totalDeductions: run.totalDeductions,
         totalEmployerContributions: run.totalEmployerContributions,
-        totalCost: run.totalGross + run.totalEmployerContributions
+        totalCost: run.totalGross + run.totalEmployerContributions,
+        currency: run.currency
       });
     }
 
@@ -1066,10 +1095,10 @@ export class AnalyticsEngine {
     const allowanceMap = new Map<string, { name: string; amount: number }>();
     const deductionMap = new Map<string, { name: string; amount: number }>();
     const salaryBandsCount = {
-      "< ₹25,000": { count: 0, totalCost: 0 },
-      "₹25,000 - ₹50,000": { count: 0, totalCost: 0 },
-      "₹50,000 - ₹1,00,000": { count: 0, totalCost: 0 },
-      "> ₹1,00,000": { count: 0, totalCost: 0 }
+      "< 25,000": { count: 0, totalCost: 0 },
+      "25,000 - 50,000": { count: 0, totalCost: 0 },
+      "50,000 - 100,000": { count: 0, totalCost: 0 },
+      "> 100,000": { count: 0, totalCost: 0 }
     };
 
     let totalPayrollGross = 0;
@@ -1099,17 +1128,17 @@ export class AnalyticsEngine {
 
         // Salary Bands
         if (pEmp.grossSalary < 25000) {
-          salaryBandsCount["< ₹25,000"].count++;
-          salaryBandsCount["< ₹25,000"].totalCost += pEmp.grossSalary;
+          salaryBandsCount["< 25,000"].count++;
+          salaryBandsCount["< 25,000"].totalCost += pEmp.grossSalary;
         } else if (pEmp.grossSalary <= 50000) {
-          salaryBandsCount["₹25,000 - ₹50,000"].count++;
-          salaryBandsCount["₹25,000 - ₹50,000"].totalCost += pEmp.grossSalary;
+          salaryBandsCount["25,000 - 50,000"].count++;
+          salaryBandsCount["25,000 - 50,000"].totalCost += pEmp.grossSalary;
         } else if (pEmp.grossSalary <= 100000) {
-          salaryBandsCount["₹50,000 - ₹1,00,000"].count++;
-          salaryBandsCount["₹50,000 - ₹1,00,000"].totalCost += pEmp.grossSalary;
+          salaryBandsCount["50,000 - 100,000"].count++;
+          salaryBandsCount["50,000 - 100,000"].totalCost += pEmp.grossSalary;
         } else {
-          salaryBandsCount["> ₹1,00,000"].count++;
-          salaryBandsCount["> ₹1,00,000"].totalCost += pEmp.grossSalary;
+          salaryBandsCount["> 100,000"].count++;
+          salaryBandsCount["> 100,000"].totalCost += pEmp.grossSalary;
         }
 
         // Breakdowns
@@ -1167,9 +1196,16 @@ export class AnalyticsEngine {
     // Growth rates
     let monthlyGrowthPercentage = 0;
     if (costTrends.length >= 2) {
-      const prev = costTrends[costTrends.length - 2]?.totalCost || 1;
-      const curr = costTrends[costTrends.length - 1]?.totalCost || 1;
-      monthlyGrowthPercentage = Math.round(((curr - prev) / prev) * 1000) / 10;
+      const prev = costTrends[costTrends.length - 2]?.totalCost || 0;
+      const curr = costTrends[costTrends.length - 1]?.totalCost || 0;
+      monthlyGrowthPercentage = prev > 0 ? Math.round(((curr - prev) / prev) * 1000) / 10 : 0;
+    }
+
+    let yearlyGrowthPercentage = 0;
+    if (costTrends.length >= 13) {
+      const prevYear = costTrends[costTrends.length - 13]?.totalCost || 0;
+      const currYear = costTrends[costTrends.length - 1]?.totalCost || 0;
+      yearlyGrowthPercentage = prevYear > 0 ? Math.round(((currYear - prevYear) / prevYear) * 1000) / 10 : 0;
     }
 
     const costCenterAnalysis = Array.from(buMap.entries()).map(([businessUnitName, data]) => ({
@@ -1179,6 +1215,7 @@ export class AnalyticsEngine {
     }));
 
     return {
+      currency: latestRun?.currency ?? "USD",
       costTrends,
       departmentCostBreakdown,
       salaryBands,
@@ -1187,13 +1224,13 @@ export class AnalyticsEngine {
       overtimeCostTrend,
       growthRate: {
         monthlyPercentage: monthlyGrowthPercentage,
-        yearlyPercentage: 7.4
+        yearlyPercentage: yearlyGrowthPercentage
       },
       costCenterAnalysis,
       efficiencyMetrics: {
         averageCostPerEmployee: totalPayrollEmployees > 0 ? Math.round(totalPayrollGross / totalPayrollEmployees) : 0,
-        takeHomeRatioPercentage: totalPayrollGross > 0 ? Math.round((totalPayrollNet / totalPayrollGross) * 1000) / 10 : 85.0,
-        statutoryCostRatioPercentage: totalPayrollGross > 0 ? Math.round((totalPayrollEmployerContrib / totalPayrollGross) * 1000) / 10 : 12.0
+        takeHomeRatioPercentage: totalPayrollGross > 0 ? Math.round((totalPayrollNet / totalPayrollGross) * 1000) / 10 : 0,
+        statutoryCostRatioPercentage: totalPayrollGross > 0 ? Math.round((totalPayrollEmployerContrib / totalPayrollGross) * 1000) / 10 : 0
       }
     };
   }
@@ -1291,14 +1328,25 @@ export class AnalyticsEngine {
       };
     });
 
-    const quarterlyLiabilities = [
-      { quarter: "Q1 2026", totalLiability: 450000 },
-      { quarter: "Q2 2026", totalLiability: 475000 }
-    ];
+    const quarterlyMap = new Map<string, number>();
+    for (const m of monthlyLiabilities) {
+      const parts = m.period.split("-").map(Number);
+      const y = parts[0]!;
+      const mon = parts[1]!;
+      const q = `Q${Math.ceil(mon / 3)} ${y}`;
+      quarterlyMap.set(q, (quarterlyMap.get(q) || 0) + m.total);
+    }
+    const quarterlyLiabilities = Array.from(quarterlyMap.entries()).map(([quarter, totalLiability]) => ({
+      quarter,
+      totalLiability
+    }));
 
-    const complianceRiskScore = 12;
+    const hasSnapshots = snapshots.length > 0;
+    const complianceRiskScore = hasSnapshots ? 0 : 25;
     const missingFilingsCount = 0;
-    const pendingFilingsCount = 1;
+    const pendingFilingsCount = 0;
+    const healthScore = hasSnapshots ? 100 : 0;
+    const healthStatus: "EXCELLENT" | "HEALTHY" | "MODERATE" | "AT_RISK" = hasSnapshots ? "EXCELLENT" : "AT_RISK";
 
     return {
       pfContributionTrends,
@@ -1313,8 +1361,8 @@ export class AnalyticsEngine {
       missingFilingsCount,
       pendingFilingsCount,
       complianceHealthIndex: {
-        score: 98,
-        status: "EXCELLENT",
+        score: healthScore,
+        status: healthStatus,
         unresolvedDiscrepanciesCount: 0
       }
     };
@@ -1344,25 +1392,27 @@ export class AnalyticsEngine {
     const matched = verifications.filter((v) => v.status === "MATCHED");
     const failed = verifications.filter((v) => v.status !== "MATCHED");
 
-    const matchSuccessPercentage = total > 0 ? Math.round((matched.length / total) * 1000) / 10 : 99.4;
-    const matchFailurePercentage = total > 0 ? Math.round((failed.length / total) * 1000) / 10 : 0.6;
+    const matchSuccessPercentage = total > 0 ? Math.round((matched.length / total) * 1000) / 10 : 0;
+    const matchFailurePercentage = total > 0 ? Math.round((failed.length / total) * 1000) / 10 : 0;
 
     const avgConfidenceScore =
       matched.length > 0
         ? Math.round((matched.reduce((acc, v) => acc + v.confidenceScore, 0) / matched.length) * 100) / 100
-        : 0.94;
+        : 0;
 
     const avgLivenessScore =
       livenessList.length > 0
         ? Math.round((livenessList.reduce((acc, l) => acc + l.livenessScore, 0) / livenessList.length) * 100) / 100
-        : 0.96;
+        : 0;
 
     const spoofAttemptsCount =
       verifications.filter((v) => v.status === "SPOOF_DETECTED").length + suspiciousActivities.length;
 
     const reasonCounts = new Map<string, number>();
     for (const f of failed) {
-      reasonCounts.set(f.reason, (reasonCounts.get(f.reason) || 0) + 1);
+      if (f.reason) {
+        reasonCounts.set(f.reason, (reasonCounts.get(f.reason) || 0) + 1);
+      }
     }
 
     const failureReasonsBreakdown = Array.from(reasonCounts.entries()).map(([reason, count]) => ({
@@ -1371,12 +1421,22 @@ export class AnalyticsEngine {
       percentage: failed.length > 0 ? Math.round((count / failed.length) * 1000) / 10 : 0
     }));
 
-    if (failureReasonsBreakdown.length === 0) {
-      failureReasonsBreakdown.push(
-        { reason: "Low confidence threshold", count: 2, percentage: 66.7 },
-        { reason: "Face obscured", count: 1, percentage: 33.3 }
-      );
+    const latencies = verifications
+      .map((v) => (v.metadata as Record<string, unknown>)?.latencyMs as number)
+      .filter((n): n is number => typeof n === "number" && !isNaN(n));
+    const avgLatency = latencies.length > 0 ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : 0;
+    const p95Latency = latencies.length > 0 ? latencies.sort((a, b) => a - b)[Math.floor(latencies.length * 0.95)]! : 0;
+
+    const deviceMap = new Map<string, number>();
+    for (const v of verifications) {
+      const dev = ((v.metadata as Record<string, unknown>)?.deviceType as string) || "Browser";
+      deviceMap.set(dev, (deviceMap.get(dev) || 0) + 1);
     }
+    const deviceBreakdown = Array.from(deviceMap.entries()).map(([deviceType, count]) => ({
+      deviceType,
+      count,
+      percentage: total > 0 ? Math.round((count / total) * 1000) / 10 : 0
+    }));
 
     return {
       matchSuccessPercentage,
@@ -1386,19 +1446,15 @@ export class AnalyticsEngine {
       spoofAttemptsCount,
       failureReasonsBreakdown,
       verificationLatencyMs: {
-        averageMs: 340,
-        p95Ms: 580
+        averageMs: avgLatency,
+        p95Ms: p95Latency
       },
       cameraLightingMetrics: {
-        averageQualityScore: 0.92,
-        lowLightAttemptsCount: 4,
-        blurCount: 2
+        averageQualityScore: total > 0 ? avgConfidenceScore : 0,
+        lowLightAttemptsCount: 0,
+        blurCount: 0
       },
-      deviceBreakdown: [
-        { deviceType: "Mobile PWA", count: 320, percentage: 64.0 },
-        { deviceType: "Tablet Kiosk", count: 150, percentage: 30.0 },
-        { deviceType: "Desktop Browser", count: 30, percentage: 6.0 }
-      ]
+      deviceBreakdown
     };
   }
 
@@ -1425,8 +1481,8 @@ export class AnalyticsEngine {
         include: { _count: { select: { employees: true } } }
       }),
       this.prisma.employee.findMany({
-        where: { tenantId, status: "ACTIVE" },
-        select: { id: true, managerEmployeeId: true }
+        where: { tenantId },
+        select: { id: true, managerEmployeeId: true, joiningDate: true, status: true }
       })
     ]);
 
@@ -1489,12 +1545,39 @@ export class AnalyticsEngine {
       }
     }
 
-    const orgQuarterlyGrowth = [
-      { quarter: "Q3 2025", headcount: 38, growthRatePercentage: 4.2 },
-      { quarter: "Q4 2025", headcount: 42, growthRatePercentage: 10.5 },
-      { quarter: "Q1 2026", headcount: 45, growthRatePercentage: 7.1 },
-      { quarter: "Q2 2026", headcount: Math.max(48, totalEmployees), growthRatePercentage: 6.7 }
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const quarters = [
+      { quarter: `Q3 ${currentYear - 1}`, end: new Date(currentYear - 1, 9, 1) },
+      { quarter: `Q4 ${currentYear - 1}`, end: new Date(currentYear, 0, 1) },
+      { quarter: `Q1 ${currentYear}`, end: new Date(currentYear, 3, 1) },
+      { quarter: `Q2 ${currentYear}`, end: new Date(currentYear, 6, 1) }
     ];
+
+    const orgQuarterlyGrowth = quarters.map((q, idx) => {
+      const headcount = employees.filter((e) => e.joiningDate < q.end).length;
+      let growthRatePercentage = 0;
+      if (idx > 0) {
+        const prevCount = employees.filter((e) => e.joiningDate < quarters[idx - 1]!.end).length;
+        if (prevCount > 0) {
+          growthRatePercentage = Math.round(((headcount - prevCount) / prevCount) * 1000) / 10;
+        }
+      }
+      return {
+        quarter: q.quarter,
+        headcount,
+        growthRatePercentage
+      };
+    });
+
+    const activeCount = employees.filter((e) => e.status !== "INACTIVE" && e.status !== "ARCHIVED").length;
+    const retentionScore = totalEmployees > 0
+      ? Math.min(100, Math.round((activeCount / totalEmployees) * 100))
+      : 0;
+    const spanBalanceScore = totalManagers > 0 ? (avgSpan >= 3 && avgSpan <= 10 ? 90 : 70) : 0;
+    const healthScore = totalEmployees > 0 ? Math.round((retentionScore + spanBalanceScore) / 2) : 0;
+    const healthStatus: "EXCELLENT" | "GOOD" | "ATTENTION_REQUIRED" | "CRITICAL" =
+      healthScore >= 85 ? "EXCELLENT" : healthScore >= 70 ? "GOOD" : healthScore >= 50 ? "ATTENTION_REQUIRED" : "CRITICAL";
 
     return {
       businessUnitDistribution,
@@ -1507,14 +1590,14 @@ export class AnalyticsEngine {
       },
       orgQuarterlyGrowth,
       crossTeamMobility: {
-        totalTransfersLast12Months: 4,
-        transferRatePercentage: 8.5
+        totalTransfersLast12Months: 0,
+        transferRatePercentage: 0
       },
       orgHealthScore: {
-        score: 91,
-        status: "EXCELLENT",
-        spanBalanceScore: 92,
-        retentionScore: 90
+        score: healthScore,
+        status: healthStatus,
+        spanBalanceScore,
+        retentionScore
       }
     };
   }

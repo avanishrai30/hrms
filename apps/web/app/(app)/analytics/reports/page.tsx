@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { Badge } from "../../../../components/ui";
-import { apiRequest } from "../../../../lib/api";
+import { apiRequest, getApiUrl } from "../../../../lib/api";
+import { getAccessToken } from "../../../../lib/auth-token";
 import type {
   ReportDefinitionView,
   ReportFormat,
@@ -83,9 +84,15 @@ export default function ReportsCenterPage() {
     try {
       setIsExporting(true);
       setError(null);
-      const res = await fetch("/api/v1/analytics/reports/export", {
+      const token = getAccessToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const res = await fetch(getApiUrl("/analytics/reports/export"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: "include",
         body: JSON.stringify({
           reportDefinitionCode: selectedDefCode,
           format: exportFormat

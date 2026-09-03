@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { Badge, Button, Input, Panel } from "../../../components/ui";
-import { apiRequest } from "../../../lib/api";
+import { apiRequest, getApiUrl } from "../../../lib/api";
+import { getAccessToken } from "../../../lib/auth-token";
 import type {
   ReportDefinitionView,
   ReportFormat,
@@ -217,9 +218,15 @@ export default function ReportsCatalogPage() {
       setIsExporting(true);
       setError(null);
 
-      const response = await fetch("/api/v1/reports/export", {
+      const token = getAccessToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const response = await fetch(getApiUrl("/reports/export"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: "include",
         body: JSON.stringify({
           reportDefinitionCode: code,
           format

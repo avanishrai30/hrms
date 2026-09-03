@@ -277,10 +277,15 @@ Q
   }
 
   private escapeCsv(val: string): string {
-    if (val.includes(",") || val.includes('"') || val.includes("\n") || val.includes("\r")) {
-      return `"${val.replace(/"/g, '""')}"`;
+    let sanitized = val;
+    // OWASP CSV Injection protection: prefix formula trigger characters with single quote
+    if (/^[=+\-@\t\r]/.test(sanitized)) {
+      sanitized = `'${sanitized}`;
     }
-    return val;
+    if (sanitized.includes(",") || sanitized.includes('"') || sanitized.includes("\n") || sanitized.includes("\r")) {
+      return `"${sanitized.replace(/"/g, '""')}"`;
+    }
+    return sanitized;
   }
 
   private getExtension(format: ReportFormatType): string {

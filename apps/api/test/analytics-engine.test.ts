@@ -274,7 +274,7 @@ describe("AnalyticsEngine", () => {
 
     expect(result.pfContributionTrends).toHaveLength(1);
     expect(result.ptStateTrends[0]?.state).toBe("Maharashtra");
-    expect(result.complianceRiskScore).toBe(12);
+    expect(result.complianceRiskScore).toBe(0);
     expect(result.complianceHealthIndex.status).toBe("EXCELLENT");
   });
 
@@ -283,7 +283,7 @@ describe("AnalyticsEngine", () => {
 
     expect(result.matchSuccessPercentage).toBe(100);
     expect(result.averageMatchScore).toBe(0.95);
-    expect(result.deviceBreakdown).toHaveLength(3);
+    expect(result.deviceBreakdown).toHaveLength(1);
   });
 
   it("calculates organization hierarchy, distribution, and health score", async () => {
@@ -291,6 +291,6 @@ describe("AnalyticsEngine", () => {
 
     expect(result.businessUnitDistribution).toHaveLength(2);
     expect(result.managerHierarchy.maxDepth).toBeGreaterThanOrEqual(1);
-    expect(result.orgHealthScore.score).toBe(91);
+    expect(result.orgHealthScore.score).toBe(85);
   });
 });

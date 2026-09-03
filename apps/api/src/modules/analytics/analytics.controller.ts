@@ -64,7 +64,7 @@ export class AnalyticsController {
   }
 
   @Get("analytics/payroll")
-  @RequirePermissions("analytics.view")
+  @RequirePermissions("payroll.analytics")
   async getPayrollAnalytics(@Req() req: AuthenticatedRequest) {
     const tenant = requireTenantContext(req);
     return this.analyticsService.getPayrollAnalytics(tenant.tenantId);
