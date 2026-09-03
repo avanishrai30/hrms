@@ -48,7 +48,10 @@ describe("SalaryProrationEngine", () => {
       baseMonthlyCtc: 30000,
       workingDays: 30,
       payableDays: 30,
-      components
+      components,
+      year: 2026,
+      month: 4,
+      jurisdiction: "IN"
     });
 
     expect(result.grossSalary).toBe(30000);
@@ -64,7 +67,10 @@ describe("SalaryProrationEngine", () => {
       baseMonthlyCtc: 30000,
       workingDays: 30,
       payableDays: 25,
-      components
+      components,
+      year: 2026,
+      month: 4,
+      jurisdiction: "IN"
     });
 
     expect(result.grossSalary).toBe(25000);
@@ -83,6 +89,9 @@ describe("SalaryProrationEngine", () => {
       workingDays: 30,
       payableDays: 30,
       components,
+      year: 2026,
+      month: 4,
+      jurisdiction: "IN",
       adjustments: [
         { type: "BONUS", title: "Quarterly Performance Bonus", amount: 5000 },
         { type: "PENALTY", title: "Inventory Loss Recovery", amount: -1000 }

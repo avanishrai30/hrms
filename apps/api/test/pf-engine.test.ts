@@ -6,7 +6,10 @@ describe("PfEngine (Task 30 - EPF & EPS Statutory Calculation)", () => {
     const res = PfEngine.calculatePf({
       basicMonthlySalary: 40000,
       daMonthlySalary: 0,
-      isPfCappedAtStatutoryWageCeiling: false
+      isPfCappedAtStatutoryWageCeiling: false,
+      year: 2026,
+      month: 4,
+      jurisdiction: "IN"
     });
 
     expect(res.pfWage).toBe(40000);
@@ -22,7 +25,10 @@ describe("PfEngine (Task 30 - EPF & EPS Statutory Calculation)", () => {
     const res = PfEngine.calculatePf({
       basicMonthlySalary: 50000,
       daMonthlySalary: 0,
-      isPfCappedAtStatutoryWageCeiling: true
+      isPfCappedAtStatutoryWageCeiling: true,
+      year: 2026,
+      month: 4,
+      jurisdiction: "IN"
     });
 
     expect(res.pfWage).toBe(15000);

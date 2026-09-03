@@ -7,7 +7,12 @@ import { PayrollService } from "../src/modules/payroll/payroll.service.js";
 
 function makeService(overrides: Record<string, unknown> = {}) {
   const prisma = {
-    tenantSettings: { findUnique: vi.fn().mockResolvedValue({ currency: "USD" }) },
+    tenantSettings: {
+      findUnique: vi.fn().mockResolvedValue({
+        currency: "USD",
+        metadata: { statutoryJurisdiction: "IN" }
+      })
+    },
     payrollRun: {
       findUnique: vi.fn().mockResolvedValue(null),
       findFirst: vi.fn().mockResolvedValue({ id: "run-1", tenantId: "tenant-A", status: PayrollRunStatus.GENERATED }),
@@ -75,6 +80,18 @@ describe("Payroll service hardening", () => {
     await expect(
       service.generatePayrollRun("tenant-A", { month: 4, year: 2026 }, "user-1")
     ).rejects.toThrow(new BadRequestException("Tenant currency must be configured before payroll generation."));
+
+    expect(prisma.payrollRun.create).not.toHaveBeenCalled();
+  });
+
+  it("requires tenant statutory jurisdiction before generating payroll", async () => {
+    const { service, prisma } = makeService({
+      tenantSettings: { findUnique: vi.fn().mockResolvedValue({ currency: "USD", metadata: {} }) }
+    });
+
+    await expect(
+      service.generatePayrollRun("tenant-A", { month: 4, year: 2026 }, "user-1")
+    ).rejects.toThrow(new BadRequestException("Payroll statutory jurisdiction is not configured for this tenant."));
 
     expect(prisma.payrollRun.create).not.toHaveBeenCalled();
   });

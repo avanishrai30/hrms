@@ -6,9 +6,9 @@ import {
 } from "./statutory-policy.registry.js";
 
 /**
- * TASK 30 & TASK 05.3 — EMPLOYEES' STATE INSURANCE (ESI) ENGINE
- * Calculates statutory ESI contributions using authoritative Decimal arithmetic
- * and versioned, period-effective statutory policy.
+ * EMPLOYEES' STATE INSURANCE (ESI) ENGINE (Task 05.4)
+ * Calculates configured statutory ESI contributions using authoritative Decimal arithmetic
+ * and period-effective statutory policy.
  */
 export interface EsiCalculationInput {
   grossMonthlyWages: Prisma.Decimal | number | string;
@@ -31,6 +31,7 @@ export interface EsiCalculationResult {
   employeeEsiContributionDecimal: Prisma.Decimal;
   employerEsiContributionDecimal: Prisma.Decimal;
   totalMonthlyEsiDepositDecimal: Prisma.Decimal;
+  policy: EsiPolicy;
   policyVersion: string;
 }
 
@@ -41,7 +42,11 @@ export class EsiEngine {
   static calculateEsi(input: EsiCalculationInput): EsiCalculationResult {
     const policy =
       input.policy ??
-      StatutoryPolicyRegistry.getEsiPolicy(input.year, input.month, input.jurisdiction);
+      StatutoryPolicyRegistry.getEsiPolicy({
+        year: input.year!,
+        month: input.month!,
+        jurisdiction: input.jurisdiction!
+      });
 
     const grossDecimal = PayrollMoney.requireDecimal(input.grossMonthlyWages, "Gross Monthly Wages");
 
@@ -63,6 +68,7 @@ export class EsiEngine {
         employeeEsiContributionDecimal: PayrollMoney.zero(),
         employerEsiContributionDecimal: PayrollMoney.zero(),
         totalMonthlyEsiDepositDecimal: PayrollMoney.zero(),
+        policy,
         policyVersion: policy.version
       };
     }
@@ -87,6 +93,7 @@ export class EsiEngine {
       employeeEsiContributionDecimal,
       employerEsiContributionDecimal,
       totalMonthlyEsiDepositDecimal,
+      policy,
       policyVersion: policy.version
     };
   }

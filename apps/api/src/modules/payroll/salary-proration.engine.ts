@@ -7,6 +7,7 @@ import type {
 import { PayrollMoney } from "./engines/payroll-money.js";
 import { PfEngine } from "./engines/pf-engine.js";
 import { EsiEngine } from "./engines/esi-engine.js";
+import { StatutoryPolicyRegistry } from "./engines/statutory-policy.registry.js";
 
 export interface CompensationItemSnapshot {
   componentId?: string | null;
@@ -38,11 +39,31 @@ export interface ProrationResultItem {
   isTaxable: boolean;
 }
 
+/**
+ * Statutory Policy Audit Snapshot (Task 05.4 - Blockers 6 & 7)
+ * Strictly separates policy ceilings from actual employee wage basis.
+ */
 export interface StatutoryPolicySnapshot {
+  jurisdiction: string;
+  period: string; // "MM/YYYY"
+
+  // PF Policy Metadata & Values
   pfPolicyVersion: string;
-  pfWageCeiling: string;
+  pfPolicyEffectiveFrom: string;
+  pfPolicyWageCeiling: string;
+  pfActualWageBasis: string;
+  pfEmployeeRate: string;
+  pfEmployerTotalRate: string;
+
+  // ESI Policy Metadata & Values
   esiPolicyVersion: string;
-  period: string;
+  esiPolicyEffectiveFrom: string;
+  esiWageCeiling: string;
+  esiDisabilityCeiling: string;
+  esiActualWageBasis: string;
+  esiEmployeeRate: string;
+  esiEmployerRate: string;
+  esiContinuationCycleApplied: boolean;
 }
 
 export interface ProrationResult {
@@ -67,7 +88,7 @@ export interface ProrationResult {
 export class SalaryProrationEngine {
   /**
    * Computes prorated salary component breakdowns and net salary using authoritative
-   * arbitrary-precision Decimal arithmetic and versioned statutory policy delegation.
+   * arbitrary-precision Decimal arithmetic and period-effective statutory policy delegation.
    */
   static calculateProration(params: {
     baseMonthlyCtc: number | Prisma.Decimal | string;
@@ -75,9 +96,9 @@ export class SalaryProrationEngine {
     payableDays: number | Prisma.Decimal | string;
     components: CompensationItemSnapshot[];
     adjustments?: AdjustmentSnapshot[];
-    year?: number;
-    month?: number;
-    jurisdiction?: string;
+    year: number;
+    month: number;
+    jurisdiction: string;
     isPreviouslyCoveredInCycle?: boolean;
   }): ProrationResult {
     const {
@@ -86,11 +107,18 @@ export class SalaryProrationEngine {
       payableDays: rawPayableDays,
       components,
       adjustments = [],
-      year = 2026,
-      month = 1,
-      jurisdiction = "IN",
+      year,
+      month,
+      jurisdiction,
       isPreviouslyCoveredInCycle = false
     } = params;
+
+    // Blockers 2 & 3: validate period and jurisdiction explicitly
+    StatutoryPolicyRegistry.validatePeriod(year, month);
+    if (!jurisdiction || typeof jurisdiction !== "string" || jurisdiction.trim() === "") {
+      throw new BadRequestException("Payroll statutory jurisdiction is required.");
+    }
+    const normalizedJurisdiction = jurisdiction.trim().toUpperCase();
 
     const baseMonthlyCtc = PayrollMoney.requireDecimal(rawCtc, "Base Monthly CTC");
     const workingDays = PayrollMoney.requireDecimal(rawWorkingDays, "Working Days");
@@ -152,42 +180,43 @@ export class SalaryProrationEngine {
       }
     }
 
-    // Step 2: Calculate Prorated Deductions & Employer Contributions via Authoritative Engines
-    let appliedPfVersion = "DEFAULT";
-    let appliedPfWageCeiling = "0.00";
-    let appliedEsiVersion = "DEFAULT";
+    // Pre-calculate statutory policy results for period & jurisdiction
+    const hasPfComponent = components.some((c) => c.category === "PF");
+    const hasEsiComponent = components.some((c) => c.category === "ESI");
 
+    const pfResult = hasPfComponent
+      ? PfEngine.calculatePf({
+          basicMonthlySalary: proratedBasicDecimal,
+          isPfCappedAtStatutoryWageCeiling: true,
+          year,
+          month,
+          jurisdiction: normalizedJurisdiction
+        })
+      : null;
+
+    const esiResult = hasEsiComponent
+      ? EsiEngine.calculateEsi({
+          grossMonthlyWages: proratedGrossDecimal,
+          year,
+          month,
+          jurisdiction: normalizedJurisdiction,
+          isPreviouslyCoveredInCycle
+        })
+      : null;
+
+    // Step 2: Calculate Prorated Deductions & Employer Contributions
     for (const comp of components) {
       const baseAmountDecimal = PayrollMoney.round(comp.monthlyAmount);
 
       if (comp.type === "DEDUCTION") {
         let proratedAmountDecimal = PayrollMoney.zero();
 
-        if (comp.category === "PF") {
-          // Blockers 1, 3, 9: Pass proratedBasicDecimal directly (NO .toNumber() conversion!)
-          const pfResult = PfEngine.calculatePf({
-            basicMonthlySalary: proratedBasicDecimal,
-            isPfCappedAtStatutoryWageCeiling: true,
-            year,
-            month,
-            jurisdiction
-          });
+        if (comp.category === "PF" && pfResult) {
           proratedAmountDecimal = pfResult.employeePfContributionDecimal;
-          appliedPfVersion = pfResult.policyVersion;
-          appliedPfWageCeiling = pfResult.pfWageDecimal.toFixed(2);
-        } else if (comp.category === "ESI") {
-          // Blockers 2, 3, 9, 11: Pass proratedGrossDecimal directly (NO .toNumber() conversion!)
-          const esiResult = EsiEngine.calculateEsi({
-            grossMonthlyWages: proratedGrossDecimal,
-            year,
-            month,
-            jurisdiction,
-            isPreviouslyCoveredInCycle
-          });
+        } else if (comp.category === "ESI" && esiResult) {
           proratedAmountDecimal = esiResult.employeeEsiContributionDecimal;
-          appliedEsiVersion = esiResult.policyVersion;
         } else if (comp.category === "PROFESSIONAL_TAX") {
-          // Blocker 12: PT applies from configured component data when payable days > 0
+          // Blocker 9: PT is an explicitly configured compensation component
           proratedAmountDecimal = payableDays.greaterThan(0)
             ? baseAmountDecimal
             : PayrollMoney.zero();
@@ -216,31 +245,12 @@ export class SalaryProrationEngine {
       } else if (comp.type === "EMPLOYER_CONTRIBUTION") {
         let proratedAmountDecimal = PayrollMoney.zero();
 
-        if (comp.category === "PF") {
-          // Blockers 1, 9, 10: Employer PF match = EPF + EPS matching share
-          const pfResult = PfEngine.calculatePf({
-            basicMonthlySalary: proratedBasicDecimal,
-            isPfCappedAtStatutoryWageCeiling: true,
-            year,
-            month,
-            jurisdiction
-          });
+        if (comp.category === "PF" && pfResult) {
           proratedAmountDecimal = pfResult.employerEpfContributionDecimal.add(
             pfResult.employerEpsContributionDecimal
           );
-          appliedPfVersion = pfResult.policyVersion;
-          appliedPfWageCeiling = pfResult.pfWageDecimal.toFixed(2);
-        } else if (comp.category === "ESI") {
-          // Blockers 2, 9: Employer ESI match
-          const esiResult = EsiEngine.calculateEsi({
-            grossMonthlyWages: proratedGrossDecimal,
-            year,
-            month,
-            jurisdiction,
-            isPreviouslyCoveredInCycle
-          });
+        } else if (comp.category === "ESI" && esiResult) {
           proratedAmountDecimal = esiResult.employerEsiContributionDecimal;
-          appliedEsiVersion = esiResult.policyVersion;
         } else {
           proratedAmountDecimal = PayrollMoney.prorateComponent(
             baseAmountDecimal,
@@ -279,18 +289,30 @@ export class SalaryProrationEngine {
       .sub(totalDeductionsDecimal)
       .add(totalAdjustmentsDecimal);
 
-    // Blocker 11: Fail closed on negative net pay
     if (netSalaryDecimal.isNegative()) {
       throw new BadRequestException(
         `Calculated net salary cannot be negative (${netSalaryDecimal.toFixed(2)}). Total deductions (${totalDeductionsDecimal.toFixed(2)}) and negative adjustments exceed gross earnings (${proratedGrossDecimal.toFixed(2)}).`
       );
     }
 
+    // Blockers 6 & 7: Accurate snapshot distinguishing policy ceilings from employee wage basis
     const statutoryPolicySnapshot: StatutoryPolicySnapshot = {
-      pfPolicyVersion: appliedPfVersion,
-      pfWageCeiling: appliedPfWageCeiling,
-      esiPolicyVersion: appliedEsiVersion,
-      period: `${String(month).padStart(2, "0")}/${year}`
+      jurisdiction: normalizedJurisdiction,
+      period: `${String(month).padStart(2, "0")}/${year}`,
+      pfPolicyVersion: pfResult ? pfResult.policy.version : "NOT_APPLIED",
+      pfPolicyEffectiveFrom: pfResult ? pfResult.policy.effectiveFrom : "N/A",
+      pfPolicyWageCeiling: pfResult ? pfResult.policy.wageCeiling.toFixed(2) : "0.00",
+      pfActualWageBasis: pfResult ? pfResult.pfWageDecimal.toFixed(2) : "0.00",
+      pfEmployeeRate: pfResult ? pfResult.policy.employeeRate.toString() : "0",
+      pfEmployerTotalRate: pfResult ? pfResult.policy.employerTotalRate.toString() : "0",
+      esiPolicyVersion: esiResult ? esiResult.policy.version : "NOT_APPLIED",
+      esiPolicyEffectiveFrom: esiResult ? esiResult.policy.effectiveFrom : "N/A",
+      esiWageCeiling: esiResult ? esiResult.policy.wageCeiling.toFixed(2) : "0.00",
+      esiDisabilityCeiling: esiResult ? esiResult.policy.disabilityCeiling.toFixed(2) : "0.00",
+      esiActualWageBasis: esiResult ? esiResult.grossWageBasisDecimal.toFixed(2) : "0.00",
+      esiEmployeeRate: esiResult ? esiResult.policy.employeeRate.toString() : "0",
+      esiEmployerRate: esiResult ? esiResult.policy.employerRate.toString() : "0",
+      esiContinuationCycleApplied: isPreviouslyCoveredInCycle
     };
 
     return {

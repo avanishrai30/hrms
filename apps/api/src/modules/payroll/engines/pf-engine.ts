@@ -6,9 +6,9 @@ import {
 } from "./statutory-policy.registry.js";
 
 /**
- * TASK 30 & TASK 05.3 — EMPLOYEES' PROVIDENT FUND (EPF & EPS) ENGINE
- * Calculates statutory PF contributions using authoritative Decimal arithmetic
- * and versioned, period-effective statutory policy.
+ * EMPLOYEES' PROVIDENT FUND (EPF & EPS) ENGINE (Task 05.4)
+ * Calculates configured statutory PF contributions using authoritative Decimal arithmetic
+ * and period-effective statutory policy.
  */
 export interface PfCalculationInput {
   basicMonthlySalary: Prisma.Decimal | number | string;
@@ -38,6 +38,7 @@ export interface PfCalculationResult {
   employerAdminChargesDecimal: Prisma.Decimal;
   totalEmployerPfCostDecimal: Prisma.Decimal;
   totalMonthlyPfDepositDecimal: Prisma.Decimal;
+  policy: PfPolicy;
   policyVersion: string;
 }
 
@@ -48,7 +49,11 @@ export class PfEngine {
   static calculatePf(input: PfCalculationInput): PfCalculationResult {
     const policy =
       input.policy ??
-      StatutoryPolicyRegistry.getPfPolicy(input.year, input.month, input.jurisdiction);
+      StatutoryPolicyRegistry.getPfPolicy({
+        year: input.year!,
+        month: input.month!,
+        jurisdiction: input.jurisdiction!
+      });
 
     const basicDecimal = PayrollMoney.requireDecimal(input.basicMonthlySalary, "Basic Salary");
     const daDecimal = input.daMonthlySalary !== undefined && input.daMonthlySalary !== null
@@ -60,12 +65,12 @@ export class PfEngine {
       ? (rawPfWage.greaterThan(policy.wageCeiling) ? policy.wageCeiling : rawPfWage)
       : rawPfWage;
 
-    // Employee PF contribution: pfWage * employeeRate (12%)
+    // Employee PF contribution: pfWage * employeeRate
     const employeePfContributionDecimal = PayrollMoney.round(
       pfWageDecimal.mul(policy.employeeRate)
     );
 
-    // EPS contribution: wage capped at wage ceiling * epsRate (8.33%), capped at maxEpsContribution
+    // EPS contribution: wage capped at wage ceiling * epsRate, capped at maxEpsContribution
     const epsWageBasis = pfWageDecimal.greaterThan(policy.wageCeiling)
       ? policy.wageCeiling
       : pfWageDecimal;
@@ -75,7 +80,7 @@ export class PfEngine {
       ? policy.maxEpsContribution
       : rawEps;
 
-    // Employer EPF contribution: Total Employer 12% - EPS share
+    // Employer EPF contribution: Total Employer matching - EPS share
     const totalEmployerTwelvePercent = PayrollMoney.round(
       pfWageDecimal.mul(policy.employerTotalRate)
     );
@@ -84,13 +89,13 @@ export class PfEngine {
       ? PayrollMoney.zero()
       : diffEpf;
 
-    // EDLI: epsWageBasis * edliRate (0.5%), capped at maxEdliContribution
+    // EDLI: epsWageBasis * edliRate, capped at maxEdliContribution
     const rawEdli = epsWageBasis.mul(policy.edliRate).toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
     const employerEdliContributionDecimal = rawEdli.greaterThan(policy.maxEdliContribution)
       ? policy.maxEdliContribution
       : rawEdli;
 
-    // Admin charges: epsWageBasis * adminRate (0.5%)
+    // Admin charges: epsWageBasis * adminRate
     const employerAdminChargesDecimal = epsWageBasis
       .mul(policy.adminRate)
       .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
@@ -101,7 +106,7 @@ export class PfEngine {
       .add(employerEdliContributionDecimal)
       .add(employerAdminChargesDecimal);
 
-    // Total combined deposit to EPFO challan
+    // Total combined deposit
     const totalMonthlyPfDepositDecimal = employeePfContributionDecimal.add(
       totalEmployerPfCostDecimal
     );
@@ -123,6 +128,7 @@ export class PfEngine {
       employerAdminChargesDecimal,
       totalEmployerPfCostDecimal,
       totalMonthlyPfDepositDecimal,
+      policy,
       policyVersion: policy.version
     };
   }

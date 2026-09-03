@@ -8,7 +8,7 @@ import { Prisma } from "@prisma/client";
  * - Precision Engine: Prisma.Decimal (arbitrary-precision decimal arithmetic)
  * - Standard Scale: 2 decimal places (cents/paise)
  * - Rounding Mode: ROUND_HALF_UP (standard financial accounting)
- * - Currencies: Tenant-configured (defaults to INR; also supports USD, EUR, GBP)
+ * - Currencies: Tenant-configured (strict required tenant currency; supports INR, USD, EUR, GBP). No automatic INR default.
  *   All currently supported tenant currencies utilize 2 minor unit digits.
  * - Missing Values: strictly rejected by requireDecimal() (null, undefined, "", NaN).
  * - Deliberate Zero: zero() or valid numeric 0 / "0" / "0.00".

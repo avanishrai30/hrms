@@ -74,7 +74,7 @@ export class PayrollService {
     actorMembershipId?: string
   ) {
     const { month, year, notes } = input;
-    const currency = await this.getTenantPayrollCurrency(tenantId);
+    const { currency, jurisdiction } = await this.getTenantPayrollConfig(tenantId);
 
     // Check if payroll run already exists for the month
     const existing = await this.prisma.payrollRun.findUnique({
@@ -260,7 +260,8 @@ export class PayrollService {
         payableDays: payableResult.payableDays,
         components,
         year,
-        month
+        month,
+        jurisdiction
       });
 
       totalEmployees += 1;
@@ -294,6 +295,7 @@ export class PayrollService {
           monthlyCtc: activeComp.monthlyCtc.toString(),
           annualCtc: activeComp.annualCtc.toString(),
           currency: activeComp.currency,
+          jurisdiction,
           statutoryPolicySnapshot: prorationResult.statutoryPolicySnapshot,
           components: components.map((c) => ({
             ...c,
@@ -922,17 +924,30 @@ export class PayrollService {
     });
   }
 
-  private async getTenantPayrollCurrency(tenantId: string) {
+  private async getTenantPayrollConfig(tenantId: string) {
     const settings = await this.prisma.tenantSettings.findUnique({
       where: { tenantId },
-      select: { currency: true }
+      select: { currency: true, metadata: true }
     });
 
     if (!settings?.currency) {
       throw new BadRequestException("Tenant currency must be configured before payroll generation.");
     }
 
-    return settings.currency;
+    const metadata = (settings.metadata as Record<string, unknown>) ?? {};
+    const statutoryJurisdiction =
+      (metadata.statutoryJurisdiction as string) ||
+      (metadata.jurisdiction as string) ||
+      (metadata.country as string);
+
+    if (!statutoryJurisdiction || typeof statutoryJurisdiction !== "string" || statutoryJurisdiction.trim() === "") {
+      throw new BadRequestException("Payroll statutory jurisdiction is not configured for this tenant.");
+    }
+
+    return {
+      currency: settings.currency,
+      jurisdiction: statutoryJurisdiction.trim().toUpperCase()
+    };
   }
 
   private async assertEmployeeInTenant(tenantId: string, employeeId: string) {
