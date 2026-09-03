@@ -60,4 +60,52 @@ describe("PayslipPdfEngine", () => {
     expect(pdfText.includes("Rs.")).toBe(false);
     expect(pdfText.includes("%%EOF")).toBe(true);
   });
+
+  it("generates a valid PDF with INR currency for tenant-configured INR runs", () => {
+    const data: PayslipPdfData = {
+      tenantName: "VC Organics Ltd",
+      month: 9,
+      year: 2026,
+      version: 1,
+      currency: "INR",
+      generatedAt: new Date("2026-09-30T12:00:00Z"),
+      employee: {
+        fullName: "Rahul Verma",
+        employeeCode: "EMP-042",
+        department: "Operations",
+        designation: "Plant Manager",
+        joiningDate: "15/03/2023"
+      },
+      attendance: {
+        workingDays: 30,
+        payableDays: 30,
+        presentDays: 26,
+        paidLeaveDays: 4,
+        holidayDays: 0,
+        halfDays: 0,
+        absentDays: 0
+      },
+      earnings: [
+        { name: "Basic Salary", amount: 60000 },
+        { name: "HRA", amount: 30000 }
+      ],
+      deductions: [
+        { name: "Provident Fund", amount: 7200 }
+      ],
+      employerContributions: [
+        { name: "Employer PF Match", amount: 7200 }
+      ],
+      grossSalary: 90000,
+      totalDeductions: 7200,
+      netSalary: 82800
+    };
+
+    const pdfBuffer = PayslipPdfEngine.generatePayslipPdf(data);
+    const pdfText = pdfBuffer.toString("utf8");
+
+    expect(pdfText.startsWith("%PDF-1.4")).toBe(true);
+    expect(pdfText.includes("Rahul Verma")).toBe(true);
+    expect(pdfText.includes("INR 82,800")).toBe(true);
+    expect(pdfText.includes("%%EOF")).toBe(true);
+  });
 });
