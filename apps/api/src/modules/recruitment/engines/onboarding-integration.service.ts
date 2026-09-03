@@ -1,11 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { AuditService } from "../../audit/audit.service.js";
-import { EmploymentStatus, EmploymentType, SalaryType } from "@prisma/client";
+import { EmploymentStatus, SalaryType } from "@prisma/client";
 
 export interface OnboardCandidateOptions {
   employeeCode?: string;
   joiningDate?: string;
+  salaryType?: SalaryType;
   salaryTemplateId?: string;
 }
 
@@ -23,53 +24,75 @@ export class OnboardingIntegrationService {
     actorUserId?: string,
     actorMembershipId?: string
   ) {
-    const candidate = await this.prisma.candidate.findFirst({
-      where: { id: candidateId, tenantId },
-      include: {
-        applications: {
-          include: {
-            requisition: true,
-            offers: {
-              where: { status: "ACCEPTED" },
-              orderBy: { createdAt: "desc" },
-              take: 1
+    return await this.prisma.$transaction(async (tx) => {
+      const candidate = await tx.candidate.findFirst({
+        where: { id: candidateId, tenantId },
+        include: {
+          applications: {
+            include: {
+              requisition: true,
+              offers: {
+                where: { status: "ACCEPTED", tenantId, candidateId },
+                orderBy: { createdAt: "desc" }
+              }
             }
           }
-        },
-        offers: {
-          where: { status: "ACCEPTED" },
-          orderBy: { createdAt: "desc" },
-          take: 1
         }
+      });
+
+      if (!candidate) {
+        throw new NotFoundException("Candidate not found.");
       }
-    });
 
-    if (!candidate) {
-      throw new NotFoundException("Candidate not found.");
-    }
+      if (candidate.hiredEmployeeId) {
+        throw new BadRequestException("Candidate is already onboarded as an employee.");
+      }
 
-    if (candidate.hiredEmployeeId) {
-      throw new BadRequestException("Candidate is already onboarded as an employee.");
-    }
+      const acceptedApplication = candidate.applications.find((application) =>
+        application.offers.some(
+          (offer) =>
+            offer.tenantId === tenantId &&
+            offer.candidateId === candidate.id &&
+            offer.applicationId === application.id &&
+            offer.requisitionId === application.requisitionId
+        )
+      );
+      const acceptedOffer = acceptedApplication?.offers.find(
+        (offer) =>
+          offer.tenantId === tenantId &&
+          offer.candidateId === candidate.id &&
+          offer.applicationId === acceptedApplication.id &&
+          offer.requisitionId === acceptedApplication.requisitionId
+      );
+      const requisition = acceptedApplication?.requisition;
 
-    // Determine accepted offer & requisition
-    const acceptedOffer = candidate.offers[0] || candidate.applications[0]?.offers[0];
-    const requisition = candidate.applications[0]?.requisition;
+      if (!acceptedOffer) {
+        throw new BadRequestException("Candidate cannot be onboarded without an accepted offer.");
+      }
 
-    if (!requisition) {
-      throw new BadRequestException("Candidate has no associated job requisition.");
-    }
+      if (!requisition) {
+        throw new BadRequestException("Accepted offer must be linked to a valid job requisition.");
+      }
 
-    const employeeCode =
-      options.employeeCode?.trim() || `EMP-${Date.now().toString().slice(-4)}`;
-    const joiningDate = options.joiningDate
-      ? new Date(options.joiningDate)
-      : acceptedOffer?.joiningDate
-      ? new Date(acceptedOffer.joiningDate)
-      : new Date();
+      if (!requisition.employmentType) {
+        throw new BadRequestException("Job requisition employment type is required before onboarding.");
+      }
 
-    return await this.prisma.$transaction(async (tx) => {
-      // 1. Check employee uniqueness
+      const employeeCode = options.employeeCode?.trim();
+      if (!employeeCode) {
+        throw new BadRequestException("Employee code is required for candidate onboarding.");
+      }
+
+      if (!options.salaryType) {
+        throw new BadRequestException("Salary type is required for candidate onboarding.");
+      }
+
+      if (options.salaryTemplateId) {
+        throw new BadRequestException("Compensation setup must be completed through the compensation workflow.");
+      }
+
+      const joiningDate = resolveJoiningDate(options.joiningDate, acceptedOffer.joiningDate);
+
       const existing = await tx.employee.findFirst({
         where: { tenantId, OR: [{ employeeCode }, { email: candidate.email }] }
       });
@@ -77,7 +100,13 @@ export class OnboardingIntegrationService {
         throw new BadRequestException(`Employee with code ${employeeCode} or email ${candidate.email} already exists.`);
       }
 
-      // 2. Create Employee record
+      const employeeRole = await tx.role.findFirst({
+        where: { tenantId, code: "EMPLOYEE" }
+      });
+      if (!employeeRole) {
+        throw new BadRequestException("Tenant EMPLOYEE role is required before candidate onboarding.");
+      }
+
       const employee = await tx.employee.create({
         data: {
           tenantId,
@@ -87,58 +116,65 @@ export class OnboardingIntegrationService {
           phone: candidate.mobile,
           departmentId: requisition.departmentId,
           designationId: requisition.designationId,
-          employmentType: requisition.employmentType || EmploymentType.FULL_TIME,
-          salaryType: SalaryType.MONTHLY,
-          status: EmploymentStatus.ACTIVE,
-          joiningDate,
-          activatedAt: new Date()
+          employmentType: requisition.employmentType,
+          salaryType: options.salaryType,
+          status: EmploymentStatus.DRAFT,
+          joiningDate
         }
       });
 
-      // 3. Create or Link User & Membership for ESS
-      let user = await tx.user.findFirst({
-        where: { email: candidate.email }
+      const existingMembership = await tx.tenantMembership.findFirst({
+        where: {
+          tenantId,
+          user: { email: candidate.email }
+        },
+        include: { user: true }
       });
-      if (!user) {
-        user = await tx.user.create({
+
+      if (existingMembership?.employeeId && existingMembership.employeeId !== employee.id) {
+        throw new BadRequestException("Tenant user membership is already linked to another employee.");
+      }
+
+      const user =
+        existingMembership?.user ??
+        (await tx.user.create({
           data: {
             email: candidate.email,
             phone: candidate.mobile,
-            status: "ACTIVE"
+            status: "INVITED"
           }
-        });
-      }
+        }));
 
-      // Find or create default employee role
-      let employeeRole = await tx.role.findFirst({
-        where: { tenantId, code: "EMPLOYEE" }
-      });
-      if (!employeeRole) {
-        employeeRole = await tx.role.findFirst({
-          where: { tenantId }
-        });
-      }
+      const membership = existingMembership
+        ? await tx.tenantMembership.update({
+            where: { id: existingMembership.id },
+            data: { employeeId: employee.id }
+          })
+        : await tx.tenantMembership.create({
+            data: {
+              tenantId,
+              userId: user.id,
+              employeeId: employee.id,
+              status: "INVITED"
+            }
+          });
 
-      const membership = await tx.tenantMembership.create({
-        data: {
-          tenantId,
-          userId: user.id,
-          employeeId: employee.id,
-          status: "ACTIVE"
-        }
-      });
-
-      if (employeeRole) {
-        await tx.tenantMembershipRole.create({
-          data: {
+      await tx.tenantMembershipRole.upsert({
+        where: {
+          tenantId_membershipId_roleId: {
             tenantId,
             membershipId: membership.id,
             roleId: employeeRole.id
           }
-        });
-      }
+        },
+        create: {
+          tenantId,
+          membershipId: membership.id,
+          roleId: employeeRole.id
+        },
+        update: {}
+      });
 
-      // 4. Create EmployeeProfile (Task 18 ESS)
       await tx.employeeProfile.create({
         data: {
           tenantId,
@@ -148,42 +184,6 @@ export class OnboardingIntegrationService {
         }
       });
 
-      // 5. Seed default leave balances
-      const leaveTypes = await tx.leaveType.findMany({
-        where: { tenantId }
-      });
-      const currentYear = new Date().getFullYear();
-      for (const lt of leaveTypes) {
-        await tx.leaveBalance.create({
-          data: {
-            tenantId,
-            employeeId: employee.id,
-            leaveTypeId: lt.id,
-            year: currentYear,
-            allocatedDays: 12.0,
-            accruedDays: 12.0,
-            usedDays: 0.0,
-            pendingDays: 0.0
-          }
-        });
-      }
-
-      // 6. Seed Compensation record if offer exists
-      if (acceptedOffer) {
-        await tx.employeeCompensation.create({
-          data: {
-            tenantId,
-            employeeId: employee.id,
-            monthlyCtc: Number(acceptedOffer.baseSalary),
-            annualCtc: Number(acceptedOffer.totalCtc),
-            currency: "INR",
-            effectiveFrom: joiningDate,
-            notes: `Auto-generated from accepted offer ${acceptedOffer.offerCode}`
-          }
-        });
-      }
-
-      // 7. Update Candidate status to HIRED & link employee ID
       await tx.candidate.update({
         where: { id: candidateId },
         data: {
@@ -192,16 +192,26 @@ export class OnboardingIntegrationService {
         }
       });
 
-      // 8. Record Timeline & Audit
+      const actor = actorUserId
+        ? await tx.user.findUnique({ where: { id: actorUserId }, select: { email: true } })
+        : null;
+      const actorName = actor?.email ?? (actorUserId ? `User ${actorUserId}` : "System");
+
       await tx.candidateActivity.create({
         data: {
           tenantId,
           candidateId,
-          actorName: "System Onboarding Engine",
+          actorName,
           activityType: "CANDIDATE_ONBOARDED",
-          title: "Candidate Onboarded as Active Employee",
-          description: `Generated Employee ID ${employee.employeeCode} (${employee.fullName}) and provisioned ESS workspace account.`,
-          metadataJson: { employeeId: employee.id, employeeCode: employee.employeeCode }
+          title: "Candidate Converted to Employee Draft",
+          description: `Created draft employee ${employee.employeeCode} (${employee.fullName}) from accepted offer ${acceptedOffer.offerCode}. Tenant membership remains invited until activation.`,
+          metadataJson: {
+            employeeId: employee.id,
+            employeeCode: employee.employeeCode,
+            offerId: acceptedOffer.id,
+            applicationId: acceptedOffer.applicationId,
+            requisitionId: acceptedOffer.requisitionId
+          }
         }
       });
 
@@ -231,4 +241,15 @@ export class OnboardingIntegrationService {
       };
     });
   }
+}
+
+function resolveJoiningDate(explicitJoiningDate: string | undefined, offerJoiningDate: Date): Date {
+  const source = explicitJoiningDate ?? offerJoiningDate;
+  const joiningDate = source instanceof Date ? new Date(source.getTime()) : new Date(source);
+
+  if (Number.isNaN(joiningDate.getTime())) {
+    throw new BadRequestException("Candidate onboarding requires a valid joining date.");
+  }
+
+  return joiningDate;
 }

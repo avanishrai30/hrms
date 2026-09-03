@@ -992,7 +992,7 @@ export class RecruitmentService {
   async onboardHiredCandidate(
     tenantId: string,
     candidateId: string,
-    options: { employeeCode?: string; joiningDate?: string; salaryTemplateId?: string },
+    options: { employeeCode?: string; joiningDate?: string; salaryType?: "MONTHLY" | "DAILY" | "HOURLY"; salaryTemplateId?: string },
     actorUserId?: string,
     actorMembershipId?: string
   ) {

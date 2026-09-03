@@ -178,8 +178,9 @@ export const VerifyPreboardingTaskSchema = z.object({
 });
 
 export const OnboardCandidateSchema = z.object({
-  employeeCode: z.string().min(2).optional(),
+  employeeCode: z.string().trim().min(2),
   joiningDate: z.string().datetime().optional(),
+  salaryType: z.enum(["MONTHLY", "DAILY", "HOURLY"]),
   salaryTemplateId: z.string().uuid().optional()
 });
 
