@@ -1,4 +1,5 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
+import { AiProviderUnavailableError } from "./providers/ollama.provider.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type {
   AiPromptRequestDto,
@@ -20,6 +21,8 @@ import { AiToolRegistryService, type ToolExecutionResult } from "./tools/ai-tool
 
 @Injectable()
 export class AiService {
+  private readonly logger = new Logger(AiService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(AI_PROVIDER) private readonly aiProvider: AIProvider,
@@ -162,14 +165,23 @@ export class AiService {
       ? `${dto.prompt}\n\n[VERIFIED TENANT DATA CONTEXT]:\n${contextResult.groundedDataText}`
       : dto.prompt;
 
-    const chatResponse = await this.aiProvider.chat(fullPrompt, {
-      systemPrompt,
-      model: dto.modelOverride,
-      history: conversation.messages.map((m) => ({
-        role: m.role.toLowerCase() as "user" | "assistant" | "system",
-        content: m.content
-      }))
-    });
+    let chatResponse: Awaited<ReturnType<AIProvider["chat"]>>;
+    try {
+      chatResponse = await this.aiProvider.chat(fullPrompt, {
+        systemPrompt,
+        model: dto.modelOverride,
+        history: conversation.messages.map((m) => ({
+          role: m.role.toLowerCase() as "user" | "assistant" | "system",
+          content: m.content
+        }))
+      });
+    } catch (err: unknown) {
+      if (err instanceof AiProviderUnavailableError) {
+        this.logger.warn(`AI provider unavailable during chat: ${err.reason}`);
+        throw new ServiceUnavailableException("AI service is temporarily unavailable.");
+      }
+      throw err;
+    }
 
     // 8. PII Redaction
     const sanitizedContent = this.securityService.maskPii(chatResponse.content, userPermissions);

@@ -57,7 +57,7 @@ export default function AiCopilotPage() {
   useEffect(() => {
     apiRequest<{ status: "ok" | "degraded"; provider: string; model: string }>("/ai/health")
       .then((res) => setRuntimeStatus(res))
-      .catch(() => setRuntimeStatus({ status: "degraded", provider: "local-fallback", model: "local-heuristic-v1" }));
+      .catch(() => setRuntimeStatus({ status: "degraded", provider: "unavailable", model: "unknown" }));
   }, []);
 
   const scrollToBottom = () => {
@@ -181,8 +181,8 @@ export default function AiCopilotPage() {
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">AIavro Copilot</h1>
-              <Badge tone={runtimeStatus?.status === "ok" ? "success" : "neutral"}>
-                {runtimeStatus?.status === "ok" ? (runtimeStatus.model || "Active") : "Fallback"}
+              <Badge tone={runtimeStatus?.status === "ok" ? "success" : "danger"}>
+                {runtimeStatus?.status === "ok" ? (runtimeStatus.model || "Active") : "AI Unavailable"}
               </Badge>
             </div>
             <p className="text-[11px] text-neutral-500">Tenant-isolated RAG & Permission-Gated Actions</p>
@@ -406,18 +406,23 @@ export default function AiCopilotPage() {
       )}
 
       {/* Input Form */}
+      {runtimeStatus?.status !== "ok" && runtimeStatus !== null && (
+        <div className="text-xs text-center text-amber-600 dark:text-amber-400 py-1">
+          ⚠️ AI service is currently unavailable. Chat is disabled.
+        </div>
+      )}
       <div className="relative flex items-center bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-300 dark:border-neutral-700 shadow-md p-2 focus-within:ring-2 focus-within:ring-emerald-500">
         <Input
           value={inputPrompt}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInputPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask a question or request an action (e.g. 'Apply for leave tomorrow')..."
+          placeholder={runtimeStatus?.status !== "ok" && runtimeStatus !== null ? "AI service unavailable..." : "Ask a question or request an action (e.g. 'Apply for leave tomorrow')..."}
           className="flex-1 border-none shadow-none focus:ring-0 text-sm bg-transparent px-3"
-          disabled={loading}
+          disabled={loading || (runtimeStatus?.status !== "ok" && runtimeStatus !== null)}
         />
         <Button
           onClick={() => void handleSendMessage()}
-          disabled={loading || !inputPrompt.trim()}
+          disabled={loading || !inputPrompt.trim() || (runtimeStatus?.status !== "ok" && runtimeStatus !== null)}
           variant="primary"
           className="rounded-xl px-4"
         >

@@ -1,20 +1,25 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { AiChatOptions, AiChatResult, AIProvider } from "./ai-provider.interface.js";
-import { LocalAiProvider } from "./local-ai.provider.js";
-import { GeminiProvider } from "./gemini.provider.js";
+import type { AiChatOptions, AiChatResult, AiHealthStatus, AIProvider } from "./ai-provider.interface.js";
 
-export interface OllamaHealthStatus {
-  status: "ok" | "degraded";
-  provider: "ollama" | "local-fallback";
-  model: string;
-  reachable: boolean;
-  latencyMs: number;
+/**
+ * Typed error thrown when the Ollama runtime is unreachable or returns a
+ * non-recoverable error.  Callers (AiService, etc.) should catch this and
+ * translate it into an HTTP 503 for the client.
+ */
+export class AiProviderUnavailableError extends Error {
+  public readonly code = "AI_PROVIDER_UNAVAILABLE";
+  constructor(
+    public readonly provider: string,
+    public readonly reason: string
+  ) {
+    super(`AI provider "${provider}" is unavailable: ${reason}`);
+    this.name = "AiProviderUnavailableError";
+  }
 }
 
 @Injectable()
 export class OllamaProvider implements AIProvider {
   private readonly logger = new Logger(OllamaProvider.name);
-  private readonly fallback: AIProvider;
   private readonly baseUrl: string;
   private readonly defaultModel: string;
   private readonly timeoutMs: number;
@@ -23,16 +28,9 @@ export class OllamaProvider implements AIProvider {
     this.baseUrl = (process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/+$/, "");
     this.defaultModel = process.env.OLLAMA_MODEL || "qwen2.5:1.5b";
     this.timeoutMs = Number(process.env.OLLAMA_TIMEOUT_MS) || 25000;
-
-    // Use Gemini if configured, otherwise deterministic LocalAiProvider
-    if (process.env.GEMINI_API_KEY) {
-      this.fallback = new GeminiProvider();
-    } else {
-      this.fallback = new LocalAiProvider();
-    }
   }
 
-  async checkHealth(): Promise<OllamaHealthStatus> {
+  async checkHealth(): Promise<AiHealthStatus> {
     const t0 = Date.now();
     try {
       const res = await fetch(`${this.baseUrl}/api/tags`, {
@@ -58,16 +56,16 @@ export class OllamaProvider implements AIProvider {
 
       return {
         status: "degraded",
-        provider: "local-fallback",
-        model: "local-heuristic-v1",
+        provider: "ollama",
+        model: this.defaultModel,
         reachable: false,
         latencyMs
       };
     } catch {
       return {
         status: "degraded",
-        provider: "local-fallback",
-        model: "local-heuristic-v1",
+        provider: "ollama",
+        model: this.defaultModel,
         reachable: false,
         latencyMs: Date.now() - t0
       };
@@ -117,7 +115,8 @@ export class OllamaProvider implements AIProvider {
       });
 
       if (!res.ok) {
-        throw new Error(`Ollama HTTP ${res.status}: ${await res.text()}`);
+        const body = await res.text().catch(() => "");
+        throw new AiProviderUnavailableError("ollama", `HTTP ${res.status}: ${body}`);
       }
 
       const data = (await res.json()) as {
@@ -147,52 +146,48 @@ export class OllamaProvider implements AIProvider {
         structuredJson
       };
     } catch (err: unknown) {
-      this.logger.warn(
-        `Ollama chat call failed (${err instanceof Error ? err.message : String(err)}), delegating to fallback provider`
-      );
-      return this.fallback.chat(prompt, options);
+      if (err instanceof AiProviderUnavailableError) {
+        throw err;
+      }
+      const reason = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Ollama chat call failed: ${reason}`);
+      throw new AiProviderUnavailableError("ollama", reason);
     }
   }
 
   async summarize(text: string, maxWords = 100): Promise<string> {
-    try {
-      const res = await this.chat(
-        `Summarize the following text concisely in under ${maxWords} words. Provide ONLY the summary text:\n\n${text}`
-      );
-      return res.content.trim() || this.fallback.summarize(text, maxWords);
-    } catch {
-      return this.fallback.summarize(text, maxWords);
+    const res = await this.chat(
+      `Summarize the following text concisely in under ${maxWords} words. Provide ONLY the summary text:\n\n${text}`
+    );
+    if (!res.content.trim()) {
+      throw new AiProviderUnavailableError("ollama", "Empty summarization response");
     }
+    return res.content.trim();
   }
 
   async classify(text: string, candidateLabels: string[]): Promise<{ label: string; confidence: number }> {
-    try {
-      const labelsList = candidateLabels.join(", ");
-      const prompt = `Classify the following text into exactly one of these labels: [${labelsList}].\nText: "${text}"\nReply with ONLY the exact label name.`;
-      const res = await this.chat(prompt, { temperature: 0.0 });
-      const chosen = res.content.trim();
-      const matched = candidateLabels.find((l) => l.toLowerCase() === chosen.toLowerCase());
-      if (matched) {
-        return { label: matched, confidence: 0.95 };
-      }
-      return this.fallback.classify(text, candidateLabels);
-    } catch {
-      return this.fallback.classify(text, candidateLabels);
+    const labelsList = candidateLabels.join(", ");
+    const prompt = `Classify the following text into exactly one of these labels: [${labelsList}].\nText: "${text}"\nReply with ONLY the exact label name.`;
+    const res = await this.chat(prompt, { temperature: 0.0 });
+    const chosen = res.content.trim();
+    const matched = candidateLabels.find((l) => l.toLowerCase() === chosen.toLowerCase());
+    if (matched) {
+      return { label: matched, confidence: 0.95 };
     }
+    throw new AiProviderUnavailableError(
+      "ollama",
+      `Classification returned unrecognized label "${chosen}"`
+    );
   }
 
   async extract<T = Record<string, unknown>>(text: string, schemaDescription: string): Promise<T> {
-    try {
-      const prompt = `Extract data from the following text according to this schema:\n${schemaDescription}\n\nText: "${text}"\n\nReturn valid JSON only.`;
-      const res = await this.chat(prompt, { temperature: 0.0 });
-      const jsonMatch = res.content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]) as T;
-      }
-      return this.fallback.extract<T>(text, schemaDescription);
-    } catch {
-      return this.fallback.extract<T>(text, schemaDescription);
+    const prompt = `Extract data from the following text according to this schema:\n${schemaDescription}\n\nText: "${text}"\n\nReturn valid JSON only.`;
+    const res = await this.chat(prompt, { temperature: 0.0 });
+    const jsonMatch = res.content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]) as T;
     }
+    throw new AiProviderUnavailableError("ollama", "Extraction returned no valid JSON");
   }
 
   async generateEmbeddings(text: string): Promise<number[]> {
@@ -207,15 +202,23 @@ export class OllamaProvider implements AIProvider {
         signal: AbortSignal.timeout(5000)
       });
 
-      if (res.ok) {
-        const data = (await res.json()) as { embedding?: number[] };
-        if (Array.isArray(data.embedding) && data.embedding.length > 0) {
-          return data.embedding;
-        }
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new AiProviderUnavailableError("ollama", `Embeddings HTTP ${res.status}: ${body}`);
       }
-    } catch {
-      // Fallback
+
+      const data = (await res.json()) as { embedding?: number[] };
+      if (Array.isArray(data.embedding) && data.embedding.length > 0) {
+        return data.embedding;
+      }
+      throw new AiProviderUnavailableError("ollama", "Embeddings response contained no vectors");
+    } catch (err: unknown) {
+      if (err instanceof AiProviderUnavailableError) {
+        throw err;
+      }
+      const reason = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Ollama embeddings call failed: ${reason}`);
+      throw new AiProviderUnavailableError("ollama", reason);
     }
-    return this.fallback.generateEmbeddings(text);
   }
 }

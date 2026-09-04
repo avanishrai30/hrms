@@ -88,12 +88,11 @@ describe("AI Multi-Tenant Isolation Tests (Task 19)", () => {
   });
 });
 
-describe("OllamaProvider Live Runtime & Resilience Tests", () => {
+describe("OllamaProvider Production Failure Semantics", () => {
   it("should parse Ollama chat responses correctly", async () => {
     const { OllamaProvider } = await import("../src/modules/ai/providers/ollama.provider.js");
     const provider = new OllamaProvider();
 
-    // Mock global fetch
     const originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -118,18 +117,127 @@ describe("OllamaProvider Live Runtime & Resilience Tests", () => {
     }
   });
 
-  it("should fallback cleanly to LocalAiProvider when Ollama is unreachable", async () => {
-    const { OllamaProvider } = await import("../src/modules/ai/providers/ollama.provider.js");
+  it("should throw AiProviderUnavailableError when Ollama is unreachable (ECONNREFUSED)", async () => {
+    const { OllamaProvider, AiProviderUnavailableError } = await import("../src/modules/ai/providers/ollama.provider.js");
     const provider = new OllamaProvider();
 
     const originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED 127.0.0.1:11434"));
 
     try {
-      const res = await provider.chat("What is my leave balance?");
-      expect(res).toBeDefined();
-      expect(res.content).toContain("leave balance is fully up to date");
-      expect(res.model).toBe("local-heuristic-v1");
+      await expect(provider.chat("What is my leave balance?")).rejects.toThrow(AiProviderUnavailableError);
+      await expect(provider.chat("What is my leave balance?")).rejects.toThrow(/ECONNREFUSED/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should throw AiProviderUnavailableError on Ollama timeout", async () => {
+    const { OllamaProvider, AiProviderUnavailableError } = await import("../src/modules/ai/providers/ollama.provider.js");
+    const provider = new OllamaProvider();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("The operation was aborted due to timeout"));
+
+    try {
+      await expect(provider.chat("Hello")).rejects.toThrow(AiProviderUnavailableError);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should throw AiProviderUnavailableError on non-2xx response", async () => {
+    const { OllamaProvider, AiProviderUnavailableError } = await import("../src/modules/ai/providers/ollama.provider.js");
+    const provider = new OllamaProvider();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => "Internal Server Error"
+    } as any);
+
+    try {
+      await expect(provider.chat("Hello")).rejects.toThrow(AiProviderUnavailableError);
+      await expect(provider.chat("Hello")).rejects.toThrow(/HTTP 500/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should NOT implicitly fall back to LocalAiProvider on failure", async () => {
+    const { OllamaProvider } = await import("../src/modules/ai/providers/ollama.provider.js");
+    const provider = new OllamaProvider();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED"));
+
+    try {
+      let threw = false;
+      try {
+        const res = await provider.chat("test");
+        // If we got here, check it is NOT LocalAiProvider output
+        expect(res.model).not.toBe("local-heuristic-v1");
+      } catch {
+        threw = true;
+      }
+      expect(threw).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should throw AiProviderUnavailableError from summarize on failure", async () => {
+    const { OllamaProvider, AiProviderUnavailableError } = await import("../src/modules/ai/providers/ollama.provider.js");
+    const provider = new OllamaProvider();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED"));
+
+    try {
+      await expect(provider.summarize("Some text to summarize")).rejects.toThrow(AiProviderUnavailableError);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should throw AiProviderUnavailableError from classify on failure", async () => {
+    const { OllamaProvider, AiProviderUnavailableError } = await import("../src/modules/ai/providers/ollama.provider.js");
+    const provider = new OllamaProvider();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED"));
+
+    try {
+      await expect(provider.classify("some text", ["A", "B"])).rejects.toThrow(AiProviderUnavailableError);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should throw AiProviderUnavailableError from extract on failure", async () => {
+    const { OllamaProvider, AiProviderUnavailableError } = await import("../src/modules/ai/providers/ollama.provider.js");
+    const provider = new OllamaProvider();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED"));
+
+    try {
+      await expect(provider.extract("some text", "name: string")).rejects.toThrow(AiProviderUnavailableError);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should throw AiProviderUnavailableError from generateEmbeddings on failure (no fake vectors)", async () => {
+    const { OllamaProvider, AiProviderUnavailableError } = await import("../src/modules/ai/providers/ollama.provider.js");
+    const provider = new OllamaProvider();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED"));
+
+    try {
+      await expect(provider.generateEmbeddings("test text")).rejects.toThrow(AiProviderUnavailableError);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -158,7 +266,7 @@ describe("OllamaProvider Live Runtime & Resilience Tests", () => {
     }
   });
 
-  it("should report degraded when Ollama tags endpoint fails", async () => {
+  it("should report degraded with provider='ollama' (NOT 'local-fallback') when Ollama is unreachable", async () => {
     const { OllamaProvider } = await import("../src/modules/ai/providers/ollama.provider.js");
     const provider = new OllamaProvider();
 
@@ -169,10 +277,27 @@ describe("OllamaProvider Live Runtime & Resilience Tests", () => {
       const health = await provider.checkHealth();
       expect(health.status).toBe("degraded");
       expect(health.reachable).toBe(false);
-      expect(health.provider).toBe("local-fallback");
+      expect(health.provider).toBe("ollama");
+      expect(health.provider).not.toBe("local-fallback");
+      expect(health.model).toBe("qwen2.5:1.5b");
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
-});
 
+  it("should only use LocalAiProvider when AI_PROVIDER=local is explicitly configured", async () => {
+    const originalEnv = process.env.AI_PROVIDER;
+    process.env.AI_PROVIDER = "local";
+
+    try {
+      const { LocalAiProvider } = await import("../src/modules/ai/providers/local-ai.provider.js");
+      const provider = new LocalAiProvider();
+
+      const res = await provider.chat("What is my leave balance?");
+      expect(res).toBeDefined();
+      expect(res.model).toBe("local-heuristic-v1");
+    } finally {
+      process.env.AI_PROVIDER = originalEnv;
+    }
+  });
+});

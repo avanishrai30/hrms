@@ -38,7 +38,18 @@ import { AiToolRegistryService } from "./tools/ai-tool-registry.service.js";
     OllamaProvider,
     {
       provide: AI_PROVIDER,
-      useClass: OllamaProvider
+      useFactory: () => {
+        const selected = (process.env.AI_PROVIDER || "ollama").toLowerCase();
+        switch (selected) {
+          case "gemini":
+            return new GeminiProvider();
+          case "local":
+            return new LocalAiProvider();
+          case "ollama":
+          default:
+            return new OllamaProvider();
+        }
+      }
     }
   ],
   exports: [
