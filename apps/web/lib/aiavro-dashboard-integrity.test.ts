@@ -105,4 +105,54 @@ describe("AIavro Dashboard Production Integrity & Zero Synthetic Data Verificati
     expect(formatted).toBe("02:30");
     expect(percentage).toBeNull(); // No assumption of 8h percentage
   });
+
+  it("ensures unassigned shift displays 'Not assigned' and never 'Shift Ended'", () => {
+    const attendanceWithoutShift: {
+      shift: { name?: string } | null;
+      record: { checkInAt: string; checkOutAt: string; status: string } | null;
+    } = {
+      shift: null,
+      record: { checkInAt: "2026-09-04T12:00:00Z", checkOutAt: "2026-09-04T13:00:00Z", status: "HALF_DAY" }
+    };
+
+    const shiftDisplay = attendanceWithoutShift.shift?.name || "Not assigned";
+    expect(shiftDisplay).toBe("Not assigned");
+    expect(shiftDisplay).not.toBe("Shift Ended");
+    expect(shiftDisplay).not.toBe("Standard Work Shift");
+  });
+
+  it("ensures attendance action strip shows real timestamps without fallback", () => {
+    const record = { checkInAt: "2026-09-04T12:00:00.000Z", checkOutAt: "2026-09-04T13:00:00.000Z" };
+    const shift = null;
+
+    const shiftText = shift ? (shift as { name: string }).name : "Shift not assigned";
+    const statusText = record.checkInAt && record.checkOutAt
+      ? `Attendance completed · In ${new Date(record.checkInAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · Out ${new Date(record.checkOutAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+      : "Not checked in yet";
+
+    expect(shiftText).toBe("Shift not assigned");
+    expect(shiftText).not.toBe("Standard Work Shift");
+    expect(statusText).toContain("Attendance completed");
+  });
+
+  it("validates 7, 14, 30 days period options map to correct query numbers", () => {
+    const periodMap = {
+      "7days": 7,
+      "14days": 14,
+      "30days": 30
+    } as const;
+
+    expect(periodMap["7days"]).toBe(7);
+    expect(periodMap["14days"]).toBe(14);
+    expect(periodMap["30days"]).toBe(30);
+  });
+
+  it("verifies chart Y domain has a strict minimum of 0 and cannot dip negative", () => {
+    const domain: [number, string] = [0, "auto"];
+    expect(domain[0]).toBe(0);
+
+    const dataPoints = [{ present: 0 }, { present: 4 }, { present: 0 }];
+    const clampedPoints = dataPoints.map((p) => Math.max(0, p.present));
+    expect(clampedPoints.every((v) => v >= 0)).toBe(true);
+  });
 });

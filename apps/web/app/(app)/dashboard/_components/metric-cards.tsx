@@ -14,7 +14,6 @@ import { useSessionStore } from "../../../../lib/session-store";
 import {
   formatLeaveDaysMetric,
   formatPendingRequestsMetric,
-  formatShiftName,
   getPendingRequestsBadge
 } from "../../../../lib/semantic-state";
 
@@ -43,7 +42,6 @@ export function MetricCards() {
     : null;
 
   const employeeCount = employeeCountQuery.data ?? null;
-  const shiftLabel = formatShiftName(attendance?.shift, { isSuccess: attendanceQuery.isSuccess });
   const leaveMetric = formatLeaveDaysMetric(totalLeaveDays, {
     isLoading: leaveBalancesQuery.isLoading,
     isSuccess: leaveBalancesQuery.isSuccess
@@ -80,7 +78,7 @@ export function MetricCards() {
               Active
             </Badge>
           </div>
-          <p className="text-muted-foreground text-xs">VC Organics Headcount</p>
+          <p className="text-muted-foreground text-xs">Active employees</p>
         </CardContent>
       </Card>
 
@@ -99,21 +97,27 @@ export function MetricCards() {
             <div className="font-medium text-3xl leading-none tracking-tight truncate">
               {attendanceQuery.isLoading
                 ? "—"
-                : attendanceRecord?.checkInAt && attendanceRecord?.checkOutAt
-                ? "Shift Ended"
+                : attendance?.shift?.name
+                ? attendance.shift.name
+                : "Not assigned"}
+            </div>
+            <Badge variant={canPunchOut ? "default" : "secondary"}>
+              {attendanceRecord?.checkInAt && attendanceRecord?.checkOutAt
+                ? "Checked Out"
                 : canPunchOut
                 ? "On Duty"
                 : canPunchIn
                 ? "Ready"
-                : attendanceRecord?.status
-                ? attendanceRecord.status.replace(/_/g, " ")
-                : "—"}
-            </div>
-            <Badge variant={canPunchOut ? "default" : "secondary"}>
-              {canPunchOut ? "Active" : "Shift"}
+                : "Shift"}
             </Badge>
           </div>
-          <p className="text-muted-foreground text-xs truncate">{shiftLabel}</p>
+          <p className="text-muted-foreground text-xs truncate">
+            {attendance?.shift?.startTime && attendance?.shift?.endTime
+              ? `${attendance.shift.startTime} – ${attendance.shift.endTime}`
+              : attendanceRecord?.checkInAt
+              ? `Attendance logged · In at ${new Date(attendanceRecord.checkInAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+              : "No shift assigned"}
+          </p>
         </CardContent>
       </Card>
 

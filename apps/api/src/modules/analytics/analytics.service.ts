@@ -58,8 +58,10 @@ export class AnalyticsService {
     return this.analyticsEngine.calculateWorkforceAnalytics(tenantId);
   }
 
-  async getAttendanceAnalytics(tenantId: string) {
-    return this.analyticsEngine.calculateAttendanceAnalytics(tenantId);
+  async getAttendanceAnalytics(tenantId: string, options?: { days?: number }) {
+    return options
+      ? this.analyticsEngine.calculateAttendanceAnalytics(tenantId, options)
+      : this.analyticsEngine.calculateAttendanceAnalytics(tenantId);
   }
 
   async getLeaveAnalytics(tenantId: string) {

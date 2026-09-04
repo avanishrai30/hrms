@@ -210,3 +210,31 @@ export function useEmployeeCount(enabled: boolean) {
     staleTime: 120000
   });
 }
+
+export interface DailyTrendItem {
+  date: string;
+  present: number;
+  absent: number;
+  late: number;
+  halfDay: number;
+  onLeave: number;
+}
+
+export interface AttendanceAnalyticsResponse {
+  dailyTrends?: DailyTrendItem[];
+}
+
+export function useAttendanceAnalytics(days: number = 14, enabled: boolean = true) {
+  return useQuery({
+    queryKey: [...dashboardKeys.all, "workforce-activity", days] as const,
+    queryFn: async () => {
+      const res = await apiRequest<AttendanceAnalyticsResponse>(`/analytics/attendance?days=${days}`);
+      return res;
+    },
+    enabled,
+    retry: 1,
+    staleTime: 45000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true
+  });
+}

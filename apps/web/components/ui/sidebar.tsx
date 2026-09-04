@@ -91,6 +91,13 @@ export function SidebarProvider({
   return (
     <SidebarContext.Provider value={contextValue}>
       <div
+        style={
+          {
+            "--sidebar-width": "17rem",
+            "--sidebar-width-icon": "3.5rem",
+            ...props.style
+          } as React.CSSProperties
+        }
         className={cn(
           "group/sidebar-wrapper flex min-h-svh w-full bg-background has-[[data-variant=inset]]:bg-sidebar",
           className
@@ -140,17 +147,35 @@ export const Sidebar = React.forwardRef<
   return (
     <div
       ref={ref}
+      className="group peer hidden lg:block text-sidebar-foreground"
       data-state={state}
       data-collapsible={state === "collapsed" ? collapsible : ""}
       data-variant={variant}
-      className={cn(
-        "relative hidden lg:flex h-svh flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-linear shrink-0",
-        state === "expanded" ? "w-[17rem]" : "w-[3.5rem]",
-        className
-      )}
-      {...props}
     >
-      {children}
+      {/* This handles the sidebar gap on desktop layout */}
+      <div
+        data-sidebar="gap"
+        className={cn(
+          "duration-200 relative h-svh bg-transparent transition-[width] ease-linear shrink-0",
+          state === "expanded" ? "w-[17rem]" : "w-[3.5rem]"
+        )}
+      />
+      <div
+        data-sidebar="container"
+        className={cn(
+          "duration-200 fixed inset-y-0 left-0 z-30 hidden h-svh transition-[width] ease-linear lg:flex flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+          state === "expanded" ? "w-[17rem]" : "w-[3.5rem]",
+          className
+        )}
+        {...props}
+      >
+        <div
+          data-sidebar="inner"
+          className="flex h-full w-full flex-col bg-sidebar"
+        >
+          {children}
+        </div>
+      </div>
     </div>
   );
 });
@@ -158,7 +183,12 @@ Sidebar.displayName = "Sidebar";
 
 export const SidebarHeader = React.forwardRef<HTMLDivElement, React.ComponentProps<"div">>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("flex flex-col gap-2 p-3 border-b border-sidebar-border/60", className)} {...props} />
+    <div
+      ref={ref}
+      data-sidebar="header"
+      className={cn("flex flex-col gap-2 p-3 border-b border-sidebar-border/60 shrink-0", className)}
+      {...props}
+    />
   )
 );
 SidebarHeader.displayName = "SidebarHeader";
@@ -167,8 +197,9 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.ComponentPr
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
+      data-sidebar="content"
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-2 group-data-[collapsible=icon]/sidebar-wrapper:overflow-hidden",
+        "flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden overscroll-contain p-2 group-data-[collapsible=icon]/sidebar-wrapper:overflow-hidden",
         className
       )}
       {...props}
@@ -179,7 +210,12 @@ SidebarContent.displayName = "SidebarContent";
 
 export const SidebarFooter = React.forwardRef<HTMLDivElement, React.ComponentProps<"div">>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("flex flex-col gap-2 p-3 border-t border-sidebar-border/60 mt-auto", className)} {...props} />
+    <div
+      ref={ref}
+      data-sidebar="footer"
+      className={cn("flex flex-col gap-2 p-3 border-t border-sidebar-border/60 mt-auto shrink-0", className)}
+      {...props}
+    />
   )
 );
 SidebarFooter.displayName = "SidebarFooter";

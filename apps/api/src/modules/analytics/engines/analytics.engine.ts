@@ -662,9 +662,12 @@ export class AnalyticsEngine {
   /**
    * 3. Calculate Attendance Analytics
    */
-  async calculateAttendanceAnalytics(tenantId: string): Promise<AttendanceAnalyticsResult> {
+  async calculateAttendanceAnalytics(tenantId: string, options?: { days?: number }): Promise<AttendanceAnalyticsResult> {
     const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
+    const trendDays = options?.days ? Math.min(Math.max(Number(options.days), 1), 90) : 7;
+    const historyDays = Math.max(trendDays, 30);
+    const historyAgo = new Date(now.getTime() - historyDays * 86400000);
+    const thirtyDaysAgo = historyAgo;
 
     const [
       attendances,
@@ -676,7 +679,7 @@ export class AnalyticsEngine {
       suspiciousActivities
     ] = await Promise.all([
       this.prisma.attendance.findMany({
-        where: { tenantId, date: { gte: thirtyDaysAgo } },
+        where: { tenantId, date: { gte: historyAgo } },
         orderBy: { date: "asc" }
       }),
       this.prisma.attendanceEvent.findMany({
@@ -702,9 +705,9 @@ export class AnalyticsEngine {
       })
     ]);
 
-    // Daily Trends (last 7 days)
+    // Daily Trends (last trendDays days)
     const dailyMap = new Map<string, { present: number; absent: number; late: number; halfDay: number; onLeave: number }>();
-    for (let i = 6; i >= 0; i--) {
+    for (let i = trendDays - 1; i >= 0; i--) {
       const d = new Date(now.getTime() - i * 86400000);
       const key = d.toISOString().split("T")[0]!;
       dailyMap.set(key, { present: 0, absent: 0, late: 0, halfDay: 0, onLeave: 0 });

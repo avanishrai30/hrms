@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "../api";
+import { dashboardKeys } from "./use-dashboard-queries";
 
 // ----------------- Profile Types & Hooks -----------------
 
@@ -169,6 +170,7 @@ export function usePunchMutation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: attendanceKeys.all });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     }
   });
 }

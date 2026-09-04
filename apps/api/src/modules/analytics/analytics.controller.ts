@@ -51,9 +51,15 @@ export class AnalyticsController {
 
   @Get("analytics/attendance")
   @RequirePermissions("analytics.view")
-  async getAttendanceAnalytics(@Req() req: AuthenticatedRequest) {
+  async getAttendanceAnalytics(
+    @Req() req: AuthenticatedRequest,
+    @Query("days") days?: string
+  ) {
     const tenant = requireTenantContext(req);
-    return this.analyticsService.getAttendanceAnalytics(tenant.tenantId);
+    const parsedDays = days ? parseInt(days, 10) : undefined;
+    return this.analyticsService.getAttendanceAnalytics(tenant.tenantId, {
+      days: Number.isFinite(parsedDays) ? parsedDays : undefined
+    });
   }
 
   @Get(["analytics/leave", "analytics/leaves"])
