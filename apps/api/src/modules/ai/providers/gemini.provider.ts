@@ -11,6 +11,16 @@ export class GeminiProvider implements AIProvider {
     this.fallback = new LocalAiProvider();
   }
 
+  async checkHealth() {
+    return {
+      status: process.env.GEMINI_API_KEY ? ("ok" as const) : ("degraded" as const),
+      provider: "gemini",
+      model: "gemini-1.5-flash",
+      reachable: Boolean(process.env.GEMINI_API_KEY),
+      latencyMs: 1
+    };
+  }
+
   async chat(prompt: string, options?: AiChatOptions): Promise<AiChatResult> {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {

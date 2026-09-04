@@ -12,7 +12,7 @@ import {
 import { type AuthenticatedRequest } from "../common/request-context.js";
 import { requireTenantContext } from "../common/tenant-context.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
-import { RequirePermissions } from "../rbac/permissions.decorator.js";
+import { Public, RequirePermissions } from "../rbac/permissions.decorator.js";
 import {
   AiDocumentExtractSchema,
   type AiDocumentExtractDto,
@@ -50,6 +50,12 @@ export class AiController {
     private readonly insightsEngine: InsightsEngine,
     private readonly memoryService: ConversationMemoryService
   ) {}
+
+  @Public()
+  @Get("health")
+  async getHealth() {
+    return this.aiService.getHealth();
+  }
 
   @Post("chat")
   @RequirePermissions("ai.chat")

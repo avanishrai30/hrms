@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, prefer-const */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it } from "vitest";
 
 describe("V1.1B HRMS Product Depth & Workflow Completion Tests", () => {

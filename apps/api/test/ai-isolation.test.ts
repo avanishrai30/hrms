@@ -87,3 +87,92 @@ describe("AI Multi-Tenant Isolation Tests (Task 19)", () => {
     expect(resultsB.length).toBe(0);
   });
 });
+
+describe("OllamaProvider Live Runtime & Resilience Tests", () => {
+  it("should parse Ollama chat responses correctly", async () => {
+    const { OllamaProvider } = await import("../src/modules/ai/providers/ollama.provider.js");
+    const provider = new OllamaProvider();
+
+    // Mock global fetch
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        message: { content: "Your remaining leave balance is 14 days." },
+        prompt_eval_count: 12,
+        eval_count: 18,
+        model: "qwen2.5:1.5b"
+      })
+    } as any);
+
+    try {
+      const res = await provider.chat("What is my leave balance?", {
+        systemPrompt: "You are an HR Assistant."
+      });
+
+      expect(res.content).toBe("Your remaining leave balance is 14 days.");
+      expect(res.model).toBe("qwen2.5:1.5b");
+      expect(res.tokensUsed).toBe(30);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should fallback cleanly to LocalAiProvider when Ollama is unreachable", async () => {
+    const { OllamaProvider } = await import("../src/modules/ai/providers/ollama.provider.js");
+    const provider = new OllamaProvider();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED 127.0.0.1:11434"));
+
+    try {
+      const res = await provider.chat("What is my leave balance?");
+      expect(res).toBeDefined();
+      expect(res.content).toContain("leave balance is fully up to date");
+      expect(res.model).toBe("local-heuristic-v1");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should report healthy when Ollama tags endpoint returns the model", async () => {
+    const { OllamaProvider } = await import("../src/modules/ai/providers/ollama.provider.js");
+    const provider = new OllamaProvider();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        models: [{ name: "qwen2.5:1.5b" }]
+      })
+    } as any);
+
+    try {
+      const health = await provider.checkHealth();
+      expect(health.status).toBe("ok");
+      expect(health.provider).toBe("ollama");
+      expect(health.reachable).toBe(true);
+      expect(health.model).toBe("qwen2.5:1.5b");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should report degraded when Ollama tags endpoint fails", async () => {
+    const { OllamaProvider } = await import("../src/modules/ai/providers/ollama.provider.js");
+    const provider = new OllamaProvider();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Connection timeout"));
+
+    try {
+      const health = await provider.checkHealth();
+      expect(health.status).toBe("degraded");
+      expect(health.reachable).toBe(false);
+      expect(health.provider).toBe("local-fallback");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+

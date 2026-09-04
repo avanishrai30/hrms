@@ -3,6 +3,7 @@ import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { QueueService } from "../queue/queue.service.js";
 import { Public } from "../rbac/permissions.decorator.js";
+import { OllamaProvider } from "../ai/providers/ollama.provider.js";
 
 @Public()
 @ApiTags("health")
@@ -10,7 +11,8 @@ import { Public } from "../rbac/permissions.decorator.js";
 export class HealthController {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly queueService: QueueService
+    private readonly queueService: QueueService,
+    private readonly ollamaProvider: OllamaProvider
   ) {}
 
   @Public()
@@ -20,6 +22,18 @@ export class HealthController {
   getLiveness() {
     return {
       status: "ok" as const,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  @Public()
+  @Get("ai")
+  @ApiOperation({ summary: "AI Gateway and model runtime health check" })
+  @ApiResponse({ status: 200, description: "AI runtime health status" })
+  async getAiHealth() {
+    const health = await this.ollamaProvider.checkHealth();
+    return {
+      ...health,
       timestamp: new Date().toISOString()
     };
   }

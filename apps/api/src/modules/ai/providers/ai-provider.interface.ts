@@ -14,12 +14,21 @@ export interface AiChatResult {
   structuredJson?: Record<string, unknown>;
 }
 
+export interface AiHealthStatus {
+  status: "ok" | "degraded";
+  provider: string;
+  model: string;
+  reachable: boolean;
+  latencyMs: number;
+}
+
 export interface AIProvider {
   chat(prompt: string, options?: AiChatOptions): Promise<AiChatResult>;
   summarize(text: string, maxWords?: number): Promise<string>;
   classify(text: string, candidateLabels: string[]): Promise<{ label: string; confidence: number }>;
   extract<T = Record<string, unknown>>(text: string, schemaDescription: string): Promise<T>;
   generateEmbeddings(text: string): Promise<number[]>;
+  checkHealth?(): Promise<AiHealthStatus>;
 }
 
 export const AI_PROVIDER = "AI_PROVIDER";

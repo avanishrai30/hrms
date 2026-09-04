@@ -61,8 +61,21 @@ services:
       PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-admin@example.com}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
     ports:
       - "127.0.0.1:4100:4000"
+    networks:
+      - hrms-net
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: hrms-ollama
+    restart: unless-stopped
+    volumes:
+      - hrms_ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
     networks:
       - hrms-net
 
@@ -94,3 +107,5 @@ volumes:
     name: vc-hrms-postgres-data
   hrms_redis_data:
     name: vc-hrms-redis-data
+  hrms_ollama_data:
+    name: vc-hrms-ollama-data

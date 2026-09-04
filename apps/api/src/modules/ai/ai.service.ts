@@ -497,4 +497,22 @@ export class AiService {
       generatedAt: new Date().toISOString()
     };
   }
+
+  async getHealth() {
+    if (typeof this.aiProvider.checkHealth === "function") {
+      const health = await this.aiProvider.checkHealth();
+      return {
+        ...health,
+        timestamp: new Date().toISOString()
+      };
+    }
+    return {
+      status: "ok" as const,
+      provider: "ai-provider",
+      model: "active",
+      reachable: true,
+      latencyMs: 0,
+      timestamp: new Date().toISOString()
+    };
+  }
 }

@@ -46,8 +46,19 @@ export default function AiCopilotPage() {
   const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [confirmingTokens, setConfirmingTokens] = useState<Record<string, "pending" | "confirmed" | "failed">>({});
+  const [runtimeStatus, setRuntimeStatus] = useState<{
+    status: "ok" | "degraded";
+    provider?: string;
+    model?: string;
+  } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    apiRequest<{ status: "ok" | "degraded"; provider: string; model: string }>("/ai/health")
+      .then((res) => setRuntimeStatus(res))
+      .catch(() => setRuntimeStatus({ status: "degraded", provider: "local-fallback", model: "local-heuristic-v1" }));
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -170,14 +181,16 @@ export default function AiCopilotPage() {
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">AIavro Copilot</h1>
-              <Badge tone="success">Active</Badge>
+              <Badge tone={runtimeStatus?.status === "ok" ? "success" : "neutral"}>
+                {runtimeStatus?.status === "ok" ? (runtimeStatus.model || "Active") : "Fallback"}
+              </Badge>
             </div>
             <p className="text-[11px] text-neutral-500">Tenant-isolated RAG & Permission-Gated Actions</p>
           </div>
         </div>
 
         <div className="flex items-center space-x-2 text-xs text-neutral-500">
-          <span className="hidden sm:inline">Model: Server AI Gateway</span>
+          <span className="hidden sm:inline">Runtime: {runtimeStatus?.provider || "Private Gateway"}</span>
           <Link href={"/ai/history" as Route}>
             <Button variant="ghost">📜 History</Button>
           </Link>

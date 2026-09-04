@@ -7,6 +7,7 @@ import { PredictionEngine } from "./engines/prediction.engine.js";
 import { InsightsEngine } from "./engines/insights.engine.js";
 import { ConversationMemoryService } from "./memory/conversation-memory.service.js";
 import { AI_PROVIDER } from "./providers/ai-provider.interface.js";
+import { OllamaProvider } from "./providers/ollama.provider.js";
 import { GeminiProvider } from "./providers/gemini.provider.js";
 import { OpenAiProvider } from "./providers/openai.provider.js";
 import { LocalAiProvider } from "./providers/local-ai.provider.js";
@@ -34,9 +35,10 @@ import { AiToolRegistryService } from "./tools/ai-tool-registry.service.js";
     LocalAiProvider,
     GeminiProvider,
     OpenAiProvider,
+    OllamaProvider,
     {
       provide: AI_PROVIDER,
-      useClass: GeminiProvider
+      useClass: OllamaProvider
     }
   ],
   exports: [
@@ -48,7 +50,9 @@ import { AiToolRegistryService } from "./tools/ai-tool-registry.service.js";
     KnowledgeBaseService,
     DocumentAiService,
     NaturalLanguageReportsService,
-    AiSecurityService
+    AiSecurityService,
+    OllamaProvider,
+    AI_PROVIDER
   ]
 })
 export class AiModule {}

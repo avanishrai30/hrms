@@ -3,6 +3,16 @@ import type { AiChatOptions, AiChatResult, AIProvider } from "./ai-provider.inte
 
 @Injectable()
 export class LocalAiProvider implements AIProvider {
+  async checkHealth() {
+    return {
+      status: "ok" as const,
+      provider: "local-heuristic-v1",
+      model: "local-heuristic-v1",
+      reachable: true,
+      latencyMs: 1
+    };
+  }
+
   async chat(prompt: string, options?: AiChatOptions): Promise<AiChatResult> {
     const text = prompt.toLowerCase();
     let responseText = "I am your VC-WMS HR Intelligence Assistant. How can I help you today with attendance, leaves, payroll, or company policies?";
