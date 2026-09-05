@@ -77,6 +77,24 @@ describe("attendance validation schemas", () => {
       requestedChange: { date: "2026-08-31" }
     });
     expect(missingReason.success).toBe(false);
+
+    const invalidTimeline = createCorrectionSchema.safeParse({
+      reason: "Forgot to punch while leaving the office",
+      requestedChange: {
+        date: "2026-08-31",
+        checkInAt: "2026-08-31T18:00:00.000Z",
+        checkOutAt: "2026-08-31T09:00:00.000Z"
+      }
+    });
+    expect(invalidTimeline.success).toBe(false);
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const futureDate = createCorrectionSchema.safeParse({
+      reason: "Trying to regularize a future attendance day",
+      requestedChange: { date: tomorrow.toISOString().slice(0, 10) }
+    });
+    expect(futureDate.success).toBe(false);
   });
 
   it("validates correction review payload", () => {

@@ -209,17 +209,15 @@ export class OllamaProvider implements AIProvider {
           return data.embedding;
         }
       }
-    } catch {
-      // Graceful fallback to deterministic semantic vector
+      const body = await res.text().catch(() => "");
+      throw new AiProviderUnavailableError("ollama", `Embedding HTTP ${res.status}: ${body || "empty embedding response"}`);
+    } catch (err: unknown) {
+      if (err instanceof AiProviderUnavailableError) {
+        throw err;
+      }
+      const reason = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Ollama embedding call failed: ${reason}`);
+      throw new AiProviderUnavailableError("ollama", reason);
     }
-
-    const vector = new Array(32).fill(0);
-    for (let i = 0; i < text.length; i++) {
-      const charCode = text.charCodeAt(i);
-      const index = (charCode * (i + 1)) % 32;
-      vector[index] = Number(((vector[index] ?? 0) + (charCode / 255.0)).toFixed(4));
-    }
-    const mag = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0)) || 1;
-    return vector.map((v) => Number((v / mag).toFixed(4)));
   }
 }

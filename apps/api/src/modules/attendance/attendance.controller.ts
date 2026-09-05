@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -42,14 +43,24 @@ export class AttendanceController {
     private readonly prisma: PrismaService
   ) {}
 
-  private async resolveEmployeeId(tenantId: string, membershipId: string, employeeId?: string): Promise<string> {
-    if (employeeId) return employeeId;
+  private async resolveEmployeeId(tenantId: string, membershipId: string, permissions: readonly string[], employeeId?: string): Promise<string> {
     const membership = await this.prisma.tenantMembership.findFirst({
       where: { id: membershipId, tenantId },
       select: { employeeId: true }
     });
     if (!membership?.employeeId) {
       throw new BadRequestException("No employee profile is linked to your user account.");
+    }
+    if (employeeId && employeeId !== membership.employeeId) {
+      const canUseOverride =
+        permissions.includes("attendance.update") ||
+        permissions.includes("attendance.approve") ||
+        permissions.includes("attendance.read") ||
+        permissions.includes("mss.manage");
+      if (!canUseOverride) {
+        throw new ForbiddenException("You cannot access another employee's attendance from this endpoint.");
+      }
+      return employeeId;
     }
     return membership.employeeId;
   }
@@ -62,7 +73,7 @@ export class AttendanceController {
     @Req() request: AuthenticatedRequest
   ) {
     const tenant = requireTenantContext(request);
-    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, employeeIdQuery);
+    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, tenant.permissions, employeeIdQuery);
     return this.attendanceService.checkIn(tenant.tenantId, employeeId, body, tenant.userId, tenant.membershipId);
   }
 
@@ -74,7 +85,7 @@ export class AttendanceController {
     @Req() request: AuthenticatedRequest
   ) {
     const tenant = requireTenantContext(request);
-    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, employeeIdQuery);
+    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, tenant.permissions, employeeIdQuery);
     return this.attendanceService.checkOut(tenant.tenantId, employeeId, body, tenant.userId, tenant.membershipId);
   }
 
@@ -82,7 +93,7 @@ export class AttendanceController {
   @RequirePermissions("attendance.view")
   async getToday(@Query("employeeId") employeeIdQuery: string | undefined, @Req() request: AuthenticatedRequest) {
     const tenant = requireTenantContext(request);
-    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, employeeIdQuery);
+    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, tenant.permissions, employeeIdQuery);
     return this.attendanceService.getTodayAttendance(tenant.tenantId, employeeId);
   }
 
@@ -94,7 +105,7 @@ export class AttendanceController {
     @Req() request: AuthenticatedRequest
   ) {
     const tenant = requireTenantContext(request);
-    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, employeeIdQuery);
+    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, tenant.permissions, employeeIdQuery);
     return this.attendanceService.getEmployeeHistory(tenant.tenantId, employeeId, query);
   }
 
@@ -102,7 +113,7 @@ export class AttendanceController {
   @RequirePermissions("attendance.view")
   async getTimeline(@Query("employeeId") employeeIdQuery: string | undefined, @Req() request: AuthenticatedRequest) {
     const tenant = requireTenantContext(request);
-    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, employeeIdQuery);
+    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, tenant.permissions, employeeIdQuery);
     return this.attendanceService.getAttendanceTimeline(tenant.tenantId, employeeId);
   }
 
@@ -110,7 +121,7 @@ export class AttendanceController {
   @RequirePermissions("attendance.view")
   async getEmployeeDashboard(@Query("employeeId") employeeIdQuery: string | undefined, @Req() request: AuthenticatedRequest) {
     const tenant = requireTenantContext(request);
-    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, employeeIdQuery);
+    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, tenant.permissions, employeeIdQuery);
     return this.attendanceService.getEmployeeDashboard(tenant.tenantId, employeeId);
   }
 
@@ -125,7 +136,7 @@ export class AttendanceController {
   @RequirePermissions("attendance.view")
   async getManagerDashboard(@Query("managerEmployeeId") managerIdQuery: string | undefined, @Req() request: AuthenticatedRequest) {
     const tenant = requireTenantContext(request);
-    const managerId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, managerIdQuery);
+    const managerId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, tenant.permissions, managerIdQuery);
     return this.attendanceService.getManagerDashboard(tenant.tenantId, managerId);
   }
 
@@ -162,7 +173,7 @@ export class AttendanceController {
     @Req() request: AuthenticatedRequest
   ) {
     const tenant = requireTenantContext(request);
-    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, employeeIdQuery);
+    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, tenant.permissions, employeeIdQuery);
     return this.attendanceService.requestCorrection(tenant.tenantId, employeeId, body, tenant.userId, tenant.membershipId);
   }
 

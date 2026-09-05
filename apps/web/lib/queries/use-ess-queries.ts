@@ -106,6 +106,20 @@ export function useRemoveAvatarMutation() {
 
 export interface AttendanceRecordItem {
   id: string;
+  employee?: {
+    id?: string;
+    fullName?: string;
+    employeeCode?: string;
+    department?: { name?: string } | null;
+    designation?: { name?: string } | null;
+  } | null;
+  shift?: {
+    id?: string;
+    name?: string;
+    startsAtMinute?: number;
+    endsAtMinute?: number;
+    timezone?: string;
+  } | null;
   status: string;
   checkInAt: string | null;
   checkOutAt: string | null;
@@ -115,6 +129,8 @@ export interface AttendanceRecordItem {
   overtimeMinutes?: number;
   notes?: string | null;
   date?: string;
+  accuracyMeters?: number | null;
+  locationVerificationStatus?: string | null;
 }
 
 export interface TodayAttendanceData {
@@ -126,6 +142,9 @@ export interface TodayAttendanceData {
     name?: string;
     startTime?: string;
     endTime?: string;
+    startsAtMinute?: number;
+    endsAtMinute?: number;
+    timezone?: string;
     workHours?: number | null;
   } | null;
   canCheckIn: boolean;
@@ -134,7 +153,9 @@ export interface TodayAttendanceData {
   rules?: {
     allowSelfCheckIn?: boolean;
     requireGeofence?: boolean;
-    requireFace?: boolean;
+    requireFaceVerification?: boolean;
+    allowMultipleSessionsPerDay?: boolean;
+    gracePeriodMinutes?: number;
   };
 }
 
@@ -142,7 +163,8 @@ export const attendanceKeys = {
   all: ["ess-attendance"] as const,
   today: () => [...attendanceKeys.all, "today"] as const,
   history: (startDate?: string, endDate?: string) =>
-    [...attendanceKeys.all, "history", { startDate, endDate }] as const
+    [...attendanceKeys.all, "history", { startDate, endDate }] as const,
+  team: (params?: Record<string, string | undefined>) => [...attendanceKeys.all, "team", params] as const
 };
 
 export function useAttendanceToday(enabled: boolean = true) {
@@ -208,13 +230,21 @@ export function usePunchMutation() {
 
 export interface AttendanceCorrectionItem {
   id: string;
-  attendanceRecordId?: string;
+  attendanceId?: string | null;
   date: string;
-  requestedCheckIn?: string;
-  requestedCheckOut?: string;
+  requestedCheckIn?: string | null;
+  requestedCheckOut?: string | null;
   reason: string;
-  status: "PENDING" | "APPROVED" | "REJECTED";
-  approverComments?: string;
+  requestedChange?: {
+    date?: string;
+    checkInAt?: string;
+    checkOutAt?: string;
+    status?: string;
+    notes?: string;
+  };
+  employee?: { id?: string; fullName?: string; employeeCode?: string } | null;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  reviewNote?: string | null;
   createdAt: string;
 }
 
@@ -223,8 +253,31 @@ export function useAttendanceCorrections(enabled: boolean = true) {
     queryKey: ["ess-attendance", "corrections"] as const,
     queryFn: async () => {
       const res = await apiRequest<AttendanceCorrectionItem[] | { corrections: AttendanceCorrectionItem[] }>("/attendance/corrections");
+      const rows = Array.isArray(res) ? res : res && "corrections" in res && Array.isArray(res.corrections) ? res.corrections : [];
+      return rows.map((row) => ({
+        ...row,
+        date: row.requestedChange?.date ?? row.date ?? row.createdAt,
+        requestedCheckIn: row.requestedChange?.checkInAt ?? row.requestedCheckIn ?? null,
+        requestedCheckOut: row.requestedChange?.checkOutAt ?? row.requestedCheckOut ?? null
+      }));
+    },
+    enabled,
+    staleTime: 30000
+  });
+}
+
+export function useTeamAttendance(params: Record<string, string | undefined>, enabled: boolean = true) {
+  return useQuery({
+    queryKey: attendanceKeys.team(params),
+    queryFn: async () => {
+      const qs = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value) qs.set(key, value);
+      });
+      const queryString = qs.toString() ? `?${qs.toString()}` : "";
+      const res = await apiRequest<AttendanceRecordItem[] | { records: AttendanceRecordItem[] }>(`/attendance${queryString}`);
       if (Array.isArray(res)) return res;
-      if (res && "corrections" in res && Array.isArray(res.corrections)) return res.corrections;
+      if (res && "records" in res && Array.isArray(res.records)) return res.records;
       return [];
     },
     enabled,
@@ -235,10 +288,19 @@ export function useAttendanceCorrections(enabled: boolean = true) {
 export function useSubmitAttendanceCorrection() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { date: string; requestedCheckIn?: string; requestedCheckOut?: string; reason: string; attendanceRecordId?: string }) => {
+    mutationFn: async (data: { date: string; requestedCheckIn?: string; requestedCheckOut?: string; reason: string; attendanceId?: string }) => {
       return apiRequest("/attendance/corrections", {
         method: "POST",
-        body: JSON.stringify(data)
+        body: JSON.stringify({
+          attendanceId: data.attendanceId,
+          reason: data.reason,
+          requestedChange: {
+            date: data.date,
+            checkInAt: data.requestedCheckIn,
+            checkOutAt: data.requestedCheckOut,
+            notes: data.reason
+          }
+        })
       });
     },
     onSuccess: () => {
@@ -251,10 +313,10 @@ export function useSubmitAttendanceCorrection() {
 export function useReviewAttendanceCorrection() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, status, reviewNotes }: { id: string; status: "APPROVED" | "REJECTED"; reviewNotes?: string }) => {
+    mutationFn: async ({ id, status, reviewNote }: { id: string; status: "APPROVED" | "REJECTED"; reviewNote: string }) => {
       return apiRequest(`/attendance/corrections/${id}/review`, {
         method: "PATCH",
-        body: JSON.stringify({ status, reviewNotes })
+        body: JSON.stringify({ status, reviewNote })
       });
     },
     onSuccess: () => {

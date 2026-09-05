@@ -57,7 +57,7 @@ export class AttendanceService {
   ) {
     await this.assertEmployee(tenantId, employeeId);
     const now = new Date();
-    const today = this.getStartOfDay(now);
+    const today = await this.getTenantBusinessDate(tenantId, now);
 
     const rules = await this.getRulesConfig(tenantId);
     const existing = await this.prisma.attendance.findUnique({
@@ -342,7 +342,7 @@ export class AttendanceService {
   ) {
     await this.assertEmployee(tenantId, employeeId);
     const now = new Date();
-    const today = this.getStartOfDay(now);
+    const today = await this.getTenantBusinessDate(tenantId, now);
 
     const existing = await this.prisma.attendance.findUnique({
       where: { tenantId_employeeId_date: { tenantId, employeeId, date: today } }
@@ -362,8 +362,47 @@ export class AttendanceService {
 
     const rules = await this.getRulesConfig(tenantId);
     const shift = existing.shiftId
-      ? await this.prisma.shift.findUnique({ where: { id: existing.shiftId } })
+      ? await this.prisma.shift.findFirst({ where: { id: existing.shiftId, tenantId } })
       : await this.resolveShiftForEmployee(tenantId, employeeId, today);
+
+    let checkoutLocationMetadata: Record<string, unknown> = {};
+    if (input.latitude !== undefined && input.longitude !== undefined) {
+      const accuracy = input.accuracy ?? 0;
+      const verification = await this.locationsService.verifyGps(
+        tenantId,
+        employeeId,
+        {
+          latitude: input.latitude,
+          longitude: input.longitude,
+          accuracy
+        },
+        actorUserId
+      );
+      checkoutLocationMetadata = {
+        status: verification.status,
+        verified: verification.verified,
+        matchedLocationId: verification.matchedLocationId,
+        distanceMeters: verification.distanceMeters,
+        accuracyMeters: accuracy,
+        reason: verification.reason
+      };
+      if (!verification.verified && !input.overrideReason && rules.requireGeofence) {
+        await this.prisma.attendanceException.create({
+          data: {
+            tenantId,
+            employeeId,
+            attendanceId: existing.id,
+            date: today,
+            exceptionType: "LOCATION_GEOFENCE_FAILED",
+            severity: "HIGH",
+            details: { reason: verification.reason, accuracy }
+          }
+        });
+        throw new BadRequestException(`Geofence verification failed: ${verification.reason}`);
+      }
+    } else if (rules.requireGeofence && !input.overrideReason) {
+      throw new BadRequestException("GPS coordinates are required for attendance check-out by tenant policy.");
+    }
 
     const workedMinutes = AttendanceRulesEngine.calculateWorkedMinutes(existing.checkInAt, now);
     let earlyDepartureMinutes = 0;
@@ -405,7 +444,7 @@ export class AttendanceService {
           actorUserId,
           actorMembershipId,
           source: input.source,
-          metadata: { workedMinutes, earlyDepartureMinutes, overtimeMinutes }
+          metadata: this.auditJson({ workedMinutes, earlyDepartureMinutes, overtimeMinutes, checkoutLocation: checkoutLocationMetadata })
         }
       });
 
@@ -665,7 +704,7 @@ export class AttendanceService {
    */
   async getTodayAttendance(tenantId: string, employeeId: string) {
     await this.assertEmployee(tenantId, employeeId);
-    const today = this.getStartOfDay();
+    const today = await this.getTenantBusinessDate(tenantId);
     const record = await this.prisma.attendance.findUnique({
       where: { tenantId_employeeId_date: { tenantId, employeeId, date: today } },
       include: { shift: true }
@@ -998,7 +1037,7 @@ export class AttendanceService {
    */
   async getEmployeeDashboard(tenantId: string, employeeId: string) {
     await this.assertEmployee(tenantId, employeeId);
-    const today = this.getStartOfDay();
+    const today = await this.getTenantBusinessDate(tenantId);
     const startOfMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1, 0, 0, 0, 0));
 
     const [todayRecord, shift, monthRecords, recentEvents] = await Promise.all([
@@ -1044,7 +1083,7 @@ export class AttendanceService {
    * HR Attendance Dashboard
    */
   async getHrDashboard(tenantId: string) {
-    const today = this.getStartOfDay();
+    const today = await this.getTenantBusinessDate(tenantId);
 
     const [totalEmployees, todayAttendances, pendingCorrections, recentEvents] = await Promise.all([
       this.prisma.employee.count({ where: { tenantId, status: "ACTIVE" } }),
@@ -1083,7 +1122,7 @@ export class AttendanceService {
    * Manager Attendance Dashboard (Team Scope)
    */
   async getManagerDashboard(tenantId: string, managerEmployeeId: string) {
-    const today = this.getStartOfDay();
+    const today = await this.getTenantBusinessDate(tenantId);
     const teamMembers = await this.prisma.employee.findMany({
       where: { tenantId, managerEmployeeId, status: "ACTIVE" },
       select: { id: true, fullName: true, department: { select: { name: true } } }
@@ -1196,8 +1235,32 @@ export class AttendanceService {
       return assignment.shift;
     }
 
-    // Fallback: first active shift in tenant or null
-    return this.prisma.shift.findFirst({ where: { tenantId } });
+    return null;
+  }
+
+  private async getTenantBusinessDate(tenantId: string, date: Date = new Date()): Promise<Date> {
+    const settings = await this.prisma.tenantSettings.findUnique({
+      where: { tenantId },
+      select: { attendanceTimezone: true, timezone: true }
+    }).catch(() => null);
+    const timezone = settings?.attendanceTimezone || settings?.timezone || "UTC";
+    try {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).formatToParts(date);
+      const year = Number(parts.find((part) => part.type === "year")?.value);
+      const month = Number(parts.find((part) => part.type === "month")?.value);
+      const day = Number(parts.find((part) => part.type === "day")?.value);
+      if (year && month && day) {
+        return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+      }
+    } catch {
+      return this.getStartOfDay(date);
+    }
+    return this.getStartOfDay(date);
   }
 
   private auditJson(value: unknown): Prisma.InputJsonValue {

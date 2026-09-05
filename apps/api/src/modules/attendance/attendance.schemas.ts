@@ -79,6 +79,25 @@ export const createCorrectionSchema = z.object({
     notes: z.string().optional()
   }),
   attachmentsMetadata: z.array(z.record(z.unknown())).default([])
+}).superRefine((value, ctx) => {
+  const requestedDate = new Date(`${value.requestedChange.date}T00:00:00`);
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  if (Number.isNaN(requestedDate.getTime())) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["requestedChange", "date"], message: "Correction date is invalid." });
+  } else if (requestedDate.getTime() > today.getTime()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["requestedChange", "date"], message: "Future attendance cannot be regularized." });
+  }
+
+  if (value.requestedChange.checkInAt && value.requestedChange.checkOutAt) {
+    const checkInAt = new Date(value.requestedChange.checkInAt);
+    const checkOutAt = new Date(value.requestedChange.checkOutAt);
+    if (Number.isNaN(checkInAt.getTime()) || Number.isNaN(checkOutAt.getTime())) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["requestedChange"], message: "Requested check-in/check-out time is invalid." });
+    } else if (checkOutAt.getTime() <= checkInAt.getTime()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["requestedChange", "checkOutAt"], message: "Requested check-out must be after check-in." });
+    }
+  }
 });
 
 export const reviewCorrectionSchema = z.object({
