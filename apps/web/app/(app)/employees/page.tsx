@@ -1,179 +1,175 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import {
-  Search,
-  Plus,
-  Users,
-  ShieldCheck,
   AlertCircle,
+  ArrowRight,
+  BriefcaseBusiness,
+  Building2,
   ChevronLeft,
   ChevronRight,
-  ArrowRight,
-  CircleUser
+  CircleUser,
+  Download,
+  Filter,
+  MapPin,
+  Plus,
+  Search,
+  ShieldCheck,
+  UserRoundCheck,
+  Users,
+  Wrench
 } from "lucide-react";
 import {
-  useEmployees,
+  formatEmploymentStatus,
+  formatEmploymentType,
+  useDebounce,
   useDepartments,
   useDesignations,
-  useCreateEmployeeMutation,
-  useDebounce,
-  formatEmploymentType,
-  formatEmploymentStatus
+  useEmployeesPage,
+  useLocations
 } from "../../../lib/queries/use-people-queries";
-import { usePermissionGate, useHasPermission } from "../../../lib/session-store";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../../components/ui/card";
+import { useHasPermission, usePermissionGate } from "../../../lib/session-store";
+import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell
-} from "../../../components/ui/table";
-import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter
-} from "../../../components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
 
 const PAGE_SIZE = 20;
 
 const STATUS_FILTERS = [
-  { value: "ALL", label: "All Statuses" },
-  { value: "ACTIVE", label: "Active" },
-  { value: "PROBATION", label: "Probation" },
-  { value: "ON_LEAVE", label: "On Leave" },
-  { value: "NOTICE_PERIOD", label: "Notice Period" },
-  { value: "INACTIVE", label: "Inactive" },
-  { value: "DRAFT", label: "Draft" },
-  { value: "INVITED", label: "Invited" }
-];
+  ["ALL", "All statuses"],
+  ["DRAFT", "Draft"],
+  ["INVITED", "Invited"],
+  ["ACTIVE", "Active"],
+  ["PROBATION", "Probation"],
+  ["ON_LEAVE", "On Leave"],
+  ["NOTICE_PERIOD", "Notice Period"],
+  ["INACTIVE", "Inactive"],
+  ["ARCHIVED", "Archived"]
+] as const;
+
+const EMPLOYMENT_FILTERS = [
+  ["ALL", "All types"],
+  ["FULL_TIME", "Full Time"],
+  ["PART_TIME", "Part Time"],
+  ["CONTRACT", "Contract"],
+  ["TEMPORARY", "Temporary"]
+] as const;
+
+function statusVariant(status?: string) {
+  if (status === "ACTIVE") return "success";
+  if (status === "PROBATION" || status === "INVITED" || status === "NOTICE_PERIOD") return "warning";
+  if (status === "INACTIVE" || status === "ARCHIVED") return "secondary";
+  return "outline";
+}
+
+function textOrFallback(value: string | null | undefined, fallback = "Not assigned") {
+  return value && value.trim() ? value : fallback;
+}
+
+function relationName(value: unknown, fallback = "Not assigned") {
+  if (!value) return fallback;
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && "name" in value && typeof value.name === "string") return value.name;
+  return fallback;
+}
+
+function currentLocation(employee: { location?: { name?: string } | null | undefined; locationAssignments?: Array<{ location?: { name?: string } | null | undefined }> | undefined }) {
+  return employee.location?.name ?? employee.locationAssignments?.find((assignment) => assignment.location)?.location?.name ?? null;
+}
+
+function currentRole(employee: { designation?: unknown; memberships?: Array<{ roles?: Array<{ role?: { name?: string; code?: string } | undefined }> | undefined }> | undefined }) {
+  const designation = relationName(employee.designation, "");
+  const role = employee.memberships?.flatMap((membership) => membership.roles ?? []).find((assignment) => assignment.role)?.role;
+  return designation || role?.name || role?.code || null;
+}
+
+function MetricCard({
+  label,
+  value,
+  detail,
+  icon: Icon
+}: {
+  label: string;
+  value: string | number;
+  detail: string;
+  icon: React.ComponentType<{ className?: string }>;
+}) {
+  return (
+    <Card className="border-border shadow-xs">
+      <CardContent className="flex items-center justify-between gap-3 p-4">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{value}</p>
+          <p className="mt-1 truncate text-[11px] text-muted-foreground">{detail}</p>
+        </div>
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground">
+          <Icon className="size-4" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function EmployeesListPage() {
   const gate = usePermissionGate(["employees.read"]);
   const canCreate = useHasPermission("employees.create");
+  const canExport = useHasPermission("employees.export");
 
   const [search, setSearch] = useState("");
-  const debouncedSearch = useDebounce(search, 300);
+  const [page, setPage] = useState(1);
   const [departmentId, setDepartmentId] = useState("ALL");
+  const [designationId, setDesignationId] = useState("ALL");
+  const [locationId, setLocationId] = useState("ALL");
   const [status, setStatus] = useState("ALL");
-  const [page, setPage] = useState(0);
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [employmentType, setEmploymentType] = useState("ALL");
+  const debouncedSearch = useDebounce(search, 300);
 
-  // New Employee Form state - deliberate choices without synthetic defaults
-  const [employeeCode, setEmployeeCode] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [formDeptId, setFormDeptId] = useState("");
-  const [formDesigId, setFormDesigId] = useState("");
-  const [joiningDate, setJoiningDate] = useState("");
-  const [employmentType, setEmploymentType] = useState<"" | "FULL_TIME" | "PART_TIME" | "CONTRACT" | "TEMPORARY">("");
-
-  const { data: departments = [] } = useDepartments(gate.isAuthorized);
-  const { data: designations = [] } = useDesignations(gate.isAuthorized);
-  const { data: allEmployees = [], isLoading, isError, refetch } = useEmployees(
-    {
+  const filters = useMemo(
+    () => ({
       q: debouncedSearch.trim() || undefined,
-      departmentId: departmentId !== "ALL" ? departmentId : undefined,
-      status: status !== "ALL" ? status : undefined
-    },
-    gate.isAuthorized
+      departmentId,
+      designationId,
+      locationId,
+      status,
+      employmentType,
+      page,
+      limit: PAGE_SIZE,
+      archived: status === "ARCHIVED"
+    }),
+    [debouncedSearch, departmentId, designationId, employmentType, locationId, page, status]
   );
 
-  const createMutation = useCreateEmployeeMutation();
+  const { data, isLoading, isError, refetch } = useEmployeesPage(filters, gate.isAuthorized);
+  const { data: departments = [] } = useDepartments(gate.isAuthorized);
+  const { data: designations = [] } = useDesignations(gate.isAuthorized);
+  const { data: locations = [] } = useLocations({}, gate.isAuthorized);
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearch(e.target.value);
-    setPage(0);
+  const employees = data?.employees ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
+  const start = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const end = Math.min(page * PAGE_SIZE, total);
+
+  const resetToFirst = (setter: (value: string) => void) => (value: string) => {
+    setter(value);
+    setPage(1);
   };
 
-  const handleDeptFilterChange = (deptId: string) => {
-    setDepartmentId(deptId);
-    setPage(0);
-  };
-
-  const handleStatusFilterChange = (s: string) => {
-    setStatus(s);
-    setPage(0);
-  };
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!employeeCode.trim()) {
-      setFormError("Employee Code is required.");
-      return;
-    }
-    if (!fullName.trim()) {
-      setFormError("Full Name is required.");
-      return;
-    }
-    if (!email.trim() || !email.includes("@")) {
-      setFormError("Valid Work Email is required.");
-      return;
-    }
-    if (!formDeptId) {
-      setFormError("Please select a Department.");
-      return;
-    }
-    if (!formDesigId) {
-      setFormError("Please select a Designation.");
-      return;
-    }
-    if (!joiningDate) {
-      setFormError("Joining Date is required.");
-      return;
-    }
-    if (!employmentType) {
-      setFormError("Please select a valid Employment Type.");
-      return;
-    }
-
-    setFormError(null);
-    try {
-      await createMutation.mutateAsync({
-        employeeCode: employeeCode.trim(),
-        fullName: fullName.trim(),
-        email: email.trim(),
-        phone: phone.trim() || undefined,
-        departmentId: formDeptId,
-        designationId: formDesigId,
-        joiningDate: new Date(joiningDate).toISOString(),
-        employmentType
-      });
-
-      // Reset and close
-      setEmployeeCode("");
-      setFullName("");
-      setEmail("");
-      setPhone("");
-      setFormDeptId("");
-      setFormDesigId("");
-      setJoiningDate("");
-      setEmploymentType("");
-      setIsAddOpen(false);
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Failed to create employee.");
-    }
-  };
-
-  if (gate.isLoading || (gate.isAuthorized && isLoading && page === 0)) {
+  if (gate.isLoading || (gate.isAuthorized && isLoading && !data)) {
     return (
-      <div className="flex flex-col gap-5 max-w-7xl mx-auto">
-        <div className="h-8 w-48 rounded-md bg-muted animate-pulse" />
-        <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
-        <div className="h-96 rounded-xl border border-border bg-muted/30 animate-pulse" />
+      <div className="mx-auto flex max-w-7xl flex-col gap-4">
+        <div className="h-8 w-56 animate-pulse rounded-md bg-muted" />
+        <div className="grid gap-3 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="h-28 animate-pulse rounded-lg border border-border bg-muted/30" />
+          ))}
+        </div>
+        <div className="h-96 animate-pulse rounded-lg border border-border bg-muted/30" />
       </div>
     );
   }
@@ -181,371 +177,223 @@ export default function EmployeesListPage() {
   if (!gate.isAuthorized) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Card className="max-w-md w-full text-center p-6 border-border shadow-xs">
+        <Card className="w-full max-w-md border-border p-6 text-center shadow-xs">
           <CardHeader className="items-center pb-2">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600 mb-2">
+            <div className="mb-2 flex size-10 items-center justify-center rounded-md bg-amber-500/15 text-amber-600">
               <ShieldCheck className="size-5" />
             </div>
             <CardTitle className="text-base">Access Restricted</CardTitle>
-            <CardDescription className="text-xs">
-              You do not have permission (<code className="text-[11px] font-mono">employees.read</code>) to view the employee roster.
-            </CardDescription>
+            <p className="text-xs text-muted-foreground">You need employee read permission to view this workspace.</p>
           </CardHeader>
         </Card>
       </div>
     );
   }
 
-  const paginatedEmployees = allEmployees.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-
   return (
-    <div className="flex flex-col gap-5 max-w-7xl mx-auto">
-      {/* 1. Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+    <div className="mx-auto flex max-w-7xl flex-col gap-4">
+      <div className="flex flex-col justify-between gap-3 border-b border-border pb-4 md:flex-row md:items-center">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground">Employee Management</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Manage organization members, assignments, profiles, and employment status.
-          </p>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">Employees</h1>
+          <p className="mt-1 text-xs text-muted-foreground">Tenant-scoped people records, org assignments, access, and employee readiness.</p>
         </div>
-
-        {canCreate && (
-          <Button onClick={() => setIsAddOpen(true)} size="sm">
-            <Plus className="size-3.5 mr-1" />
-            <span>Add Employee</span>
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {canExport && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={"/documents" as Route}>
+                <Download className="mr-1.5 size-3.5" />
+                Export
+              </Link>
+            </Button>
+          )}
+          {canCreate && (
+            <Button size="sm" asChild>
+              <Link href={"/employees/new" as Route}>
+                <Plus className="mr-1.5 size-3.5" />
+                Add Employee
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* 2. Search & Filters Bar */}
-      <Card className="border border-border bg-card p-3 shadow-xs">
-        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
-          <div className="relative w-full sm:w-80">
-            <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search by name, code, email..."
-              value={search}
-              onChange={handleSearchChange}
-              className="pl-8 h-9 text-xs"
-            />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Total Employees" value={data?.summary.total ?? total} detail="Current filtered tenant roster" icon={Users} />
+        <MetricCard label="Active" value={data?.summary.active ?? 0} detail="Ready for workforce workflows" icon={UserRoundCheck} />
+        <MetricCard label="On Leave Today" value={data?.summary.onLeave ?? 0} detail="Status-based until leave calendar is queried" icon={BriefcaseBusiness} />
+        <MetricCard label="Needs Setup" value={data?.summary.needsSetup ?? 0} detail="Missing manager, access, location, or shift" icon={Wrench} />
+      </div>
+
+      <Card className="border-border shadow-xs">
+        <CardContent className="p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="relative w-full lg:max-w-sm">
+              <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setPage(1);
+                }}
+                className="h-9 pl-8 text-xs"
+                placeholder="Search name, email, phone, employee ID"
+                aria-label="Search employees"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:flex lg:flex-wrap">
+              <FilterSelect label="Department" value={departmentId} onChange={resetToFirst(setDepartmentId)} options={[["ALL", "All departments"], ...departments.map((item) => [item.id, item.name] as const)]} />
+              <FilterSelect label="Designation" value={designationId} onChange={resetToFirst(setDesignationId)} options={[["ALL", "All designations"], ...designations.map((item) => [item.id, item.name] as const)]} />
+              <FilterSelect label="Location" value={locationId} onChange={resetToFirst(setLocationId)} options={[["ALL", "All locations"], ...locations.map((item) => [item.id, item.name] as const)]} />
+              <FilterSelect label="Status" value={status} onChange={resetToFirst(setStatus)} options={STATUS_FILTERS} />
+              <FilterSelect label="Employment type" value={employmentType} onChange={resetToFirst(setEmploymentType)} options={EMPLOYMENT_FILTERS} />
+            </div>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            <select
-              value={departmentId}
-              onChange={(e) => handleDeptFilterChange(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="ALL">All Departments</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={status}
-              onChange={(e) => handleStatusFilterChange(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              {STATUS_FILTERS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-
-            <Badge variant="secondary" className="h-9 px-3 text-xs font-normal">
-              {allEmployees.length} Total
-            </Badge>
-          </div>
-        </div>
+        </CardContent>
       </Card>
 
-      {/* 3. Error Banner */}
       {isError && (
-        <Card className="border-destructive/30 bg-destructive/5 p-4">
-          <div className="flex items-center justify-between text-xs text-destructive">
-            <div className="flex items-center gap-2">
+        <Card className="border-destructive/30 bg-destructive/5 shadow-xs">
+          <CardContent className="flex flex-col gap-2 p-3 text-xs text-destructive sm:flex-row sm:items-center sm:justify-between">
+            <span className="flex items-center gap-2">
               <AlertCircle className="size-4" />
-              <span>Failed to load employees list.</span>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => refetch()} className="h-7 text-xs">
+              Employee data could not be loaded.
+            </span>
+            <Button variant="outline" size="sm" onClick={() => refetch()} className="h-8">
               Retry
             </Button>
-          </div>
+          </CardContent>
         </Card>
       )}
 
-      {/* 4. Data Table (Studio Admin Table Pattern) */}
-      <Card className="border border-border bg-card shadow-xs overflow-hidden">
+      <Card className="overflow-hidden border-border shadow-xs">
         <CardContent className="p-0">
-          {paginatedEmployees.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[30%]">Employee</TableHead>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Department & Designation</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedEmployees.map((emp) => {
-                  const name = emp.fullName || "";
-                  const initial = name.trim().length > 0 ? name.trim().charAt(0).toUpperCase() : null;
-                  const isProbation = emp.status === "PROBATION";
-                  const isActive = emp.status === "ACTIVE";
-                  const deptName = typeof emp.department === "string" ? emp.department : emp.department?.name || "—";
-                  const desigName = typeof emp.designation === "string" ? emp.designation : emp.designation?.name || "—";
-
-                  return (
-                    <TableRow key={emp.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-8 w-8 border border-border">
-                            {emp.avatarUrl || emp.profilePhoto ? (
-                              <AvatarImage src={emp.avatarUrl || emp.profilePhoto || ""} alt={name} />
-                            ) : null}
-                            <AvatarFallback>
-                              {initial || <CircleUser className="size-4 text-muted-foreground" />}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <p className="font-semibold text-foreground truncate">{name || "—"}</p>
-                            <p className="text-[11px] text-muted-foreground truncate">{emp.email || "—"}</p>
+          {employees.length ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[240px]">Employee</TableHead>
+                    <TableHead>Employee ID</TableHead>
+                    <TableHead>Role / Job Title</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Store / Location</TableHead>
+                    <TableHead>Reporting Manager</TableHead>
+                    <TableHead>Employment Type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {employees.map((employee) => {
+                    const name = employee.fullName || "Unnamed employee";
+                    const initial = name.trim().charAt(0).toUpperCase();
+                    const locationName = currentLocation(employee);
+                    return (
+                      <TableRow key={employee.id}>
+                        <TableCell>
+                          <div className="flex min-w-0 items-center gap-3">
+                            <Avatar className="size-8 border border-border">
+                              {employee.avatarUrl || employee.profilePhoto ? <AvatarImage src={employee.avatarUrl || employee.profilePhoto || ""} alt={name} /> : null}
+                              <AvatarFallback>{initial || <CircleUser className="size-4 text-muted-foreground" />}</AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-foreground">{name}</p>
+                              <p className="truncate text-[11px] text-muted-foreground">{textOrFallback(employee.email, "No work email")}</p>
+                            </div>
                           </div>
-                        </div>
-                      </TableCell>
-
-                      <TableCell className="font-mono text-xs font-medium text-foreground">
-                        {emp.employeeCode}
-                      </TableCell>
-
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <p className="font-medium text-foreground">{desigName}</p>
-                          <p className="text-[11px] text-muted-foreground">{deptName}</p>
-                        </div>
-                      </TableCell>
-
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatEmploymentType(emp.employmentType)}
-                      </TableCell>
-
-                      <TableCell>
-                        <Badge
-                          variant={isActive ? "success" : isProbation ? "warning" : "secondary"}
-                          className="text-[10px]"
-                        >
-                          {formatEmploymentStatus(emp.status)}
-                        </Badge>
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" asChild className="h-7 px-2.5">
-                          <Link href={`/employees/${emp.id}` as Route}>
-                            <span>Manage</span>
-                            <ArrowRight className="size-3 ml-1" />
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{employee.employeeCode || "Not set"}</TableCell>
+                        <TableCell className="text-xs">{textOrFallback(currentRole(employee))}</TableCell>
+                        <TableCell className="text-xs">{relationName(employee.department)}</TableCell>
+                        <TableCell className="text-xs">
+                          <span className="inline-flex items-center gap-1.5">
+                            <MapPin className="size-3 text-muted-foreground" />
+                            {textOrFallback(locationName)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs">{textOrFallback(employee.manager?.fullName ?? employee.managerName)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{formatEmploymentType(employee.employmentType)}</TableCell>
+                        <TableCell>
+                          <Badge variant={statusVariant(employee.status)} className="text-[10px]">
+                            {formatEmploymentStatus(employee.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" asChild className="h-8 px-2.5">
+                            <Link href={`/employees/${employee.id}` as Route}>
+                              Manage
+                              <ArrowRight className="ml-1 size-3" />
+                            </Link>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           ) : (
-            <div className="py-12 text-center text-xs text-muted-foreground">
-              <Users className="size-8 mx-auto mb-2 opacity-40" />
-              <p className="font-semibold text-foreground">No matching employees</p>
-              <p className="text-[11px] mt-0.5">Try clearing filters or search queries.</p>
+            <div className="flex flex-col items-center justify-center px-4 py-14 text-center">
+              <div className="mb-3 flex size-10 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground">
+                <Building2 className="size-5" />
+              </div>
+              <p className="text-sm font-semibold text-foreground">No employees found</p>
+              <p className="mt-1 max-w-sm text-xs text-muted-foreground">Adjust filters or add the first tenant-scoped employee record.</p>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* 5. Server Pagination Footer */}
-      <div className="flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
-        <div>
-          Showing <span className="font-medium text-foreground">{page * PAGE_SIZE + 1}</span> to{" "}
-          <span className="font-medium text-foreground">{Math.min((page + 1) * PAGE_SIZE, allEmployees.length)}</span> of{" "}
-          <span className="font-medium text-foreground">{allEmployees.length}</span> employees
-        </div>
-
+      <div className="flex flex-col gap-2 border-t border-border pt-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        <span>
+          Showing <span className="font-medium text-foreground">{start}</span> to <span className="font-medium text-foreground">{end}</span> of{" "}
+          <span className="font-medium text-foreground">{total}</span> employees
+        </span>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            disabled={page === 0}
-            className="h-8 text-xs"
-          >
-            <ChevronLeft className="size-3.5 mr-1" />
-            <span>Previous</span>
+          <Button variant="outline" size="sm" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page <= 1} className="h-8">
+            <ChevronLeft className="mr-1 size-3.5" />
+            Previous
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => p + 1)}
-            disabled={(page + 1) * PAGE_SIZE >= allEmployees.length}
-            className="h-8 text-xs"
-          >
-            <span>Next</span>
-            <ChevronRight className="size-3.5 ml-1" />
+          <Badge variant="secondary" className="h-8 px-3 font-normal">
+            Page {page} of {totalPages}
+          </Badge>
+          <Button variant="outline" size="sm" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page >= totalPages} className="h-8">
+            Next
+            <ChevronRight className="ml-1 size-3.5" />
           </Button>
         </div>
       </div>
-
-      {/* 6. Add Employee Dialog (Studio Admin Dialog Pattern) */}
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add New Employee</DialogTitle>
-            <DialogDescription>
-              Enter workplace details to create a draft employee profile in the tenant roster.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleCreate} className="space-y-3.5 py-2">
-            {formError && (
-              <div className="p-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-xs text-destructive flex items-center gap-2">
-                <AlertCircle className="size-4 shrink-0" />
-                <span>{formError}</span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Employee Code *</label>
-                <Input
-                  value={employeeCode}
-                  onChange={(e) => setEmployeeCode(e.target.value)}
-                  placeholder="e.g. EMP-101"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Full Name *</label>
-                <Input
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Maya Sharma"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Work Email *</label>
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="maya@vcorganics.com"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Phone</label>
-                <Input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+91 98765 43210"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Department *</label>
-                <select
-                  value={formDeptId}
-                  onChange={(e) => setFormDeptId(e.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  required
-                >
-                  <option value="">Select Department</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Designation *</label>
-                <select
-                  value={formDesigId}
-                  onChange={(e) => setFormDesigId(e.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  required
-                >
-                  <option value="">Select Designation</option>
-                  {designations.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Employment Type *</label>
-                <select
-                  value={employmentType}
-                  onChange={(e) =>
-                    setEmploymentType(e.target.value as "" | "FULL_TIME" | "PART_TIME" | "CONTRACT" | "TEMPORARY")
-                  }
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  required
-                >
-                  <option value="">Select Employment Type</option>
-                  <option value="FULL_TIME">Full Time</option>
-                  <option value="PART_TIME">Part Time</option>
-                  <option value="CONTRACT">Contract</option>
-                  <option value="TEMPORARY">Temporary</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Joining Date *</label>
-                <Input
-                  type="date"
-                  value={joiningDate}
-                  onChange={(e) => setJoiningDate(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-
-            <DialogFooter className="pt-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsAddOpen(false)}
-                disabled={createMutation.isPending}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Creating..." : "Save Employee"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange
+}: {
+  label: string;
+  value: string;
+  options: ReadonlyArray<readonly [string, string]>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="relative">
+      <span className="sr-only">{label}</span>
+      <Filter className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-7 text-xs shadow-xs outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring lg:w-[150px]"
+        aria-label={label}
+      >
+        {options.map(([optionValue, optionLabel]) => (
+          <option key={optionValue} value={optionValue}>
+            {optionLabel}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

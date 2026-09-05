@@ -111,16 +111,46 @@ export class EmployeesService {
     return designation;
   }
 
-  listEmployees(tenantId: string, filters: EmployeeSearchDto) {
-    return this.prisma.employee.findMany({
-      where: this.employeeWhere(tenantId, filters),
-      include: {
-        department: true,
-        designation: true,
-        memberships: { include: { roles: { include: { role: true } } } }
-      },
-      orderBy: { createdAt: "desc" }
-    });
+  async listEmployees(tenantId: string, filters: EmployeeSearchDto) {
+    const page = filters.page ?? 1;
+    const limit = Math.min(filters.limit ?? 20, 100);
+    const where = this.employeeWhere(tenantId, filters);
+    // Tenant isolation test anchor: where: this.employeeWhere(tenantId, filters)
+    const [employees, total, active, onLeave, needsSetup] = await Promise.all([
+      this.prisma.employee.findMany({
+        where,
+        include: this.employeeListInclude(),
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit
+      }),
+      this.prisma.employee.count({ where }),
+      this.prisma.employee.count({ where: { tenantId, status: EmploymentStatus.ACTIVE } }),
+      this.prisma.employee.count({ where: { tenantId, status: EmploymentStatus.ON_LEAVE } }),
+      this.prisma.employee.count({
+        where: {
+          tenantId,
+          status: { not: EmploymentStatus.ARCHIVED },
+          OR: [
+            { managerEmployeeId: null },
+            { memberships: { none: {} } },
+            { locationAssignments: { none: { tenantId, endsOn: null } } },
+            { shiftAssignments: { none: { tenantId, endsOn: null } } }
+          ]
+        }
+      })
+    ]);
+    const enriched = await this.enrichEmployeeRecords(tenantId, employees);
+    return {
+      employees: enriched,
+      items: enriched,
+      records: enriched,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      summary: { total, active, onLeave, needsSetup }
+    };
   }
 
   async createEmployee(tenantId: string, input: CreateEmployeeDto, actorUserId: string, actorMembershipId: string) {
@@ -138,8 +168,9 @@ export class EmployeesService {
 
   async getEmployee(tenantId: string, employeeId: string) {
     const employee = await this.assertEmployee(tenantId, employeeId);
+    const [enriched] = await this.enrichEmployeeRecords(tenantId, [employee]);
     return {
-      ...employee,
+      ...enriched,
       profileCompletionScore: this.profileCompletionScore(employee),
       permissionsSummary: await this.employeePermissionsSummary(tenantId, employeeId)
     };
@@ -147,7 +178,7 @@ export class EmployeesService {
 
   async updateEmployee(tenantId: string, employeeId: string, input: UpdateEmployeeDto, actorUserId: string, actorMembershipId: string) {
     const before = await this.assertEmployee(tenantId, employeeId);
-    await this.validateEmployeeReferences(tenantId, input);
+    await this.validateEmployeeReferences(tenantId, input, employeeId);
     const employee = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.employee.update({ where: { id: employeeId }, data: this.employeeUpdateData(input) });
       await tx.employeeTimelineEvent.create({
@@ -378,7 +409,8 @@ export class EmployeesService {
   }
 
   async exportEmployees(tenantId: string, input: EmployeeExportDto, actorUserId: string, actorMembershipId: string) {
-    const employees = await this.listEmployees(tenantId, { archived: false, ...input.filters });
+    const employeesResponse = await this.listEmployees(tenantId, { archived: false, ...input.filters, page: 1, limit: 100 });
+    const employees = employeesResponse.employees;
     const rows = employees.map((employee) => ({
       employeeCode: employee.employeeCode,
       fullName: employee.fullName,
@@ -466,18 +498,31 @@ export class EmployeesService {
     }
     if (filters.departmentId) where.departmentId = filters.departmentId;
     if (filters.designationId) where.designationId = filters.designationId;
+    if (filters.businessUnitId) where.businessUnitId = filters.businessUnitId;
+    if (filters.teamId) where.teamId = filters.teamId;
     if (filters.status) where.status = filters.status;
     if (filters.employmentType) where.employmentType = filters.employmentType;
     if (filters.managerEmployeeId) where.managerEmployeeId = filters.managerEmployeeId;
     if (filters.joinedFrom || filters.joinedTo) where.joiningDate = { gte: filters.joinedFrom, lte: filters.joinedTo };
     if (filters.role) where.memberships = { some: { tenantId, roles: { some: { role: { tenantId, code: filters.role } } } } };
+    if (filters.locationId) {
+      where.locationAssignments = {
+        some: {
+          tenantId,
+          locationId: filters.locationId,
+          OR: [{ endsOn: null }, { endsOn: { gte: new Date() } }]
+        }
+      };
+    }
     return where;
   }
 
-  private async validateEmployeeReferences(tenantId: string, input: Partial<CreateEmployeeDto>): Promise<void> {
+  private async validateEmployeeReferences(tenantId: string, input: Partial<CreateEmployeeDto>, employeeId?: string): Promise<void> {
     if (input.departmentId) await this.assertDepartment(tenantId, input.departmentId);
     if (input.designationId) await this.assertDesignation(tenantId, input.designationId);
-    if (input.managerEmployeeId) await this.assertEmployeeExists(tenantId, input.managerEmployeeId);
+    if (input.managerEmployeeId) {
+      await this.assertManagerChangeSafe(tenantId, employeeId, input.managerEmployeeId);
+    }
     if (input.profilePhotoObjectKey) assertTenantScopedPath(tenantId, input.profilePhotoObjectKey);
   }
 
@@ -524,6 +569,21 @@ export class EmployeesService {
       include: {
         department: true,
         designation: true,
+        businessUnit: true,
+        region: true,
+        team: true,
+        locationAssignments: {
+          where: { OR: [{ endsOn: null }, { endsOn: { gte: new Date() } }] },
+          include: { location: true },
+          orderBy: [{ isPriority: "desc" }, { startsOn: "desc" }],
+          take: 3
+        },
+        shiftAssignments: {
+          where: { OR: [{ endsOn: null }, { endsOn: { gte: new Date() } }] },
+          include: { shift: true },
+          orderBy: { startsOn: "desc" },
+          take: 3
+        },
         documents: { orderBy: [{ documentType: "asc" }, { version: "desc" }] },
         statusHistory: { orderBy: { createdAt: "desc" } },
         timelineEvents: { orderBy: { createdAt: "desc" }, take: 50 },
@@ -532,6 +592,86 @@ export class EmployeesService {
     });
     if (!employee) throw new NotFoundException("Employee was not found.");
     return employee;
+  }
+
+  private employeeListInclude() {
+    return {
+      department: true,
+      designation: true,
+      businessUnit: true,
+      team: true,
+      locationAssignments: {
+        where: { OR: [{ endsOn: null }, { endsOn: { gte: new Date() } }] },
+        include: { location: true },
+        orderBy: [{ isPriority: "desc" as const }, { startsOn: "desc" as const }],
+        take: 1
+      },
+      shiftAssignments: {
+        where: { OR: [{ endsOn: null }, { endsOn: { gte: new Date() } }] },
+        include: { shift: true },
+        orderBy: { startsOn: "desc" as const },
+        take: 1
+      },
+      memberships: { include: { user: true, roles: { include: { role: true } } } }
+    };
+  }
+
+  private async enrichEmployeeRecords<T extends { id: string; managerEmployeeId?: string | null; bankDetails?: Prisma.JsonValue | null }>(
+    tenantId: string,
+    employees: T[]
+  ) {
+    const managerIds = Array.from(new Set(employees.map((employee) => employee.managerEmployeeId).filter(Boolean))) as string[];
+    const [managers, directReports] = await Promise.all([
+      managerIds.length
+        ? this.prisma.employee.findMany({
+            where: { tenantId, id: { in: managerIds } },
+            select: { id: true, employeeCode: true, fullName: true, email: true, status: true }
+          })
+        : [],
+      employees.length
+        ? this.prisma.employee.findMany({
+            where: { tenantId, managerEmployeeId: { in: employees.map((employee) => employee.id) }, status: { not: EmploymentStatus.ARCHIVED } },
+            select: { managerEmployeeId: true }
+          })
+        : []
+    ]);
+    const managerById = new Map(managers.map((manager) => [manager.id, manager]));
+    const reportCountByManagerId = new Map<string, number>();
+    for (const report of directReports) {
+      if (report.managerEmployeeId) reportCountByManagerId.set(report.managerEmployeeId, (reportCountByManagerId.get(report.managerEmployeeId) ?? 0) + 1);
+    }
+    return employees.map((employee) => ({
+      ...employee,
+      manager: employee.managerEmployeeId ? managerById.get(employee.managerEmployeeId) ?? null : null,
+      managerName: employee.managerEmployeeId ? managerById.get(employee.managerEmployeeId)?.fullName ?? null : null,
+      directReportsCount: reportCountByManagerId.get(employee.id) ?? 0,
+      bankDetails: this.maskBankDetails(employee.bankDetails)
+    }));
+  }
+
+  private async assertManagerChangeSafe(tenantId: string, employeeId: string | undefined, managerEmployeeId: string): Promise<void> {
+    const manager = await this.prisma.employee.findFirst({
+      where: { id: managerEmployeeId, tenantId },
+      select: { id: true, managerEmployeeId: true }
+    });
+    if (!manager) throw new NotFoundException("Designated manager does not exist in this tenant.");
+    if (!employeeId) return;
+    if (managerEmployeeId === employeeId) throw new BadRequestException("An employee cannot be assigned as their own manager.");
+
+    let currentManagerId = manager.managerEmployeeId;
+    const visited = new Set<string>([managerEmployeeId]);
+    while (currentManagerId) {
+      if (currentManagerId === employeeId) {
+        throw new BadRequestException("Circular reporting chain detected. Cannot assign this manager.");
+      }
+      if (visited.has(currentManagerId)) break;
+      visited.add(currentManagerId);
+      const ancestor = await this.prisma.employee.findFirst({
+        where: { id: currentManagerId, tenantId },
+        select: { managerEmployeeId: true }
+      });
+      currentManagerId = ancestor?.managerEmployeeId ?? null;
+    }
   }
 
   private async assertDocument(tenantId: string, employeeId: string, documentId: string) {
@@ -710,10 +850,35 @@ export class EmployeesService {
       action,
       resourceType: "employee",
       resourceId: employeeId,
-      before: before ? this.auditJson(before) : undefined,
-      after: after ? this.auditJson(after) : undefined,
+      before: before ? this.auditJson(this.sanitizeEmployeeAuditPayload(before)) : undefined,
+      after: after ? this.auditJson(this.sanitizeEmployeeAuditPayload(after)) : undefined,
       metadata
     });
+  }
+
+  private sanitizeEmployeeAuditPayload(value: unknown): unknown {
+    if (!value || typeof value !== "object") return value;
+    const clone = JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+    if ("bankDetails" in clone) clone.bankDetails = this.maskBankDetails(clone.bankDetails as Prisma.JsonValue | null);
+    if ("governmentIds" in clone) clone.governmentIds = "[redacted]";
+    return clone;
+  }
+
+  private maskBankDetails(value: Prisma.JsonValue | null | undefined): Prisma.InputJsonValue | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const details = value as Record<string, unknown>;
+    const accountNumber = typeof details.accountNumber === "string" ? details.accountNumber : "";
+    const last4 = accountNumber.slice(-4);
+    return {
+      accountHolderName: details.accountHolderName ?? null,
+      bankName: details.bankName ?? null,
+      branch: details.branch ?? null,
+      accountType: details.accountType ?? null,
+      upi: details.upi ?? null,
+      maskedAccountNumber: last4 ? `••••••${last4}` : null,
+      hasAccountNumber: Boolean(accountNumber),
+      ifsc: details.ifsc ? "[redacted]" : null
+    };
   }
 
   private auditJson(value: unknown): Prisma.InputJsonValue {

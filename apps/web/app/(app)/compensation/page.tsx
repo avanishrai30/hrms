@@ -5,6 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { apiRequest } from "../../../lib/api";
 import { formatMoney } from "../../../lib/money";
+import { normalizeEmployeePageResponse, type EmployeePageResponse } from "../../../lib/queries/use-people-queries";
 import type {
   CompensationBreakdownResult,
   CompensationTemplateView,
@@ -50,11 +51,11 @@ export default function CompensationDirectoryPage() {
       setError(null);
       const [compData, empData, tmplData] = await Promise.all([
         apiRequest<{ compensations: EmployeeCompensationView[] }>("/compensation/all?limit=100"),
-        apiRequest<EmployeeOption[]>("/employees"),
+        apiRequest<EmployeeOption[] | EmployeePageResponse<EmployeeOption>>("/employees?limit=100"),
         apiRequest<CompensationTemplateView[]>("/compensation/templates")
       ]);
       setCompensations(compData.compensations ?? []);
-      setEmployees(empData ?? []);
+      setEmployees(normalizeEmployeePageResponse(empData).employees);
       setTemplates(tmplData ?? []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load compensation data.");

@@ -71,6 +71,70 @@ export function buildEmployeesQueryParams(filter?: Record<string, unknown> | und
   return queryParams.toString();
 }
 
+export interface EmployeePageResponse<TEmployee = EmployeeRecordView> {
+  employees?: TEmployee[];
+  items?: TEmployee[];
+  records?: TEmployee[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
+  summary?: {
+    total?: number;
+    active?: number;
+    onLeave?: number;
+    needsSetup?: number;
+  };
+}
+
+export function normalizeEmployeePageResponse<TEmployee>(
+  response: TEmployee[] | EmployeePageResponse<TEmployee>
+) {
+  const hasStatus = (employee: TEmployee, status: string) => typeof employee === "object" && employee !== null && "status" in employee && employee.status === status;
+  const needsSetup = (employee: TEmployee) => {
+    const record = employee as Record<string, unknown>;
+    return !record.managerEmployeeId || !Array.isArray(record.memberships) || !record.memberships.length || !Array.isArray(record.locationAssignments) || !record.locationAssignments.length || !Array.isArray(record.shiftAssignments) || !record.shiftAssignments.length;
+  };
+  if (Array.isArray(response)) {
+    const employees = response;
+    return {
+      employees,
+      items: employees,
+      records: employees,
+      total: employees.length,
+      page: 1,
+      limit: employees.length || 20,
+      totalPages: 1,
+      summary: {
+        total: employees.length,
+        active: employees.filter((employee) => hasStatus(employee, "ACTIVE")).length,
+        onLeave: employees.filter((employee) => hasStatus(employee, "ON_LEAVE")).length,
+        needsSetup: employees.filter(needsSetup).length
+      }
+    };
+  }
+  const employees = response.employees ?? response.items ?? response.records ?? [];
+  const total = response.total ?? employees.length;
+  const limit = response.limit ?? (employees.length || 20);
+  return {
+    employees,
+    items: employees,
+    records: employees,
+    total,
+    page: response.page ?? 1,
+    limit,
+    totalPages: response.totalPages ?? Math.max(1, Math.ceil(total / limit)),
+    summary: {
+      total: response.summary?.total ?? total,
+      active: response.summary?.active ?? employees.filter((employee) => hasStatus(employee, "ACTIVE")).length,
+      onLeave: response.summary?.onLeave ?? employees.filter((employee) => hasStatus(employee, "ON_LEAVE")).length,
+      needsSetup:
+        response.summary?.needsSetup ??
+        employees.filter(needsSetup).length
+    }
+  };
+}
+
 export function formatEmploymentStatus(status?: string | null | undefined): string {
   if (!status || !status.trim()) return "—";
   return status.replace(/_/g, " ");
@@ -92,8 +156,11 @@ export interface EmployeeRecordView {
   fullName: string;
   email?: string | undefined;
   phone?: string | null | undefined;
+  preferredName?: string | null | undefined;
+  personalEmail?: string | null | undefined;
   status?: string | undefined;
   employmentType?: string | undefined;
+  salaryType?: string | undefined;
   joiningDate?: string | undefined;
   avatarUrl?: string | null | undefined;
   profilePhoto?: string | null | undefined;
@@ -103,9 +170,26 @@ export interface EmployeeRecordView {
   designation?: { id: string; name: string; code?: string | undefined } | string | null | undefined;
   locationId?: string | null | undefined;
   location?: { id: string; name: string } | null | undefined;
+  locationAssignments?: Array<{ id: string; location?: { id: string; name: string; code?: string } | null; isPriority?: boolean }> | undefined;
+  shiftAssignments?: Array<{ id: string; shift?: { id: string; name: string; code?: string; startsAtMinute?: number; endsAtMinute?: number } | null }> | undefined;
+  businessUnit?: { id: string; name: string; code?: string } | null | undefined;
+  team?: { id: string; name: string; code?: string } | null | undefined;
   managerId?: string | null | undefined;
   managerName?: string | null | undefined;
-  manager?: { fullName?: string; email?: string } | null | undefined;
+  managerEmployeeId?: string | null | undefined;
+  manager?: { id?: string; employeeCode?: string; fullName?: string; email?: string; status?: string } | null | undefined;
+  directReportsCount?: number | undefined;
+  memberships?: Array<{
+    id?: string;
+    status?: string;
+    user?: { id?: string; email?: string; status?: string } | null;
+    roles?: Array<{ role?: { id?: string; code?: string; name?: string; permissions?: Array<{ permission?: { code?: string; name?: string } }> } }> | undefined;
+  }> | undefined;
+  permissionsSummary?: { roles?: Array<{ code?: string; name?: string }>; permissions?: string[] } | undefined;
+  bankDetails?: Record<string, unknown> | null | undefined;
+  documents?: EmployeeDocumentView[] | undefined;
+  statusHistory?: Array<{ id: string; previousStatus?: string; newStatus?: string; reason?: string; createdAt?: string }> | undefined;
+  faceProfile?: unknown;
   profileCompletionScore?: number | undefined;
 }
 
@@ -282,7 +366,18 @@ export function useEmployees(filter?: Record<string, unknown> | undefined, enabl
   const path = `/employees${qs ? `?${qs}` : ""}`;
   return useQuery({
     queryKey: peopleKeys.employees(filter),
-    queryFn: () => apiRequest<EmployeeRecordView[]>(path),
+    queryFn: async () => normalizeEmployeePageResponse(await apiRequest<EmployeeRecordView[] | EmployeePageResponse>(path)).employees,
+    enabled,
+    staleTime: 30 * 1000
+  });
+}
+
+export function useEmployeesPage(filter?: Record<string, unknown> | undefined, enabled: boolean = true) {
+  const qs = buildEmployeesQueryParams(filter);
+  const path = `/employees${qs ? `?${qs}` : ""}`;
+  return useQuery({
+    queryKey: peopleKeys.employees(filter),
+    queryFn: async () => normalizeEmployeePageResponse(await apiRequest<EmployeeRecordView[] | EmployeePageResponse>(path)),
     enabled,
     staleTime: 30 * 1000
   });
@@ -474,6 +569,57 @@ export function useUpdateEmployeeMutation(employeeId: string) {
   });
 }
 
+export function useAssignReportingManagerMutation(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (managerEmployeeId: string | null) =>
+      apiRequest<EmployeeRecordView>("/organization/reporting-manager", {
+        method: "PUT",
+        body: JSON.stringify({ employeeId, managerEmployeeId })
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDetail(employeeId) });
+      queryClient.invalidateQueries({ queryKey: ["people", "employees"] });
+      queryClient.invalidateQueries({ queryKey: ["people", "directory"] });
+      queryClient.invalidateQueries({ queryKey: ["organization"] });
+    }
+  });
+}
+
+export function useAssignEmployeeOrgMutation(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { businessUnitId?: string | null; regionId?: string | null; teamId?: string | null; departmentId?: string | null }) =>
+      apiRequest<EmployeeRecordView>(`/organization/employees/${employeeId}/assignment`, {
+        method: "PUT",
+        body: JSON.stringify(data)
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDetail(employeeId) });
+      queryClient.invalidateQueries({ queryKey: ["people", "employees"] });
+      queryClient.invalidateQueries({ queryKey: ["people", "directory"] });
+      queryClient.invalidateQueries({ queryKey: ["organization"] });
+    }
+  });
+}
+
+export function useAssignEmployeeLocationMutation(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (locationId: string) =>
+      apiRequest(`/locations/${locationId}/assignments`, {
+        method: "POST",
+        body: JSON.stringify({ employeeId, startsOn: new Date().toISOString(), isPriority: true })
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDetail(employeeId) });
+      queryClient.invalidateQueries({ queryKey: ["people", "employees"] });
+      queryClient.invalidateQueries({ queryKey: ["organization", "locations"] });
+      queryClient.invalidateQueries({ queryKey: ["attendance"] });
+    }
+  });
+}
+
 export function useCreateDepartmentMutation() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -613,10 +759,10 @@ export function useUpdateEmployeeProfile() {
 export function useUpdateEmployeeStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
+    mutationFn: ({ id, status, reason }: { id: string; status: string; reason?: string }) =>
       apiRequest(`/employees/${id}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status, reason: reason?.trim() || `Status changed to ${status}` })
       }),
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: peopleKeys.employeeDetail(variables.id) });

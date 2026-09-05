@@ -105,13 +105,18 @@ export const employeeSearchSchema = z.object({
   q: z.string().optional(),
   departmentId: z.string().uuid().optional(),
   designationId: z.string().uuid().optional(),
+  businessUnitId: z.string().uuid().optional(),
+  teamId: z.string().uuid().optional(),
+  locationId: z.string().uuid().optional(),
   status: employmentStatusSchema.optional(),
   employmentType: z.enum(["FULL_TIME", "PART_TIME", "CONTRACT", "TEMPORARY"]).optional(),
   joinedFrom: z.coerce.date().optional(),
   joinedTo: z.coerce.date().optional(),
   managerEmployeeId: z.string().uuid().optional(),
   role: z.string().optional(),
-  archived: z.coerce.boolean().default(false)
+  archived: z.coerce.boolean().default(false),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20)
 });
 
 export const employeeImportPreviewSchema = z.object({

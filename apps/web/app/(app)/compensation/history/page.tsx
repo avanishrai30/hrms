@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Badge } from "../../../../components/ui";
 import { apiRequest } from "../../../../lib/api";
 import { formatMoney } from "../../../../lib/money";
+import { normalizeEmployeePageResponse, type EmployeePageResponse } from "../../../../lib/queries/use-people-queries";
 import type { EmployeeCompensationHistoryView } from "@vc-wms/shared-types";
 
 interface EmployeeOption {
@@ -25,11 +26,12 @@ export default function CompensationHistoryPage() {
     try {
       setIsLoading(true);
       setError(null);
-      const empData = await apiRequest<EmployeeOption[]>("/employees");
-      setEmployees(empData ?? []);
+      const empData = await apiRequest<EmployeeOption[] | EmployeePageResponse<EmployeeOption>>("/employees?limit=100");
+      const normalizedEmployees = normalizeEmployeePageResponse(empData).employees;
+      setEmployees(normalizedEmployees);
 
-      if (empData && empData.length > 0) {
-        const empId = selectedEmployeeId || (empData[0]?.id ?? "");
+      if (normalizedEmployees.length > 0) {
+        const empId = selectedEmployeeId || (normalizedEmployees[0]?.id ?? "");
         setSelectedEmployeeId(empId);
         const histData = await apiRequest<EmployeeCompensationHistoryView[]>(
           `/compensation/history/${empId}`

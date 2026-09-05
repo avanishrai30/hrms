@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -39,14 +40,26 @@ export class LocationsController {
     private readonly prisma: PrismaService
   ) {}
 
-  private async resolveEmployeeId(tenantId: string, membershipId: string, employeeId?: string): Promise<string> {
-    if (employeeId) return employeeId;
+  private async resolveEmployeeId(tenantId: string, membershipId: string, permissions: readonly string[], employeeId?: string): Promise<string> {
     const membership = await this.prisma.tenantMembership.findFirst({
       where: { id: membershipId, tenantId },
       select: { employeeId: true }
     });
     if (!membership?.employeeId) {
       throw new BadRequestException("No employee profile is linked to your user account.");
+    }
+    if (employeeId && employeeId !== membership.employeeId) {
+      const canUseOverride =
+        permissions.includes("location.audit") ||
+        permissions.includes("location.override") ||
+        permissions.includes("location.assign") ||
+        permissions.includes("attendance.read") ||
+        permissions.includes("attendance.update") ||
+        permissions.includes("mss.manage");
+      if (!canUseOverride) {
+        throw new ForbiddenException("You cannot verify another employee's location from this endpoint.");
+      }
+      return employeeId;
     }
     return membership.employeeId;
   }
@@ -108,7 +121,7 @@ export class LocationsController {
     @Req() request: AuthenticatedRequest
   ) {
     const tenant = requireTenantContext(request);
-    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, body.employeeId);
+    const employeeId = await this.resolveEmployeeId(tenant.tenantId, tenant.membershipId, tenant.permissions, body.employeeId);
     return this.locationsService.verifyGps(tenant.tenantId, employeeId, body, tenant.userId);
   }
 
