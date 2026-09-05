@@ -88,7 +88,6 @@ export default function EmployeeDetailPage({
   // Status Change Dialog State
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const [newStatus, setNewStatus] = useState("ACTIVE");
-  const [statusReason, setStatusReason] = useState("");
   const [statusError, setStatusError] = useState<string | null>(null);
 
   const { data: employee, isLoading, isError, refetch } = useEmployee(id, gate.isAuthorized);
@@ -181,7 +180,6 @@ export default function EmployeeDetailPage({
 
   const handleOpenStatus = () => {
     setNewStatus(employee.status || "ACTIVE");
-    setStatusReason("");
     setStatusError(null);
     setIsStatusOpen(true);
   };
@@ -275,7 +273,15 @@ export default function EmployeeDetailPage({
       </Card>
 
       {/* 3. Detail Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => {
+          if (value === "overview" || value === "org" || value === "leave" || value === "assets" || value === "documents" || value === "timeline") {
+            setActiveTab(value);
+          }
+        }}
+        className="w-full"
+      >
         <TabsList className="grid grid-cols-3 sm:grid-cols-6 w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="org">Hierarchy</TabsTrigger>

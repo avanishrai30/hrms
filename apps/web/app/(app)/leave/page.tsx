@@ -25,7 +25,7 @@ import {
 } from "../../../lib/queries/use-ess-queries";
 import { usePermissionGate, useHasPermission } from "../../../lib/session-store";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
@@ -194,7 +194,13 @@ export default function EmployeeLeavePage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-auto">
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => {
+              if (value === "overview" || value === "calendar" || value === "approvals") setActiveTab(value);
+            }}
+            className="w-auto"
+          >
             <TabsList>
               <TabsTrigger value="overview">My Leaves</TabsTrigger>
               <TabsTrigger value="calendar">Team Calendar</TabsTrigger>
@@ -608,7 +614,10 @@ export default function EmployeeLeavePage() {
                   <select
                     className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
                     value={halfDaySession}
-                    onChange={(e) => setHalfDaySession(e.target.value as any)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === "FIRST_HALF" || value === "SECOND_HALF") setHalfDaySession(value);
+                    }}
                   >
                     <option value="FIRST_HALF">First Half (Morning Session)</option>
                     <option value="SECOND_HALF">Second Half (Afternoon Session)</option>

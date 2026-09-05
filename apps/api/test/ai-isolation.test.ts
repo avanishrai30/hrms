@@ -8,6 +8,7 @@ describe("AI Multi-Tenant Isolation Tests (Task 19)", () => {
   let knowledgeService: KnowledgeBaseService;
   let mockPrisma: any;
   let mockSecurity: any;
+  let mockAiProvider: any;
 
   const tenantA = "11111111-1111-1111-1111-111111111111";
   const tenantB = "22222222-2222-2222-2222-222222222222";
@@ -16,6 +17,9 @@ describe("AI Multi-Tenant Isolation Tests (Task 19)", () => {
   beforeEach(() => {
     mockSecurity = {
       recordAiAudit: vi.fn().mockResolvedValue(undefined)
+    };
+    mockAiProvider = {
+      generateEmbeddings: vi.fn().mockResolvedValue([0.1, 0.2, 0.3])
     };
 
     mockPrisma = {
@@ -52,7 +56,9 @@ describe("AI Multi-Tenant Isolation Tests (Task 19)", () => {
                 content: "Tenant A Confidential Leave Policy: 24 days annually.",
                 keywords: ["leave", "policy", "tenant"],
                 embeddingVector: [0.1, 0.2, 0.3],
-                document: { id: "doc-a", title: "Leave Policy A", category: "POLICY" }
+                sourcePage: null,
+                sourceSection: "Leave",
+                document: { id: "doc-a", title: "Leave Policy A", category: "POLICY", version: 1 }
               }
             ]);
           }
@@ -62,7 +68,7 @@ describe("AI Multi-Tenant Isolation Tests (Task 19)", () => {
     };
 
     memoryService = new ConversationMemoryService(mockPrisma);
-    knowledgeService = new KnowledgeBaseService(mockPrisma, mockSecurity);
+    knowledgeService = new KnowledgeBaseService(mockPrisma, mockSecurity, mockAiProvider);
   });
 
   it("should never return conversations belonging to Tenant B when querying for Tenant A", async () => {

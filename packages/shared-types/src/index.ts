@@ -2331,9 +2331,21 @@ export interface AiKnowledgeDocumentView {
   category: string;
   content: string;
   filePath?: string | null;
+  originalFileName?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number;
+  sha256?: string | null;
+  status?: "UPLOADED" | "PROCESSING" | "INDEXED" | "FAILED" | "ARCHIVED";
   version: number;
+  effectiveDate?: string | null;
+  expiresAt?: string | null;
+  audience?: string;
   isActive: boolean;
   chunkCount?: number;
+  indexedAt?: string | null;
+  lastError?: string | null;
+  uploadedById?: string | null;
+  uploadedAt?: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -2344,7 +2356,10 @@ export interface AiKnowledgeChunkView {
   documentId: string;
   documentTitle?: string;
   category?: string;
+  version?: number;
   chunkIndex: number;
+  sourcePage?: number | null;
+  sourceSection?: string | null;
   content: string;
   keywords: string[];
   similarityScore?: number;
@@ -3228,7 +3243,6 @@ export interface OperationsAnalyticsView {
     avgTurnaroundDays: number;
   };
 }
-
 
 
 

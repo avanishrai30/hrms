@@ -17,6 +17,16 @@ export const AiKnowledgeUploadSchema = z.object({
 });
 export type AiKnowledgeUploadDto = z.infer<typeof AiKnowledgeUploadSchema>;
 
+export const AiKnowledgeFileUploadSchema = z.object({
+  title: z.string().min(2).max(200).optional(),
+  category: z.enum(["POLICY", "LEAVE", "COMPLIANCE", "BENEFITS", "CODE_OF_CONDUCT", "CUSTOM"]).default("POLICY"),
+  effectiveDate: z.coerce.date().optional(),
+  expiresAt: z.coerce.date().optional(),
+  audience: z.enum(["TENANT_ADMIN", "HR", "MANAGER", "EMPLOYEE", "ALL"]).default("TENANT_ADMIN"),
+  versionOfDocumentId: z.string().uuid().optional()
+});
+export type AiKnowledgeFileUploadDto = z.infer<typeof AiKnowledgeFileUploadSchema>;
+
 export const AiKnowledgeSearchSchema = z.object({
   query: z.string().min(1).max(500),
   category: z.string().optional(),
@@ -63,4 +73,3 @@ export const AiToolConfirmSchema = z.object({
   confirmationToken: z.string().min(1).max(128)
 });
 export type AiToolConfirmDto = z.infer<typeof AiToolConfirmSchema>;
-

@@ -7,7 +7,6 @@ import {
   Building2,
   Scale,
   Sparkles,
-  Users,
   Mail,
   Save,
   CheckCircle2,
@@ -15,13 +14,18 @@ import {
   Loader2,
   ArrowLeft,
   FileText,
-  ShieldCheck,
-  Globe2,
   Clock,
-  Landmark
+  Landmark,
+  UploadCloud,
+  Archive,
+  RefreshCw,
+  Trash2,
+  Search
 } from "lucide-react";
-import { apiRequest } from "../../../../lib/api";
+import { apiRequest, getApiUrl } from "../../../../lib/api";
+import { getAccessToken } from "../../../../lib/auth-token";
 import { Badge, Button, Field, Input, Panel } from "../../../../components/ui";
+import type { AiKnowledgeChunkView, AiKnowledgeDocumentView } from "@vc-wms/shared-types";
 
 interface TenantSettingsResponse {
   id: string;
@@ -44,8 +48,10 @@ interface TenantInfoResponse {
   settings?: TenantSettingsResponse;
 }
 
+type BusinessContextTab = "legal" | "statutory" | "workforce" | "ai" | "contacts" | "knowledge";
+
 export default function BusinessContextPage() {
-  const [activeTab, setActiveTab] = useState<"legal" | "statutory" | "workforce" | "ai" | "contacts">("statutory");
+  const [activeTab, setActiveTab] = useState<BusinessContextTab>("statutory");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,8 +92,23 @@ export default function BusinessContextPage() {
   const [hrEmail, setHrEmail] = useState("");
   const [payrollEmail, setPayrollEmail] = useState("");
   const [grievanceEmail, setGrievanceEmail] = useState("");
+  const [knowledgeDocs, setKnowledgeDocs] = useState<AiKnowledgeDocumentView[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDraggingKnowledge, setIsDraggingKnowledge] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadCategory, setUploadCategory] = useState("POLICY");
+  const [uploadEffectiveDate, setUploadEffectiveDate] = useState("");
+  const [uploadExpiresAt, setUploadExpiresAt] = useState("");
+  const [knowledgeSearch, setKnowledgeSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<AiKnowledgeChunkView[]>([]);
+  const [knowledgeActionId, setKnowledgeActionId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "knowledge") {
+      setActiveTab("knowledge");
+    }
+
     async function loadData() {
       try {
         setLoading(true);
@@ -146,6 +167,7 @@ export default function BusinessContextPage() {
         setHrEmail(String(contactsMeta.hrEmail || ""));
         setPayrollEmail(String(contactsMeta.payrollEmail || ""));
         setGrievanceEmail(String(contactsMeta.grievanceEmail || ""));
+        await loadKnowledgeDocs();
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to load tenant configuration.");
       } finally {
@@ -155,6 +177,11 @@ export default function BusinessContextPage() {
 
     void loadData();
   }, []);
+
+  async function loadKnowledgeDocs() {
+    const docs = await apiRequest<AiKnowledgeDocumentView[]>("/ai/knowledge").catch(() => []);
+    setKnowledgeDocs(docs);
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -224,6 +251,99 @@ export default function BusinessContextPage() {
     }
   }
 
+  function acceptKnowledgeFile(file: File | null | undefined) {
+    if (!file) return;
+    const allowed = [".pdf", ".docx", ".txt", ".md"];
+    const lower = file.name.toLowerCase();
+    if (!allowed.some((ext) => lower.endsWith(ext))) {
+      setError("Upload PDF, DOCX, TXT, or MD files only.");
+      return;
+    }
+    setError(null);
+    setSelectedFile(file);
+    if (!uploadTitle.trim()) {
+      setUploadTitle(file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " "));
+    }
+  }
+
+  async function uploadKnowledgeFile() {
+    if (!selectedFile) {
+      setError("Select a knowledge file before uploading.");
+      return;
+    }
+
+    const form = new FormData();
+    form.append("file", selectedFile);
+    if (uploadTitle.trim()) form.append("title", uploadTitle.trim());
+    form.append("category", uploadCategory);
+    if (uploadEffectiveDate) form.append("effectiveDate", uploadEffectiveDate);
+    if (uploadExpiresAt) form.append("expiresAt", uploadExpiresAt);
+    form.append("audience", "TENANT_ADMIN");
+
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", getApiUrl("/ai/knowledge/files"));
+      const token = getAccessToken();
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.withCredentials = true;
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          setUploadProgress(Math.round((event.loaded / event.total) * 100));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(xhr.responseText || "Knowledge file upload failed."));
+      };
+      xhr.onerror = () => reject(new Error("Knowledge file upload failed."));
+      setUploadProgress(0);
+      xhr.send(form);
+    });
+
+    setSelectedFile(null);
+    setUploadTitle("");
+    setUploadProgress(null);
+    await loadKnowledgeDocs();
+    setSuccess(true);
+    setTimeout(() => setSuccess(false), 4000);
+  }
+
+  async function runKnowledgeSearch() {
+    if (!knowledgeSearch.trim()) return;
+    const results = await apiRequest<AiKnowledgeChunkView[]>("/ai/knowledge/search", {
+      method: "POST",
+      body: JSON.stringify({ query: knowledgeSearch.trim(), topK: 5 })
+    });
+    setSearchResults(results);
+  }
+
+  async function runKnowledgeAction(id: string, action: "archive" | "reindex" | "delete") {
+    try {
+      setKnowledgeActionId(id);
+      setError(null);
+      if (action === "delete") {
+        await apiRequest(`/ai/knowledge/${id}`, { method: "DELETE" });
+      } else {
+        await apiRequest(`/ai/knowledge/${id}/${action}`, { method: "POST" });
+      }
+      await loadKnowledgeDocs();
+      if (action === "archive") {
+        setSearchResults([]);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Knowledge action failed.");
+    } finally {
+      setKnowledgeActionId(null);
+    }
+  }
+
+  function formatSize(bytes?: number) {
+    if (!bytes) return "Not configured";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
   if (loading) {
     return (
       <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-pulse">
@@ -281,19 +401,20 @@ export default function BusinessContextPage() {
 
       {/* Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-zinc-200 dark:border-zinc-800">
-        {[
+        {([
           { id: "statutory", label: "Finance & Statutory", icon: Scale, badge: "Critical" },
           { id: "legal", label: "Legal & Entity", icon: Building2 },
           { id: "workforce", label: "Workforce Rules", icon: Clock },
           { id: "ai", label: "AI Grounding", icon: Sparkles, badge: "Intelligence" },
+          { id: "knowledge", label: "Knowledge Library", icon: FileText, badge: "RAG" },
           { id: "contacts", label: "Key Contacts", icon: Mail }
-        ].map((tab) => {
+        ] satisfies Array<{ id: BusinessContextTab; label: string; icon: typeof Scale; badge?: string }>).map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id)}
               className={`px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition flex items-center gap-2 ${
                 isActive
                   ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-sm"
@@ -669,6 +790,217 @@ export default function BusinessContextPage() {
               </Field>
             </div>
           </Panel>
+        )}
+
+        {/* TAB 6: KNOWLEDGE LIBRARY */}
+        {activeTab === "knowledge" && (
+          <div className="grid grid-cols-1 xl:grid-cols-[0.9fr_1.4fr] gap-6">
+            <Panel className="p-6 space-y-5">
+              <div className="flex items-start justify-between gap-3 border-b border-zinc-200 pb-3 dark:border-zinc-800">
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-950 dark:text-white flex items-center gap-2">
+                    <UploadCloud className="w-4 h-4 text-primary" />
+                    Upload Knowledge
+                  </h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    PDF, DOCX, TXT, and MD files are stored privately, extracted, chunked, and indexed per tenant.
+                  </p>
+                </div>
+                <Badge tone="neutral">Tenant scoped</Badge>
+              </div>
+
+              <div
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setIsDraggingKnowledge(true);
+                }}
+                onDragLeave={() => setIsDraggingKnowledge(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setIsDraggingKnowledge(false);
+                  acceptKnowledgeFile(event.dataTransfer.files.item(0));
+                }}
+                className={`relative overflow-hidden rounded-xl border border-dashed p-6 text-center transition ${
+                  isDraggingKnowledge
+                    ? "border-zinc-900 bg-zinc-100 dark:border-white dark:bg-zinc-900"
+                    : "border-zinc-300 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950"
+                }`}
+              >
+                <div className="absolute inset-x-6 top-0 h-px animate-pulse bg-gradient-to-r from-transparent via-zinc-400 to-transparent" />
+                <UploadCloud className="mx-auto h-8 w-8 text-zinc-500" />
+                <p className="mt-3 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                  {selectedFile ? selectedFile.name : "Drop a business document here"}
+                </p>
+                <p className="mt-1 text-[11px] text-zinc-500">
+                  {selectedFile ? formatSize(selectedFile.size) : "Server validates file type, size, tenant path, and duplicate hash."}
+                </p>
+                <label className="mt-4 inline-flex h-8 cursor-pointer items-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
+                  Choose file
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+                    className="sr-only"
+                    onChange={(event) => acceptKnowledgeFile(event.target.files?.item(0))}
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 text-xs">
+                <Field label="Document Title">
+                  <Input value={uploadTitle} onChange={(event) => setUploadTitle(event.target.value)} placeholder="Employee handbook v3" />
+                </Field>
+                <Field label="Category">
+                  <select
+                    value={uploadCategory}
+                    onChange={(event) => setUploadCategory(event.target.value)}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+                  >
+                    {["POLICY", "LEAVE", "COMPLIANCE", "BENEFITS", "CODE_OF_CONDUCT", "CUSTOM"].map((category) => (
+                      <option key={category} value={category}>{category.replace(/_/g, " ")}</option>
+                    ))}
+                  </select>
+                </Field>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Effective Date">
+                    <Input type="date" value={uploadEffectiveDate} onChange={(event) => setUploadEffectiveDate(event.target.value)} />
+                  </Field>
+                  <Field label="Expiry Date">
+                    <Input type="date" value={uploadExpiresAt} onChange={(event) => setUploadExpiresAt(event.target.value)} />
+                  </Field>
+                </div>
+              </div>
+
+              {uploadProgress !== null && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                    <span>Uploading and preparing index</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-900">
+                    <div className="h-full rounded-full bg-zinc-900 transition-all dark:bg-white" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                </div>
+              )}
+
+              <Button
+                type="button"
+                onClick={() => void uploadKnowledgeFile().catch((err: unknown) => {
+                  setUploadProgress(null);
+                  setError(err instanceof Error ? err.message : "Knowledge file upload failed.");
+                })}
+                disabled={!selectedFile || uploadProgress !== null}
+                className="w-full"
+              >
+                {uploadProgress !== null ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
+                Upload and Index
+              </Button>
+            </Panel>
+
+            <div className="space-y-6">
+              <Panel className="p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-zinc-200 pb-3 dark:border-zinc-800">
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-950 dark:text-white">Document Library</h3>
+                    <p className="text-xs text-zinc-500 mt-0.5">Current and archived tenant knowledge versions.</p>
+                  </div>
+                  <Button type="button" variant="secondary" className="h-8 px-3" onClick={() => void loadKnowledgeDocs()}>
+                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                    Refresh
+                  </Button>
+                </div>
+
+                <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-zinc-50 text-[11px] uppercase text-zinc-500 dark:bg-zinc-900">
+                      <tr>
+                        <th className="px-3 py-2 font-semibold">Document</th>
+                        <th className="px-3 py-2 font-semibold">Status</th>
+                        <th className="px-3 py-2 font-semibold">Size</th>
+                        <th className="px-3 py-2 font-semibold">Chunks</th>
+                        <th className="px-3 py-2 font-semibold">Indexed</th>
+                        <th className="px-3 py-2 text-right font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {knowledgeDocs.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-3 py-8 text-center text-zinc-500">No knowledge documents uploaded.</td>
+                        </tr>
+                      ) : knowledgeDocs.map((doc) => (
+                        <tr key={doc.id} className="bg-white dark:bg-zinc-950">
+                          <td className="px-3 py-3">
+                            <p className="font-semibold text-zinc-900 dark:text-zinc-100">{doc.title}</p>
+                            <p className="mt-0.5 text-[11px] text-zinc-500">
+                              v{doc.version} · {doc.category} · {doc.originalFileName || "Textarea content"}
+                            </p>
+                          </td>
+                          <td className="px-3 py-3">
+                            <Badge tone={doc.status === "INDEXED" ? "success" : doc.status === "FAILED" ? "danger" : doc.status === "ARCHIVED" ? "neutral" : "warning"}>
+                              {doc.status || (doc.isActive ? "INDEXED" : "ARCHIVED")}
+                            </Badge>
+                            {doc.lastError && <p className="mt-1 max-w-44 text-[10px] text-red-600">{doc.lastError}</p>}
+                          </td>
+                          <td className="px-3 py-3 text-zinc-600 dark:text-zinc-400">{formatSize(doc.sizeBytes)}</td>
+                          <td className="px-3 py-3 text-zinc-600 dark:text-zinc-400">{doc.chunkCount ?? 0}</td>
+                          <td className="px-3 py-3 text-zinc-600 dark:text-zinc-400">
+                            {doc.indexedAt ? new Date(doc.indexedAt).toLocaleString() : "Not indexed"}
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex justify-end gap-1.5">
+                              <Button type="button" variant="secondary" className="h-7 w-7 p-0" disabled={knowledgeActionId === doc.id} onClick={() => void runKnowledgeAction(doc.id, "reindex")}>
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button type="button" variant="secondary" className="h-7 w-7 p-0" disabled={knowledgeActionId === doc.id || doc.status === "ARCHIVED"} onClick={() => void runKnowledgeAction(doc.id, "archive")}>
+                                <Archive className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button type="button" variant="danger" className="h-7 w-7 p-0" disabled={knowledgeActionId === doc.id} onClick={() => void runKnowledgeAction(doc.id, "delete")}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Panel>
+
+              <Panel className="p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-zinc-200 pb-3 dark:border-zinc-800">
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-950 dark:text-white">RAG Search Explorer</h3>
+                    <p className="text-xs text-zinc-500 mt-0.5">Diagnostics for source-backed tenant retrieval.</p>
+                  </div>
+                  <Badge tone="neutral">Admin diagnostics</Badge>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input value={knowledgeSearch} onChange={(event) => setKnowledgeSearch(event.target.value)} placeholder="Search exact policy concept" />
+                  <Button type="button" onClick={() => void runKnowledgeSearch().catch((err: unknown) => setError(err instanceof Error ? err.message : "Knowledge search failed."))}>
+                    <Search className="mr-2 h-4 w-4" />
+                    Search
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {searchResults.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-zinc-200 p-4 text-xs text-zinc-500 dark:border-zinc-800">No retrieved chunks yet.</div>
+                  ) : searchResults.map((chunk) => (
+                    <div key={chunk.id} className="rounded-lg border border-zinc-200 bg-white p-4 text-xs dark:border-zinc-800 dark:bg-zinc-950">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+                          {chunk.documentTitle} v{chunk.version ?? 1}
+                        </p>
+                        <Badge tone="neutral">Score {chunk.similarityScore ?? 0}</Badge>
+                      </div>
+                      <p className="mt-1 text-[11px] text-zinc-500">
+                        {chunk.category || "CUSTOM"} · {chunk.sourceSection || "Section not tagged"} {chunk.sourcePage ? `· Page ${chunk.sourcePage}` : ""}
+                      </p>
+                      <p className="mt-3 line-clamp-3 text-zinc-600 dark:text-zinc-400">{chunk.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            </div>
+          </div>
         )}
 
         {/* Action Footer */}

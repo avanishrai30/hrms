@@ -41,6 +41,16 @@ export class AiContextBuilderService {
     const deniedDomains: string[] = [];
     let dataPayload: Record<string, unknown> | null = null;
 
+    const tenantProfile = await this.buildTenantProfileSummary(tenantId, promptLower);
+    if (tenantProfile) {
+      contextSnippets.push(`[TRUSTED_TENANT_PROFILE]:\n${tenantProfile}`);
+      sources.push({
+        title: "Tenant Business Context",
+        category: "TENANT_PROFILE",
+        excerpt: tenantProfile
+      });
+    }
+
     // 1. LEAVE CONTEXT ADAPTER
     if (
       promptLower.includes("leave") &&
@@ -207,8 +217,8 @@ export class AiContextBuilderService {
         deniedDomains.push("people");
         contextSnippets.push("[ORGANIZATION CONTEXT: Access Restricted. User lacks employee directory permissions.]");
       } else if (employeeId) {
-        const emp = await this.prisma.employee.findUnique({
-          where: { id: employeeId },
+        const emp = await this.prisma.employee.findFirst({
+          where: { id: employeeId, tenantId },
           include: {
             department: true,
             designation: true
@@ -216,8 +226,8 @@ export class AiContextBuilderService {
         });
 
         if (emp?.managerEmployeeId) {
-          const mgr = await this.prisma.employee.findUnique({
-            where: { id: emp.managerEmployeeId },
+          const mgr = await this.prisma.employee.findFirst({
+            where: { id: emp.managerEmployeeId, tenantId },
             include: { designation: true }
           });
           const mgrDesig = mgr?.designation?.name ? ` (${mgr.designation.name})` : "";
@@ -257,7 +267,7 @@ export class AiContextBuilderService {
 
         if (relevantChunks.length > 0) {
           const policyText = relevantChunks
-            .map((c) => `[Document: ${c.documentTitle}]: ${c.content}`)
+            .map((c) => `[Document: ${c.documentTitle} v${c.version ?? 1}${c.sourceSection ? `, Section: ${c.sourceSection}` : ""}${c.sourcePage ? `, Page: ${c.sourcePage}` : ""}]: ${c.content}`)
             .join("\n\n");
 
           contextSnippets.push(
@@ -266,9 +276,9 @@ export class AiContextBuilderService {
 
           for (const chunk of relevantChunks) {
             sources.push({
-              title: chunk.documentTitle,
+              title: `${chunk.documentTitle} v${chunk.version ?? 1}`,
               category: chunk.category,
-              excerpt: chunk.content.slice(0, 150) + "..."
+              excerpt: `${chunk.sourceSection ? `${chunk.sourceSection}: ` : ""}${chunk.content.slice(0, 150)}...`
             });
           }
         }
@@ -286,5 +296,48 @@ export class AiContextBuilderService {
       quickReplies,
       deniedDomains
     };
+  }
+
+  private async buildTenantProfileSummary(tenantId: string, promptLower: string) {
+    const tenant = await this.prisma.tenant?.findUnique({
+      where: { id: tenantId },
+      include: { settings: true }
+    });
+    if (!tenant) return "";
+
+    const meta = (tenant.settings?.metadata as Record<string, unknown> | null) ?? {};
+    const ai = (meta.ai as Record<string, unknown> | undefined) ?? {};
+    const payroll = (meta.payroll as Record<string, unknown> | undefined) ?? {};
+    const workforce = (meta.workforce as Record<string, unknown> | undefined) ?? {};
+    const includeStatutory =
+      promptLower.includes("statutory") ||
+      promptLower.includes("pf") ||
+      promptLower.includes("esi") ||
+      promptLower.includes("payroll") ||
+      promptLower.includes("tax") ||
+      promptLower.includes("compliance");
+
+    const lines = [
+      `Display name: ${tenant.name}`,
+      `Legal name: ${tenant.legalName}`,
+      `Industry/domain: ${String(ai.industryDomain || "Not configured")}`,
+      `Business overview: ${String(ai.companyMission || "Not configured")}`,
+      `Locale/timezone: ${tenant.settings?.locale || tenant.locale} / ${tenant.settings?.timezone || tenant.timezone}`,
+      `Currency: ${tenant.settings?.currency || tenant.currency}`,
+      `Week starts on day: ${tenant.settings?.weekStartDay ?? "Not configured"}`,
+      `Working days per month: ${tenant.settings?.defaultWorkingDaysPerMonth ?? "Not configured"}`,
+      `Daily hours: ${String(workforce.standardDailyHours ?? "Not configured")}`,
+      `Tenant AI guidance: ${String(ai.aiInstructions || "Not configured")}`
+    ];
+
+    if (includeStatutory) {
+      lines.push(
+        `Statutory jurisdiction: ${String(payroll.statutoryJurisdiction || meta.statutoryJurisdiction || "Not configured")}`,
+        `PF policy version: ${String(payroll.pfPolicyVersion || meta.pfPolicyVersion || "Not configured")}`,
+        `ESI policy version: ${String(payroll.esiPolicyVersion || meta.esiPolicyVersion || "Not configured")}`
+      );
+    }
+
+    return lines.join("\n");
   }
 }

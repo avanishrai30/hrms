@@ -7,8 +7,11 @@ import {
   Post,
   Put,
   Query,
-  Req
+  Req,
+  UploadedFile,
+  UseInterceptors
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { type AuthenticatedRequest } from "../common/request-context.js";
 import { requireTenantContext } from "../common/tenant-context.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
@@ -18,6 +21,8 @@ import {
   type AiDocumentExtractDto,
   AiKnowledgeSearchSchema,
   type AiKnowledgeSearchDto,
+  AiKnowledgeFileUploadSchema,
+  type AiKnowledgeFileUploadDto,
   AiKnowledgeUploadSchema,
   type AiKnowledgeUploadDto,
   AiNlReportGenerateSchema,
@@ -38,6 +43,7 @@ import { NaturalLanguageReportsService } from "./services/natural-language-repor
 import { PredictionEngine } from "./engines/prediction.engine.js";
 import { InsightsEngine } from "./engines/insights.engine.js";
 import { ConversationMemoryService } from "./memory/conversation-memory.service.js";
+import type { KnowledgeUploadFile } from "./services/knowledge-base.service.js";
 
 @Controller("ai")
 export class AiController {
@@ -131,6 +137,18 @@ export class AiController {
     return this.knowledgeService.uploadKnowledgeDocument(tenant.tenantId, body, tenant.userId);
   }
 
+  @Post("knowledge/files")
+  @RequirePermissions("ai.knowledge.manage")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: Number(process.env.AI_KNOWLEDGE_MAX_FILE_BYTES || 10 * 1024 * 1024) } }))
+  async uploadKnowledgeFile(
+    @Req() req: AuthenticatedRequest,
+    @UploadedFile() file: KnowledgeUploadFile | undefined,
+    @Body(new ZodValidationPipe(AiKnowledgeFileUploadSchema)) body: AiKnowledgeFileUploadDto
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.knowledgeService.uploadKnowledgeFile(tenant.tenantId, file, body, tenant.userId);
+  }
+
   @Get("knowledge")
   @RequirePermissions("ai.knowledge.read")
   async listKnowledge(
@@ -159,6 +177,26 @@ export class AiController {
   ) {
     const tenant = requireTenantContext(req);
     return this.knowledgeService.deleteDocument(tenant.tenantId, id, tenant.userId);
+  }
+
+  @Post("knowledge/:id/archive")
+  @RequirePermissions("ai.knowledge.manage")
+  async archiveKnowledge(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.knowledgeService.archiveDocument(tenant.tenantId, id, tenant.userId);
+  }
+
+  @Post("knowledge/:id/reindex")
+  @RequirePermissions("ai.knowledge.manage")
+  async reindexKnowledge(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.knowledgeService.reindexDocument(tenant.tenantId, id, tenant.userId);
   }
 
   @Post("knowledge/search")

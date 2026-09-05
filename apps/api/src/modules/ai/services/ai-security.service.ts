@@ -64,7 +64,16 @@ export class AiSecurityService {
     tenantId: string,
     userId: string,
     data: {
-      action: "ai.query" | "ai.prediction.generated" | "ai.knowledge.uploaded" | "ai.settings.updated" | "ai.document.extracted";
+      action:
+        | "ai.query"
+        | "ai.prediction.generated"
+        | "ai.knowledge.uploaded"
+        | "ai.knowledge.file_uploaded"
+        | "ai.knowledge.archived"
+        | "ai.knowledge.reindexed"
+        | "ai.knowledge.deleted"
+        | "ai.settings.updated"
+        | "ai.document.extracted";
       promptSummary?: string;
       modelUsed?: string;
       tokensUsed?: number;

@@ -26,7 +26,7 @@ import {
   formatShiftName,
   getGpsFailureMessageForAttendance
 } from "../../../lib/semantic-state";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "../../../components/ui/card";
@@ -267,7 +267,13 @@ export default function EmployeeAttendancePage() {
           </p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-auto">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => {
+            if (value === "daily" || value === "corrections") setActiveTab(value);
+          }}
+          className="w-auto"
+        >
           <TabsList>
             <TabsTrigger value="daily">Daily Attendance</TabsTrigger>
             <TabsTrigger value="corrections">Regularization ({corrections.length})</TabsTrigger>

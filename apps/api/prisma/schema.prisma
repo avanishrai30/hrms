@@ -3189,22 +3189,38 @@ model AiMessage {
 }
 
 model AiKnowledgeDocument {
-  id        String   @id @default(uuid()) @db.Uuid
-  tenantId  String   @map("tenant_id") @db.Uuid
-  title     String
-  category  String   @default("POLICY")
-  content   String
-  filePath  String?  @map("file_path")
-  version   Int      @default(1)
-  isActive  Boolean  @default(true) @map("is_active")
-  metadata  Json     @default("{}")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id               String    @id @default(uuid()) @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  title            String
+  category         String    @default("POLICY")
+  content          String
+  filePath         String?   @map("file_path")
+  originalFileName String?   @map("original_file_name")
+  mimeType         String?   @map("mime_type")
+  sizeBytes        Int       @default(0) @map("size_bytes")
+  sha256           String?
+  status           String    @default("INDEXED")
+  version          Int       @default(1)
+  effectiveDate    DateTime? @map("effective_date")
+  expiresAt        DateTime? @map("expires_at")
+  audience         String    @default("TENANT_ADMIN") @map("audience")
+  chunkCount       Int       @default(0) @map("chunk_count")
+  indexedAt        DateTime? @map("indexed_at")
+  lastError        String?   @map("last_error")
+  uploadedById     String?   @map("uploaded_by_id") @db.Uuid
+  uploadedAt       DateTime  @default(now()) @map("uploaded_at")
+  archivedAt       DateTime? @map("archived_at")
+  isActive         Boolean   @default(true) @map("is_active")
+  metadata         Json      @default("{}")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   tenant Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   chunks AiKnowledgeChunk[]
 
   @@index([tenantId, category, isActive])
+  @@index([tenantId, sha256, isActive])
+  @@index([tenantId, status])
   @@index([tenantId, title])
   @@map("ai_knowledge_documents")
 }
@@ -3215,8 +3231,11 @@ model AiKnowledgeChunk {
   documentId      String   @map("document_id") @db.Uuid
   chunkIndex      Int      @map("chunk_index")
   content         String
+  sourcePage      Int?     @map("source_page")
+  sourceSection   String?  @map("source_section")
   keywords        String[] @default([])
   embeddingVector Json?    @map("embedding_vector")
+  metadata        Json     @default("{}")
   createdAt       DateTime @default(now()) @map("created_at")
 
   tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -9072,5 +9091,4 @@ model SearchIndexEntry {
   @@index([tenantId, searchVector])
   @@map("search_index_entries")
 }
-
 

@@ -5,21 +5,17 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Users,
-  ShieldCheck,
   Key,
   Search,
-  CheckCircle2,
   AlertCircle,
   Loader2,
   X,
   Edit2,
   UserCheck,
   UserX,
-  ShieldAlert,
   ArrowRight
 } from "lucide-react";
-import { Badge, Button, Input, Panel } from "../../../components/ui";
+import { Badge, Panel } from "../../../components/ui";
 import { apiRequest } from "../../../lib/api";
 
 interface Membership {
@@ -284,9 +280,7 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                {filteredMembers.map((member) => {
-                  const isOwner = member.roles.some((r) => r.role.code === "TENANT_OWNER");
-                  return (
+                {filteredMembers.map((member) => (
                     <tr
                       key={member.id}
                       className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition"
@@ -378,8 +372,7 @@ export default function UsersPage() {
                         </div>
                       </td>
                     </tr>
-                  );
-                })}
+                ))}
               </tbody>
             </table>
           </div>

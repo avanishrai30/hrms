@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { PrismaModule } from "../prisma/prisma.module.js";
 import { AuditModule } from "../audit/audit.module.js";
+import { StorageModule } from "../storage/storage.module.js";
 import { AiController } from "./ai.controller.js";
 import { AiService } from "./ai.service.js";
 import { PredictionEngine } from "./engines/prediction.engine.js";
@@ -19,7 +20,7 @@ import { AiContextBuilderService } from "./services/ai-context-builder.service.j
 import { AiToolRegistryService } from "./tools/ai-tool-registry.service.js";
 
 @Module({
-  imports: [PrismaModule, AuditModule],
+  imports: [PrismaModule, AuditModule, StorageModule],
   controllers: [AiController],
   providers: [
     AiService,
