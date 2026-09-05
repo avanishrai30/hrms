@@ -75,6 +75,33 @@ export function useUpdateProfileMutation() {
   });
 }
 
+export function useUploadAvatarMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { fileBase64: string; mimeType: string }) =>
+      apiRequest<{ avatarUrl: string; profilePhoto: string }>("/profile/avatar", {
+        method: "POST",
+        body: JSON.stringify(data)
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: profileKeys.me() });
+    }
+  });
+}
+
+export function useRemoveAvatarMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<{ success: boolean }>("/profile/avatar", {
+        method: "DELETE"
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: profileKeys.me() });
+    }
+  });
+}
+
 // ----------------- Attendance Types & Hooks -----------------
 
 export interface AttendanceRecordItem {
@@ -92,6 +119,7 @@ export interface AttendanceRecordItem {
 
 export interface TodayAttendanceData {
   date: string;
+  state?: "NOT_STARTED" | "CLOCKED_IN" | "COMPLETED";
   record: AttendanceRecordItem | null;
   shift?: {
     id?: string;
@@ -102,6 +130,7 @@ export interface TodayAttendanceData {
   } | null;
   canCheckIn: boolean;
   canCheckOut: boolean;
+  requiresLocation?: boolean;
   rules?: {
     allowSelfCheckIn?: boolean;
     requireGeofence?: boolean;
@@ -135,7 +164,7 @@ export function useAttendanceHistory(startDate?: string, endDate?: string, enabl
       if (endDate) params.set("endDate", endDate);
       const queryString = params.toString() ? `?${params.toString()}` : "";
       const res = await apiRequest<AttendanceRecordItem[] | { records: AttendanceRecordItem[] }>(
-        `/attendance/history${queryString}`
+        `/attendance/me/history${queryString}`
       );
       if (Array.isArray(res)) return res;
       if (res && "records" in res && Array.isArray(res.records)) return res.records;

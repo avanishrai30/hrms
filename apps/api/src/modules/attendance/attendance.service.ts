@@ -59,12 +59,18 @@ export class AttendanceService {
     const now = new Date();
     const today = this.getStartOfDay(now);
 
+    const rules = await this.getRulesConfig(tenantId);
     const existing = await this.prisma.attendance.findUnique({
       where: { tenantId_employeeId_date: { tenantId, employeeId, date: today } }
     });
 
     if (existing && existing.checkInAt) {
-      throw new BadRequestException("Employee has already checked in today.");
+      if (existing.checkOutAt && !rules.allowMultipleSessionsPerDay) {
+        throw new BadRequestException("Today's attendance has already been completed.");
+      }
+      if (!existing.checkOutAt) {
+        throw new BadRequestException("Employee has already checked in today.");
+      }
     }
 
     // PART E.5 — ATTENDANCE CONFLICT VALIDATION: Prevent Check-in on Approved Leave Days
@@ -98,7 +104,6 @@ export class AttendanceService {
       );
     }
 
-    const rules = await this.getRulesConfig(tenantId);
     if (!rules.allowSelfCheckIn && !actorUserId) {
       throw new BadRequestException("Self check-in is disabled by tenant policy.");
     }
@@ -349,6 +354,10 @@ export class AttendanceService {
 
     if (existing.checkOutAt) {
       throw new BadRequestException("Employee has already checked out today.");
+    }
+
+    if (now.getTime() < existing.checkInAt.getTime()) {
+      throw new BadRequestException("Check-out time cannot be earlier than check-in time.");
     }
 
     const rules = await this.getRulesConfig(tenantId);
@@ -664,16 +673,26 @@ export class AttendanceService {
 
     const shift = await this.resolveShiftForEmployee(tenantId, employeeId, today);
     const rules = await this.getRulesConfig(tenantId);
+    let state: "NOT_STARTED" | "CLOCKED_IN" | "COMPLETED" = "NOT_STARTED";
+    if (record && record.checkInAt && !record.checkOutAt) {
+      state = "CLOCKED_IN";
+    } else if (record && record.checkInAt && record.checkOutAt) {
+      state = "COMPLETED";
+    }
 
-    const canCheckIn = !record || !record.checkInAt;
-    const canCheckOut = record && record.checkInAt && !record.checkOutAt;
+    const allowMultiple = Boolean(rules.allowMultipleSessionsPerDay);
+    const canCheckIn = state === "NOT_STARTED" || (state === "COMPLETED" && allowMultiple);
+    const canCheckOut = state === "CLOCKED_IN";
+    const requiresLocation = Boolean(rules.requireGeofence);
 
     return {
       date: today.toISOString(),
+      state,
       record,
       shift,
-      canCheckIn: Boolean(canCheckIn),
-      canCheckOut: Boolean(canCheckOut),
+      canCheckIn,
+      canCheckOut,
+      requiresLocation,
       rules
     };
   }
@@ -1103,14 +1122,15 @@ export class AttendanceService {
   /**
    * Get / Update Attendance Rules
    */
-  async getRulesConfig(tenantId: string): Promise<RuleConfig & { allowSelfCheckIn: boolean; requireGeofence: boolean; requireFaceVerification: boolean }> {
+  async getRulesConfig(tenantId: string): Promise<RuleConfig & { allowSelfCheckIn: boolean; requireGeofence: boolean; requireFaceVerification: boolean; allowMultipleSessionsPerDay?: boolean }> {
     const rules = await this.prisma.attendanceRule.findUnique({ where: { tenantId } });
     if (!rules) {
       return {
         ...DEFAULT_ATTENDANCE_RULES,
         allowSelfCheckIn: true,
         requireGeofence: false,
-        requireFaceVerification: false
+        requireFaceVerification: false,
+        allowMultipleSessionsPerDay: false
       };
     }
     return {
@@ -1122,7 +1142,8 @@ export class AttendanceService {
       overtimeThresholdMinutes: rules.overtimeThresholdMinutes,
       allowSelfCheckIn: rules.allowSelfCheckIn,
       requireGeofence: rules.requireGeofence,
-      requireFaceVerification: rules.requireFaceVerification
+      requireFaceVerification: rules.requireFaceVerification,
+      allowMultipleSessionsPerDay: (rules as unknown as { allowMultipleSessionsPerDay?: boolean }).allowMultipleSessionsPerDay ?? false
     };
   }
 

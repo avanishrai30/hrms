@@ -1,13 +1,18 @@
 import {
+  BadRequestException,
+  Inject,
   Injectable,
-  NotFoundException
+  NotFoundException,
+  Optional
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import { AuditService } from "../audit/audit.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { STORAGE_PROVIDER, type StorageProvider } from "../storage/storage.provider.js";
 import type {
   DirectoryFilterDto,
   UpdateProfileDto,
+  UploadAvatarDto,
   GenerateLetterDto,
   CreatePolicyDto,
   CreateFaqDto
@@ -26,7 +31,8 @@ export class EssService {
     private readonly auditService: AuditService,
     private readonly documentVaultService: DocumentVaultService,
     private readonly employeeRequestService: EmployeeRequestService,
-    private readonly announcementService: AnnouncementService
+    private readonly announcementService: AnnouncementService,
+    @Optional() @Inject(STORAGE_PROVIDER) private readonly storageProvider?: StorageProvider
   ) {}
 
   async resolveEmployeeIdForUser(tenantId: string, userId: string): Promise<string> {
@@ -123,6 +129,12 @@ export class EssService {
       profilePhoto: profile?.profilePhoto || employee.profilePhotoObjectKey
     });
 
+    const photoKey = profile?.profilePhoto || employee.profilePhotoObjectKey || null;
+    let avatarUrl: string | null = null;
+    if (photoKey && this.storageProvider && typeof this.storageProvider.getDownloadUrl === "function") {
+      avatarUrl = await this.storageProvider.getDownloadUrl(photoKey, 86400);
+    }
+
     return {
       id: profile?.id ?? employee.id,
       tenantId: employee.tenantId,
@@ -146,7 +158,8 @@ export class EssService {
       salaryType: employee.salaryType,
       status: employee.status,
       bio: profile?.bio || null,
-      profilePhoto: profile?.profilePhoto || employee.profilePhotoObjectKey || null,
+      profilePhoto: photoKey,
+      avatarUrl: avatarUrl || photoKey,
       dateOfBirth: (profile?.dateOfBirth || employee.dateOfBirth)?.toISOString() || null,
       gender: profile?.gender || employee.gender || null,
       maritalStatus: profile?.maritalStatus || null,
@@ -234,6 +247,116 @@ export class EssService {
     });
 
     return this.getProfile(tenantId, employeeId, actorUserId);
+  }
+
+  async uploadAvatar(tenantId: string, employeeId: string, dto: UploadAvatarDto, actorUserId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+      include: { profile: true }
+    });
+
+    if (!employee) {
+      throw new NotFoundException("Employee record not found.");
+    }
+
+    const buffer = Buffer.from(dto.fileBase64, "base64");
+    if (buffer.length > 5 * 1024 * 1024) {
+      throw new BadRequestException("Avatar image must not exceed 5MB.");
+    }
+
+    let ext = "jpg";
+    if (dto.mimeType === "image/png") ext = "png";
+    else if (dto.mimeType === "image/webp") ext = "webp";
+    else if (dto.mimeType === "image/gif") ext = "gif";
+
+    if (!this.storageProvider) {
+      throw new BadRequestException("Storage provider is not configured.");
+    }
+
+    const objectKey = `tenants/${tenantId}/avatars/${employeeId}_${Date.now()}.${ext}`;
+    await this.storageProvider.upload(objectKey, buffer, dto.mimeType);
+
+    const oldKey = employee.profile?.profilePhoto || employee.profilePhotoObjectKey;
+    if (oldKey && oldKey.startsWith(`tenants/${tenantId}/`)) {
+      try {
+        await this.storageProvider.delete(oldKey);
+      } catch {
+        // Silently ignore cleanup error
+      }
+    }
+
+    await this.prisma.employee.update({
+      where: { id: employeeId },
+      data: { profilePhotoObjectKey: objectKey }
+    });
+
+    await this.prisma.employeeProfile.upsert({
+      where: { employeeId },
+      update: { profilePhoto: objectKey },
+      create: {
+        tenantId,
+        employeeId,
+        profilePhoto: objectKey
+      }
+    });
+
+    const downloadUrl = await this.storageProvider.getDownloadUrl(objectKey, 86400);
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId,
+      action: "profile.avatar_uploaded",
+      resourceType: "employee_profile",
+      resourceId: employeeId,
+      after: { objectKey }
+    });
+
+    return {
+      avatarUrl: downloadUrl,
+      profilePhoto: objectKey
+    };
+  }
+
+  async removeAvatar(tenantId: string, employeeId: string, actorUserId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+      include: { profile: true }
+    });
+
+    if (!employee) {
+      throw new NotFoundException("Employee record not found.");
+    }
+
+    const oldKey = employee.profile?.profilePhoto || employee.profilePhotoObjectKey;
+    if (this.storageProvider && oldKey && oldKey.startsWith(`tenants/${tenantId}/`)) {
+      try {
+        await this.storageProvider.delete(oldKey);
+      } catch {
+        // Silently ignore cleanup error
+      }
+    }
+
+    await this.prisma.employee.update({
+      where: { id: employeeId },
+      data: { profilePhotoObjectKey: null }
+    });
+
+    if (employee.profile) {
+      await this.prisma.employeeProfile.update({
+        where: { employeeId },
+        data: { profilePhoto: null }
+      });
+    }
+
+    await this.auditService.record({
+      tenantId,
+      actorUserId,
+      action: "profile.avatar_removed",
+      resourceType: "employee_profile",
+      resourceId: employeeId
+    });
+
+    return { success: true };
   }
 
   async getDashboard(tenantId: string, employeeId: string, userId: string) {

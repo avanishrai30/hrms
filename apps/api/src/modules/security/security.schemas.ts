@@ -30,6 +30,15 @@ export const securityAlertQuerySchema = z.object({
       return val;
     }, z.boolean())
     .optional(),
+  unresolvedOnly: z
+    .preprocess((val) => {
+      if (typeof val === "string") {
+        if (val.toLowerCase() === "true" || val === "1") return true;
+        if (val.toLowerCase() === "false" || val === "0") return false;
+      }
+      return val;
+    }, z.boolean())
+    .optional(),
   userId: z.string().uuid().optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20)

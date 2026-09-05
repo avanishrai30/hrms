@@ -23,11 +23,12 @@ export class SecurityService {
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
+    const isResolvedFilter = query.unresolvedOnly ? false : query.isResolved;
     const where: Prisma.SuspiciousActivityWhereInput = {
       tenantId,
       ...(query.severity ? { severity: query.severity } : {}),
       ...(query.activityType ? { activityType: query.activityType } : {}),
-      ...(query.isResolved !== undefined ? { isResolved: query.isResolved } : {}),
+      ...(isResolvedFilter !== undefined ? { isResolved: isResolvedFilter } : {}),
       ...(query.userId ? { userId: query.userId } : {})
     };
 
@@ -51,6 +52,7 @@ export class SecurityService {
 
     return {
       items,
+      alerts: items,
       meta: {
         page,
         limit,

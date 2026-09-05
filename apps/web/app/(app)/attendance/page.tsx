@@ -93,10 +93,27 @@ export default function EmployeeAttendancePage() {
 
   const duration = computeDuration();
 
+  const isLocationRequired = Boolean(todayData?.requiresLocation || todayData?.rules?.requireGeofence);
+  const isCompleted = todayData?.state === "COMPLETED" || Boolean(record?.checkInAt && record?.checkOutAt);
+  const isClockedIn = todayData?.state === "CLOCKED_IN" || isCheckedIn;
+
   const handlePunch = async () => {
     const action = canCheckIn ? "check-in" : "check-out";
     const notes = punchNote || undefined;
     setActionError(null);
+
+    // If location is NOT required by tenant policy:
+    // DO NOT prompt or trigger browser geolocation at all!
+    if (!isLocationRequired) {
+      try {
+        setLocationState(null);
+        await punchMutation.mutateAsync(buildPunchPayload({ action, notes }));
+        setPunchNote("");
+      } catch (err: unknown) {
+        setActionError(err instanceof Error ? err.message : "Attendance punch failed");
+      }
+      return;
+    }
 
     const submitWithoutCoordinates = async (reason: "denied" | "unavailable" | "timeout" | "unsupported" | "unknown") => {
       const geofenceMessage = getGpsFailureMessageForAttendance(todayData?.rules, reason);
@@ -118,10 +135,11 @@ export default function EmployeeAttendancePage() {
       return;
     }
 
+    setLocationState("Getting location…");
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
-          setLocationState(null);
+          setLocationState("Location verified.");
           await punchMutation.mutateAsync(
             buildPunchPayload({
               action,
@@ -134,8 +152,10 @@ export default function EmployeeAttendancePage() {
             })
           );
           setPunchNote("");
+          setTimeout(() => setLocationState(null), 3000);
         } catch (err: unknown) {
           setActionError(err instanceof Error ? err.message : "Attendance punch failed");
+          setLocationState(null);
         }
       },
       async (error) => {
@@ -145,6 +165,13 @@ export default function EmployeeAttendancePage() {
           3: "timeout"
         };
         const reason = errorReasonMap[error.code] || "unknown";
+        if (reason === "denied") {
+          setLocationState("Location permission denied");
+        } else if (reason === "timeout") {
+          setLocationState("Unable to obtain required location (timeout)");
+        } else {
+          setLocationState("Unable to obtain required location");
+        }
         try {
           await submitWithoutCoordinates(reason);
         } catch (err: unknown) {
@@ -268,8 +295,8 @@ export default function EmployeeAttendancePage() {
                       {formatShiftName(shift)}
                     </CardTitle>
                   </div>
-                  <Badge variant={isCheckedIn ? "success" : "secondary"}>
-                    {isCheckedIn ? "CLOCKED IN" : "CLOCKED OUT"}
+                  <Badge variant={isClockedIn ? "success" : isCompleted ? "secondary" : "outline"}>
+                    {isClockedIn ? "CLOCKED IN" : isCompleted ? "COMPLETED" : "NOT STARTED"}
                   </Badge>
                 </div>
               </CardHeader>
@@ -322,15 +349,20 @@ export default function EmployeeAttendancePage() {
                   <Button
                     onClick={handlePunch}
                     disabled={punchMutation.isPending || (!canCheckIn && !canCheckOut)}
-                    variant={isCheckedIn ? "outline" : "default"}
+                    variant={isClockedIn ? "outline" : isCompleted && !canCheckIn ? "secondary" : "default"}
                     className="w-full sm:w-auto"
                   >
                     {punchMutation.isPending ? (
                       "Recording…"
-                    ) : isCheckedIn ? (
+                    ) : isClockedIn ? (
                       <>
                         <Square className="size-3.5 mr-1.5 fill-current" />
                         Clock Out
+                      </>
+                    ) : isCompleted && !canCheckIn ? (
+                      <>
+                        <CheckCircle2 className="size-3.5 mr-1.5 text-primary" />
+                        Attendance Completed
                       </>
                     ) : (
                       <>

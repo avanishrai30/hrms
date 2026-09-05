@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import {
@@ -12,15 +12,87 @@ import {
   AlertCircle,
   QrCode,
   FileText,
-  ShieldCheck
+  ShieldCheck,
+  Camera,
+  UploadCloud,
+  Trash2,
+  X,
+  Loader2
 } from "lucide-react";
-import { useProfile } from "../../../lib/queries/use-ess-queries";
+import {
+  useProfile,
+  useUploadAvatarMutation,
+  useRemoveAvatarMutation
+} from "../../../lib/queries/use-ess-queries";
 import { usePermissionGate } from "../../../lib/session-store";
 
 export default function EmployeeProfilePage() {
   const gate = usePermissionGate(["profile.view", "ess.read"]);
   const [activeTab, setActiveTab] = useState<"work" | "personal" | "emergency">("work");
   const { data: profile, isLoading, isError, refetch } = useProfile(gate.isAuthorized);
+
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [isDraggingAvatar, setIsDraggingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadAvatarMutation = useUploadAvatarMutation();
+  const removeAvatarMutation = useRemoveAvatarMutation();
+
+  const handleAvatarSelect = (file: File) => {
+    setAvatarError(null);
+    const validMimes = ["image/jpeg", "image/png", "image/webp"];
+    if (!validMimes.includes(file.type)) {
+      setAvatarError("Please select a JPEG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError("Avatar image must be 5MB or smaller.");
+      return;
+    }
+    setAvatarFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = reader.result as string;
+      setAvatarPreview(res);
+      setAvatarBase64(res.split(",")[1] ?? null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveAvatar = async () => {
+    if (!avatarBase64 || !avatarFile) return;
+    try {
+      setAvatarError(null);
+      await uploadAvatarMutation.mutateAsync({
+        fileBase64: avatarBase64,
+        mimeType: avatarFile.type
+      });
+      setIsAvatarModalOpen(false);
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      setAvatarBase64(null);
+    } catch (err: unknown) {
+      setAvatarError(err instanceof Error ? err.message : "Failed to upload avatar.");
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!window.confirm("Are you sure you want to remove your profile photo?")) return;
+    try {
+      setAvatarError(null);
+      await removeAvatarMutation.mutateAsync();
+      setIsAvatarModalOpen(false);
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      setAvatarBase64(null);
+    } catch (err: unknown) {
+      setAvatarError(err instanceof Error ? err.message : "Failed to remove avatar.");
+    }
+  };
 
   if (gate.isLoading || (gate.isAuthorized && isLoading)) {
     return (
@@ -92,17 +164,38 @@ export default function EmployeeProfilePage() {
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
           <div className="flex items-center gap-5 min-w-0">
-            <div className="relative w-20 h-20 rounded-panel overflow-hidden border-2 border-white shadow-md bg-white flex items-center justify-center text-primary shrink-0">
-              {profile.avatarUrl ? (
-                <img src={profile.avatarUrl} alt={displayName || "Profile"} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-primary/10 to-primary/30 flex items-center justify-center font-extrabold text-2xl text-primary">
-                  {initial || <User className="w-8 h-8 text-primary" />}
+            <div
+              className="relative group/avatar cursor-pointer shrink-0"
+              onClick={() => {
+                setAvatarError(null);
+                setAvatarFile(null);
+                setAvatarPreview(null);
+                setAvatarBase64(null);
+                setIsAvatarModalOpen(true);
+              }}
+            >
+              <div className="relative w-20 h-20 rounded-panel overflow-hidden border-2 border-white shadow-md bg-white flex items-center justify-center text-primary">
+                {profile.avatarUrl ? (
+                  <img src={profile.avatarUrl} alt={displayName || "Profile"} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-primary/10 to-primary/30 flex items-center justify-center font-extrabold text-2xl text-primary">
+                    {initial || <User className="w-8 h-8 text-primary" />}
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/avatar:opacity-100 transition flex items-center justify-center text-white">
+                  <Camera className="w-5 h-5" />
                 </div>
-              )}
-              {profile.status && (
-                <div className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-pill bg-success border-2 border-white" />
-              )}
+                {profile.status && (
+                  <div className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-pill bg-success border-2 border-white" />
+                )}
+              </div>
+              <button
+                type="button"
+                className="absolute -bottom-1 -right-1 w-6 h-6 rounded-pill bg-primary text-white shadow-sm flex items-center justify-center hover:bg-primary-hover border-2 border-white"
+                title="Update Photo"
+              >
+                <Camera className="w-3 h-3" />
+              </button>
             </div>
 
             <div className="min-w-0 space-y-1">
@@ -317,6 +410,128 @@ export default function EmployeeProfilePage() {
             <div className="py-2.5 flex justify-between">
               <span className="text-foreground-muted">Emergency Phone</span>
               <span className="font-mono font-semibold text-foreground">{profile.emergencyContact?.phone || "—"}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Change Profile Photo Modal */}
+      {isAvatarModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-panel bg-surface-raised border border-border-subtle p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+              <h3 className="text-sm font-bold text-foreground">Profile Photo</h3>
+              <button
+                onClick={() => setIsAvatarModalOpen(false)}
+                className="w-7 h-7 rounded-pill hover:bg-surface-muted flex items-center justify-center text-foreground-muted transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {avatarError && (
+              <div className="p-3 rounded-control bg-danger/10 border border-danger/20 text-danger text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{avatarError}</span>
+              </div>
+            )}
+
+            <div className="flex flex-col items-center justify-center py-2">
+              <div className="w-24 h-24 rounded-panel overflow-hidden border-2 border-border shadow-inner bg-surface flex items-center justify-center text-primary mb-4">
+                {avatarPreview ? (
+                  <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
+                ) : profile.avatarUrl ? (
+                  <img src={profile.avatarUrl} alt={displayName || "Profile"} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-primary/10 to-primary/30 flex items-center justify-center font-extrabold text-3xl text-primary">
+                    {initial || <User className="w-10 h-10 text-primary" />}
+                  </div>
+                )}
+              </div>
+
+              {/* Upload Dropzone */}
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDraggingAvatar(true);
+                }}
+                onDragLeave={() => setIsDraggingAvatar(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDraggingAvatar(false);
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleAvatarSelect(e.dataTransfer.files[0]);
+                  }
+                }}
+                onClick={() => avatarInputRef.current?.click()}
+                className={`w-full border-2 border-dashed rounded-control p-4 text-center cursor-pointer transition flex flex-col items-center justify-center gap-1.5 ${
+                  isDraggingAvatar
+                    ? "border-primary bg-primary-soft/30"
+                    : "border-border hover:border-primary/50 bg-surface/50"
+                }`}
+              >
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleAvatarSelect(e.target.files[0]);
+                    }
+                  }}
+                />
+                <UploadCloud className="w-5 h-5 text-primary" />
+                <p className="text-xs font-semibold text-foreground">
+                  {avatarFile ? avatarFile.name : "Click to select or drag photo here"}
+                </p>
+                <p className="text-[10px] text-foreground-muted">PNG, JPG, or WebP up to 5MB</p>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-border-subtle flex items-center justify-between gap-2">
+              {profile.avatarUrl ? (
+                <button
+                  type="button"
+                  disabled={removeAvatarMutation.isPending || uploadAvatarMutation.isPending}
+                  onClick={handleRemoveAvatar}
+                  className="px-3 py-1.5 rounded-control text-danger hover:bg-danger/10 text-xs font-semibold transition inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {removeAvatarMutation.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5" />
+                  )}
+                  Remove Photo
+                </button>
+              ) : (
+                <div />
+              )}
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAvatarModalOpen(false)}
+                  className="px-4 py-2 rounded-control bg-surface-muted hover:bg-muted text-xs font-semibold text-foreground-secondary transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!avatarBase64 || uploadAvatarMutation.isPending}
+                  onClick={handleSaveAvatar}
+                  className="px-4 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-bold transition shadow-sm inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {uploadAvatarMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Photo"
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

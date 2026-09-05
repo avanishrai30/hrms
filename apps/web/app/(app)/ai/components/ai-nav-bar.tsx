@@ -3,15 +3,30 @@
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  Sparkles,
+  Lightbulb,
+  TrendingUp,
+  BookOpen,
+  Zap,
+  History,
+  Settings
+} from "lucide-react";
 
-const AI_NAV_ITEMS: Array<{ label: string; href: Route; icon: string }> = [
-  { label: "Copilot", href: "/ai" as Route, icon: "✨" },
-  { label: "Insights", href: "/ai/insights" as Route, icon: "💡" },
-  { label: "Predictions", href: "/ai/predictions" as Route, icon: "📈" },
-  { label: "Policies & RAG", href: "/ai/knowledge-base" as Route, icon: "📚" },
-  { label: "Automations", href: "/ai/automations" as Route, icon: "⚡" },
-  { label: "History & Audit", href: "/ai/history" as Route, icon: "📜" },
-  { label: "AI Settings", href: "/admin/ai-settings" as Route, icon: "⚙️" }
+interface AiNavItem {
+  label: string;
+  href: Route;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const AI_NAV_ITEMS: AiNavItem[] = [
+  { label: "Copilot", href: "/ai" as Route, icon: Sparkles },
+  { label: "Insights", href: "/ai/insights" as Route, icon: Lightbulb },
+  { label: "Predictions", href: "/ai/predictions" as Route, icon: TrendingUp },
+  { label: "Policies & RAG", href: "/ai/knowledge-base" as Route, icon: BookOpen },
+  { label: "Automations", href: "/ai/automations" as Route, icon: Zap },
+  { label: "History & Audit", href: "/ai/history" as Route, icon: History },
+  { label: "AI Settings", href: "/admin/ai-settings" as Route, icon: Settings }
 ];
 
 export function AiNavBar() {
@@ -20,6 +35,7 @@ export function AiNavBar() {
   return (
     <nav aria-label="AI Workspace Navigation" className="flex items-center space-x-1.5 overflow-x-auto pb-1 mb-4 border-b border-neutral-200 dark:border-neutral-800">
       {AI_NAV_ITEMS.map((item) => {
+        const Icon = item.icon;
         const isActive = pathname === item.href || (item.href !== "/ai" && pathname.startsWith(item.href));
         return (
           <Link
@@ -27,11 +43,11 @@ export function AiNavBar() {
             href={item.href}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
               isActive
-                ? "bg-emerald-600 text-white shadow-sm dark:bg-emerald-500"
+                ? "bg-zinc-900 text-white shadow-sm dark:bg-white dark:text-zinc-950"
                 : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100"
             }`}
           >
-            <span>{item.icon}</span>
+            <Icon className="w-3.5 h-3.5" />
             <span>{item.label}</span>
           </Link>
         );

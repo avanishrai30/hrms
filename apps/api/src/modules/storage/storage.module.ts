@@ -4,9 +4,11 @@ import { AuditModule } from "../audit/audit.module.js";
 import { PrismaModule } from "../prisma/prisma.module.js";
 import { S3StorageProvider } from "./providers/s3.provider.js";
 import { LocalStorageProvider, STORAGE_PROVIDER } from "./storage.provider.js";
+import { StorageController } from "./storage.controller.js";
 
 @Module({
   imports: [ConfigModule, PrismaModule, AuditModule],
+  controllers: [StorageController],
   providers: [
     {
       provide: STORAGE_PROVIDER,

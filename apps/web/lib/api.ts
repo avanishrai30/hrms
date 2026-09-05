@@ -132,6 +132,12 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 
 export function getApiUrl(path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  if (normalizedPath.startsWith("/api/v1/")) {
+    const baseWithoutV1 = API_BASE_URL.endsWith("/api/v1")
+      ? API_BASE_URL.slice(0, -7)
+      : API_BASE_URL;
+    return `${baseWithoutV1}${normalizedPath}`;
+  }
   return `${API_BASE_URL}${normalizedPath}`;
 }
 

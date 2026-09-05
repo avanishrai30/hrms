@@ -124,6 +124,15 @@ const ADMIN_SECTIONS: AdminSection[] = [
     description: "Organization parameters, branding, RBAC permission roles, and user memberships.",
     modules: [
       {
+        title: "Business & AI Context",
+        description: "Company legal entity, statutory jurisdiction (PF/ESI versions), workforce rules, and AI grounding.",
+        href: "/admin/business-context" as Route,
+        icon: Building2,
+        permission: "tenant.settings.read",
+        badge: "Essential",
+        badgeVariant: "success"
+      },
+      {
         title: "Tenant Settings",
         description: "Manage organization profile, default currency, timezones, and payroll cycles.",
         href: "/settings/tenant" as Route,

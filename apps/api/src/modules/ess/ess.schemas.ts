@@ -57,6 +57,13 @@ export const updateProfileSchema = z.object({
 
 export type UpdateProfileDto = z.infer<typeof updateProfileSchema>;
 
+export const uploadAvatarSchema = z.object({
+  fileBase64: z.string().min(1, "Base64 image data is required"),
+  mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"]).default("image/jpeg")
+});
+
+export type UploadAvatarDto = z.infer<typeof uploadAvatarSchema>;
+
 // ----------------- Document Vault Schemas -----------------
 
 export const essDocumentTypeSchema = z.enum([

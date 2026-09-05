@@ -132,7 +132,7 @@ describe("People, Organization & MSS Tenant Isolation & Authorization Tests", ()
     };
 
     employeesService = new EmployeesService(mockPrisma, mockAudit);
-    essService = new EssService(mockPrisma, mockAudit);
+    essService = new EssService(mockPrisma, mockAudit, {} as any, {} as any, {} as any);
     leavesService = new LeavesService(mockPrisma, mockAudit);
     orgService = new OrganizationService(mockPrisma, mockAudit);
   });

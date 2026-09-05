@@ -3,6 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import type { Route } from "next";
 import Link from "next/link";
+import {
+  Sparkles,
+  Send,
+  AlertCircle,
+  AlertTriangle,
+  BookOpen,
+  MessageSquare,
+  Loader2,
+  FileText
+} from "lucide-react";
 import { Badge, Button, Input, Panel } from "../../../components/ui";
 import { apiRequest } from "../../../lib/api";
 import type { AiPromptResponseView } from "@vc-wms/shared-types";
@@ -32,11 +42,11 @@ interface ChatMessage {
 }
 
 const QUICK_PROMPTS = [
-  "🌴 How many leave days do I have?",
-  "⏱️ Show my attendance today",
-  "💰 View my latest payslip",
-  "📜 What is the maternity leave policy?",
-  "📝 Apply for leave tomorrow"
+  "How many leave days do I have?",
+  "Show my attendance today",
+  "View my latest payslip",
+  "What is the maternity leave policy?",
+  "Apply for leave tomorrow"
 ];
 
 export default function AiCopilotPage() {
@@ -225,14 +235,17 @@ export default function AiCopilotPage() {
               {/* Citations / Sources */}
               {msg.sources && msg.sources.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-800 text-xs">
-                  <div className="font-semibold text-neutral-500 mb-1.5 flex items-center space-x-1">
-                    <span>📚</span>
+                  <div className="font-semibold text-neutral-500 mb-1.5 flex items-center space-x-1.5">
+                    <BookOpen className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                     <span>Sources & Policy Citations:</span>
                   </div>
                   <div className="space-y-1">
                     {msg.sources.map((src, i) => (
-                      <div key={i} className="p-2 rounded bg-neutral-100 dark:bg-neutral-800 text-[11px] text-neutral-600 dark:text-neutral-300">
-                        <span className="font-bold text-neutral-900 dark:text-neutral-100">{src.title}</span> ({src.category}): {src.excerpt}
+                      <div key={i} className="p-2 rounded bg-neutral-100 dark:bg-neutral-800 text-[11px] text-neutral-600 dark:text-neutral-300 flex items-start gap-2">
+                        <FileText className="w-3.5 h-3.5 text-zinc-400 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-bold text-neutral-900 dark:text-neutral-100">{src.title}</span> ({src.category}): {src.excerpt}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -251,7 +264,7 @@ export default function AiCopilotPage() {
                         <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/60 space-y-2.5">
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-amber-900 dark:text-amber-200 text-xs flex items-center space-x-1.5">
-                              <span>⚠️</span>
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                               <span>Action Confirmation Required</span>
                             </span>
                             <Badge tone="warning">Mutating Action</Badge>
@@ -354,9 +367,10 @@ export default function AiCopilotPage() {
                   <button
                     key={i}
                     onClick={() => void handleSendMessage(qr)}
-                    className="px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-200/80 dark:bg-neutral-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 text-neutral-700 dark:text-neutral-300 border border-neutral-300/60 dark:border-neutral-700 transition"
+                    className="px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-200/80 dark:bg-neutral-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 text-neutral-700 dark:text-neutral-300 border border-neutral-300/60 dark:border-neutral-700 transition inline-flex items-center gap-1"
                   >
-                    💬 {qr}
+                    <MessageSquare className="w-3 h-3 opacity-60" />
+                    <span>{qr}</span>
                   </button>
                 ))}
               </div>
@@ -366,8 +380,8 @@ export default function AiCopilotPage() {
 
         {loading && (
           <div className="flex items-center space-x-3 text-neutral-500 text-sm">
-            <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center animate-pulse">
-              ✨
+            <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-emerald-600 animate-spin" />
             </div>
             <div className="space-y-1">
               <div className="flex space-x-1.5 items-center">
@@ -381,8 +395,9 @@ export default function AiCopilotPage() {
         )}
 
         {error && (
-          <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 text-xs">
-            ⚠️ {error}
+          <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <span>{error}</span>
           </div>
         )}
 
@@ -407,8 +422,9 @@ export default function AiCopilotPage() {
 
       {/* Input Form */}
       {runtimeStatus?.status !== "ok" && runtimeStatus !== null && (
-        <div className="text-xs text-center text-amber-600 dark:text-amber-400 py-1">
-          ⚠️ AI service is currently unavailable. Chat is disabled.
+        <div className="text-xs text-center text-amber-600 dark:text-amber-400 py-1 flex items-center justify-center gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5" />
+          <span>AI service is currently unavailable. Chat is disabled.</span>
         </div>
       )}
       <div className="relative flex items-center bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-300 dark:border-neutral-700 shadow-md p-2 focus-within:ring-2 focus-within:ring-emerald-500">
@@ -424,9 +440,19 @@ export default function AiCopilotPage() {
           onClick={() => void handleSendMessage()}
           disabled={loading || !inputPrompt.trim() || (runtimeStatus?.status !== "ok" && runtimeStatus !== null)}
           variant="primary"
-          className="rounded-xl px-4"
+          className="rounded-xl px-4 inline-flex items-center gap-1.5"
         >
-          {loading ? "Thinking..." : "Send 🚀"}
+          {loading ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Thinking...
+            </>
+          ) : (
+            <>
+              <Send className="w-3.5 h-3.5" />
+              Send
+            </>
+          )}
         </Button>
       </div>
     </div>

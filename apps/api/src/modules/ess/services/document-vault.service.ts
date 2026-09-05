@@ -1,4 +1,5 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { AuditService } from "../../audit/audit.service.js";
 import { PrismaService } from "../../prisma/prisma.service.js";
@@ -103,11 +104,36 @@ export class DocumentVaultService {
       throw new NotFoundException("Employee record not found in this organization.");
     }
 
-    const objectKey = `documents/${targetEmployeeId}/${Date.now()}_${dto.fileName.replace(/\s+/g, "_")}`;
     const bufferToSave = fileBuffer ?? (dto.fileBase64 ? Buffer.from(dto.fileBase64, "base64") : Buffer.from(""));
-    const finalSize = dto.fileSize ?? bufferToSave.length;
+    const finalSize = bufferToSave.length > 0 ? bufferToSave.length : (dto.fileSize ?? 0);
+
+    const MAX_SIZE_BYTES = 15 * 1024 * 1024;
+    if (finalSize > MAX_SIZE_BYTES) {
+      throw new BadRequestException("File size exceeds 15MB maximum allowed limit.");
+    }
+
+    const ALLOWED_MIMES = [
+      "application/pdf",
+      "image/png",
+      "image/jpeg",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ];
+    if (dto.mimeType && !ALLOWED_MIMES.includes(dto.mimeType)) {
+      throw new BadRequestException("Unsupported document format. Allowed formats: PDF, PNG, JPEG, DOC, DOCX.");
+    }
+
+    const sha256Hash = createHash("sha256").update(bufferToSave).digest("hex");
+    const safeFileName = dto.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const objectKey = `tenants/${tenantId}/documents/${targetEmployeeId}/${Date.now()}_${safeFileName}`;
 
     await this.storageProvider.upload(objectKey, bufferToSave, dto.mimeType);
+
+    const metadataToSave = {
+      ...((dto.metadata as Record<string, unknown>) ?? {}),
+      sha256Hash,
+      originalFileName: dto.fileName
+    };
 
     const doc = await this.prisma.employeeDocument.create({
       data: {
@@ -115,13 +141,13 @@ export class DocumentVaultService {
         employeeId: targetEmployeeId,
         documentType: dto.documentType,
         title: dto.title,
-        fileName: dto.fileName,
+        fileName: safeFileName,
         fileSize: finalSize,
         mimeType: dto.mimeType,
         filePath: objectKey,
         isVerified: false,
         expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : null,
-        metadata: (dto.metadata ?? {}) as Prisma.InputJsonValue
+        metadata: metadataToSave as Prisma.InputJsonValue
       },
       include: {
         employee: { select: { id: true, fullName: true, employeeCode: true } }

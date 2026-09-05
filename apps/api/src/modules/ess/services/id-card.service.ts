@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service.js";
 
@@ -28,14 +29,17 @@ export class IdCardService {
       throw new NotFoundException("Employee or Organization record not found.");
     }
 
+    // HMAC-signed opaque verification credential to prevent PII exposure in plain-text QR
+    const verificationSecret = process.env.ID_VERIFICATION_SECRET || process.env.JWT_SECRET || "aiavro-id-credential-secret";
+    const dataToSign = `${tenantId}:${employee.id}:${employee.employeeCode}`;
+    const hmacSignature = createHmac("sha256", verificationSecret).update(dataToSign).digest("hex").slice(0, 32);
     const qrPayload = JSON.stringify({
-      org: tenant.slug,
       code: employee.employeeCode,
-      name: employee.fullName,
-      dept: employee.department.name,
-      role: employee.designation.name,
       valid: true,
-      issued: employee.joiningDate.toISOString().slice(0, 10)
+      org: tenant.slug,
+      issued: employee.joiningDate.toISOString().slice(0, 10),
+      token: `vcard:v1:${tenant.id.slice(0, 8)}:${employee.id}:${hmacSignature}`,
+      signature: hmacSignature
     });
 
     const emergency =

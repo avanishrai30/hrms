@@ -33,6 +33,7 @@ import { LearningModule } from "./learning/learning.module.js";
 import { WorkforceModule } from "./workforce/workforce.module.js";
 import { WorkforceOperationsModule } from "./workforce-operations/workforce-operations.module.js";
 import { EngagementModule } from "./engagement/engagement.module.js";
+import { SecurityModule } from "./security/security.module.js";
 import { SearchModule } from "./search/search.module.js";
 import { VendorsModule } from "./vendors/vendors.module.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
@@ -55,6 +56,7 @@ import { HealthModule } from "./health/health.module.js";
     AuthModule,
     TenantsModule,
     UsersModule,
+    SecurityModule,
     EmployeesModule,
     AttendanceModule,
     LocationsModule,

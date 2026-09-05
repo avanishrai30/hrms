@@ -83,6 +83,25 @@ export class UsersService {
 
   async assignRoles(tenantId: string, membershipId: string, input: AssignRolesDto, actorUserId: string, actorMembershipId: string) {
     const before = await this.getMembership(tenantId, membershipId);
+
+    const isDemotingOwner =
+      before.roles.some((r) => r.role.code === "TENANT_OWNER") &&
+      !input.roles.includes("TENANT_OWNER");
+
+    if (isDemotingOwner) {
+      const otherActiveOwnersCount = await this.prisma.tenantMembershipRole.count({
+        where: {
+          tenantId,
+          membershipId: { not: membershipId },
+          role: { code: "TENANT_OWNER" },
+          membership: { status: "ACTIVE" }
+        }
+      });
+      if (otherActiveOwnersCount === 0) {
+        throw new BadRequestException("Cannot remove TENANT_OWNER role from the sole active organization owner.");
+      }
+    }
+
     const roles = await this.findRolesByCode(tenantId, input.roles);
     await this.replaceRoles(tenantId, membershipId, roles.map((role) => role.id));
     const after = await this.getMembership(tenantId, membershipId);
@@ -116,6 +135,24 @@ export class UsersService {
 
   async updateStatus(tenantId: string, membershipId: string, input: UpdateUserStatusDto, actorUserId: string, actorMembershipId: string) {
     const before = await this.getMembership(tenantId, membershipId);
+
+    if (input.status !== "ACTIVE") {
+      const hasOwnerRole = before.roles.some((r) => r.role.code === "TENANT_OWNER");
+      if (hasOwnerRole) {
+        const otherActiveOwnersCount = await this.prisma.tenantMembershipRole.count({
+          where: {
+            tenantId,
+            membershipId: { not: membershipId },
+            role: { code: "TENANT_OWNER" },
+            membership: { status: "ACTIVE" }
+          }
+        });
+        if (otherActiveOwnersCount === 0) {
+          throw new BadRequestException("Cannot deactivate or suspend the sole active TENANT_OWNER.");
+        }
+      }
+    }
+
     const membership = await this.prisma.tenantMembership.update({
       where: { id: membershipId },
       data: { status: input.status }

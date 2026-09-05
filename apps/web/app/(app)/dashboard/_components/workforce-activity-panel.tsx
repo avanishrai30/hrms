@@ -218,6 +218,17 @@ export function WorkforceActivityPanel() {
       await punchMutation.mutateAsync(buildPunchPayload({ action }));
     };
 
+    const isLocationRequired = Boolean(attendance?.rules?.requireGeofence);
+    if (!isLocationRequired) {
+      try {
+        setLocationState(null);
+        await punchMutation.mutateAsync(buildPunchPayload({ action }));
+      } catch (err: unknown) {
+        setActionError(err instanceof Error ? err.message : "Punch failed.");
+      }
+      return;
+    }
+
     if (typeof window === "undefined" || !("geolocation" in navigator)) {
       try {
         await submitWithoutCoordinates("unsupported");

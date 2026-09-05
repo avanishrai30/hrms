@@ -44,7 +44,11 @@ export default function SecurityAdminPage() {
         apiRequest<SecurityMetrics>("/security/metrics").catch(() => null)
       ]);
 
-      const items = Array.isArray(alertsRes) ? alertsRes : alertsRes.alerts ?? [];
+      const items = Array.isArray(alertsRes)
+        ? alertsRes
+        : (alertsRes as { items?: SuspiciousActivityView[]; alerts?: SuspiciousActivityView[] }).items ??
+          (alertsRes as { items?: SuspiciousActivityView[]; alerts?: SuspiciousActivityView[] }).alerts ??
+          [];
       setAlerts(items);
       setMetrics(metricsRes);
     } catch (err: unknown) {

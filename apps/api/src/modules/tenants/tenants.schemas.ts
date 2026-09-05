@@ -20,14 +20,14 @@ export const tenantStatusSchema = z.object({
 });
 
 export const updateSettingsSchema = z.object({
-  timezone: z.string().min(2),
-  locale: z.string().min(2),
-  currency: z.string().length(3),
-  weekStartDay: z.number().int().min(0).max(6),
-  payrollCycleDay: z.number().int().min(1).max(28),
-  attendanceTimezone: z.string().min(2),
-  defaultWorkingDaysPerMonth: z.number().int().min(1).max(31),
-  metadata: z.record(z.unknown()).default({})
+  timezone: z.string().min(2).optional(),
+  locale: z.string().min(2).optional(),
+  currency: z.string().length(3).optional(),
+  weekStartDay: z.number().int().min(0).max(6).optional(),
+  payrollCycleDay: z.number().int().min(1).max(28).optional(),
+  attendanceTimezone: z.string().min(2).optional(),
+  defaultWorkingDaysPerMonth: z.number().int().min(1).max(31).optional(),
+  metadata: z.record(z.unknown()).optional()
 });
 
 export const updateBrandingSchema = z.object({

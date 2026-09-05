@@ -186,8 +186,16 @@ export default function PayrollRunWorkbenchPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <span>{error}</span>
+          {error.toLowerCase().includes("statutory") || error.toLowerCase().includes("jurisdiction") || error.toLowerCase().includes("policy") ? (
+            <Link
+              href={"/admin/business-context" as Route}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-700 text-white text-xs font-semibold hover:bg-red-800 transition shrink-0"
+            >
+              Configure Statutory Settings &rarr;
+            </Link>
+          ) : null}
         </div>
       )}
 

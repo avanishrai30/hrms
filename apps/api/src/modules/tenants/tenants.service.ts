@@ -145,9 +145,24 @@ export class TenantsService {
 
   async updateSettings(tenantId: string, input: UpdateSettingsDto, actorUserId: string, membershipId: string) {
     const before = await this.getSettings(tenantId);
+    const existingMeta = (before.metadata as Record<string, unknown>) ?? {};
+    const mergedMetadata = input.metadata !== undefined
+      ? { ...existingMeta, ...input.metadata }
+      : undefined;
+
+    const dataToUpdate: Prisma.TenantSettingsUpdateInput = {};
+    if (input.timezone !== undefined) dataToUpdate.timezone = input.timezone;
+    if (input.locale !== undefined) dataToUpdate.locale = input.locale;
+    if (input.currency !== undefined) dataToUpdate.currency = input.currency;
+    if (input.weekStartDay !== undefined) dataToUpdate.weekStartDay = input.weekStartDay;
+    if (input.payrollCycleDay !== undefined) dataToUpdate.payrollCycleDay = input.payrollCycleDay;
+    if (input.attendanceTimezone !== undefined) dataToUpdate.attendanceTimezone = input.attendanceTimezone;
+    if (input.defaultWorkingDaysPerMonth !== undefined) dataToUpdate.defaultWorkingDaysPerMonth = input.defaultWorkingDaysPerMonth;
+    if (mergedMetadata !== undefined) dataToUpdate.metadata = mergedMetadata as Prisma.InputJsonValue;
+
     const settings = await this.prisma.tenantSettings.update({
       where: { tenantId },
-      data: { ...input, metadata: input.metadata as Prisma.InputJsonValue }
+      data: dataToUpdate
     });
     await this.auditService.record({
       tenantId,
@@ -224,7 +239,7 @@ export class TenantsService {
     return domain;
   }
 
-  private async findTenant(tenantId: string) {
+  async findTenant(tenantId: string) {
     return this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
   }
 

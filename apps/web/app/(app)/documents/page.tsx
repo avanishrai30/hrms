@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   FileText,
   Plus,
@@ -10,7 +10,10 @@ import {
   X,
   Send,
   Download,
-  ShieldCheck
+  ShieldCheck,
+  UploadCloud,
+  FileCheck,
+  Loader2
 } from "lucide-react";
 import {
   useEmployeeDocuments,
@@ -18,7 +21,7 @@ import {
   useDeleteDocumentMutation
 } from "../../../lib/queries/use-ess-queries";
 import { usePermissionGate } from "../../../lib/session-store";
-import { apiRequest } from "../../../lib/api";
+import { apiRequest, downloadAuthenticatedFile } from "../../../lib/api";
 import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-states";
 
 const DOCUMENT_TYPES = [
@@ -35,6 +38,14 @@ const DOCUMENT_TYPES = [
   { value: "CUSTOM", label: "Other Document" }
 ];
 
+const ALLOWED_MIME_TYPES = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+];
+
 export default function EmployeeDocumentsPage() {
   const gate = usePermissionGate(["documents.view", "ess.read"]);
 
@@ -43,13 +54,47 @@ export default function EmployeeDocumentsPage() {
   const [documentType, setDocumentType] = useState("PAN");
   const [title, setTitle] = useState("");
   const [fileName, setFileName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileBase64, setFileBase64] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: documents = [], isLoading, isError, refetch } = useEmployeeDocuments(gate.isAuthorized);
   const uploadMutation = useUploadDocumentMutation();
   const deleteMutation = useDeleteDocumentMutation();
+
+  const handleFileSelect = (file: File) => {
+    setFormError(null);
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+      setFormError("Only PDF, PNG, JPEG, and Word documents (.doc, .docx) are supported.");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setFormError("File size exceeds 15MB maximum allowed limit.");
+      return;
+    }
+
+    setSelectedFile(file);
+    setFileName(file.name);
+    if (!title.trim()) {
+      const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf(".")) || file.name;
+      setTitle(nameWithoutExt);
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(",")[1];
+      setFileBase64(base64 ?? null);
+    };
+    reader.onerror = () => {
+      setFormError("Failed to read the selected file.");
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,11 +109,14 @@ export default function EmployeeDocumentsPage() {
         documentType,
         title: title.trim(),
         fileName: fileName.trim(),
-        mimeType: "application/pdf"
+        fileBase64: fileBase64 || undefined,
+        mimeType: selectedFile?.type || "application/pdf"
       });
       setIsRegisterOpen(false);
       setTitle("");
       setFileName("");
+      setSelectedFile(null);
+      setFileBase64(null);
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : "Failed to register document.");
     }
@@ -82,14 +130,7 @@ export default function EmployeeDocumentsPage() {
       if (!res?.downloadUrl) {
         throw new Error("No download URL returned from secure storage.");
       }
-      const a = document.createElement("a");
-      a.href = res.downloadUrl;
-      a.download = res.fileName || docName || "document.pdf";
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      await downloadAuthenticatedFile(res.downloadUrl, res.fileName || docName || "document.pdf");
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : "Failed to retrieve secure document download URL.");
     } finally {
@@ -269,6 +310,80 @@ export default function EmployeeDocumentsPage() {
                 </div>
               )}
 
+              {/* Drag and Drop Zone */}
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleFileSelect(e.dataTransfer.files[0]);
+                  }
+                }}
+                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-control p-6 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2 ${
+                  isDragging
+                    ? "border-primary bg-primary-soft/30"
+                    : "border-border hover:border-primary/50 bg-surface/50"
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleFileSelect(e.target.files[0]);
+                    }
+                  }}
+                />
+
+                {selectedFile ? (
+                  <div className="flex items-center gap-3 w-full bg-surface p-2.5 rounded-control border border-border">
+                    <div className="w-8 h-8 rounded-control bg-primary-soft text-primary flex items-center justify-center shrink-0">
+                      <FileCheck className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1 text-left">
+                      <p className="text-xs font-semibold text-foreground truncate">{selectedFile.name}</p>
+                      <p className="text-[10px] text-foreground-muted">
+                        {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • {selectedFile.type || "binary"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedFile(null);
+                        setFileBase64(null);
+                        setFileName("");
+                      }}
+                      className="p-1 rounded-control hover:bg-surface-muted text-foreground-muted hover:text-danger"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-10 h-10 rounded-full bg-primary-soft text-primary flex items-center justify-center">
+                      <UploadCloud className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">
+                        Drop document here, or <span className="text-primary hover:underline">browse</span>
+                      </p>
+                      <p className="text-[11px] text-foreground-muted mt-0.5">
+                        PDF, PNG, JPG, DOC, DOCX up to 15MB
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-foreground">Document Type</label>
                 <select
@@ -297,7 +412,7 @@ export default function EmployeeDocumentsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground">File Reference Name</label>
+                <label className="text-xs font-bold text-foreground">File Name</label>
                 <input
                   type="text"
                   value={fileName}
@@ -311,7 +426,11 @@ export default function EmployeeDocumentsPage() {
               <div className="pt-3 border-t border-border-subtle flex justify-end gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setIsRegisterOpen(false)}
+                  onClick={() => {
+                    setIsRegisterOpen(false);
+                    setSelectedFile(null);
+                    setFileBase64(null);
+                  }}
                   className="px-4 py-2 rounded-control bg-surface-muted hover:bg-muted text-xs font-semibold text-foreground-secondary transition"
                 >
                   Cancel
@@ -321,10 +440,15 @@ export default function EmployeeDocumentsPage() {
                   disabled={uploadMutation.isPending}
                   className="px-5 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-bold transition shadow-sm inline-flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  {uploadMutation.isPending ? "Registering..." : (
+                  {uploadMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Uploading & Encrypting...
+                    </>
+                  ) : (
                     <>
                       <Send className="w-3.5 h-3.5" />
-                      Save Record
+                      Upload Document
                     </>
                   )}
                 </button>

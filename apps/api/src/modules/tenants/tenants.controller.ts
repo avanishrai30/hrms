@@ -59,6 +59,18 @@ export class TenantsController {
 export class TenantSelfController {
   constructor(private readonly tenantsService: TenantsService) {}
 
+  @Get("current")
+  @RequirePermissions("tenant.settings.read")
+  async currentTenant(@Req() request: AuthenticatedRequest) {
+    const tenantId = requireTenantContext(request).tenantId;
+    const tenant = await this.tenantsService.findTenant(tenantId);
+    const settings = await this.tenantsService.getSettings(tenantId);
+    return {
+      ...tenant,
+      settings
+    };
+  }
+
   @Get("settings")
   @RequirePermissions("tenant.settings.read")
   settings(@Req() request: AuthenticatedRequest) {

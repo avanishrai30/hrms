@@ -26,6 +26,7 @@ import {
   requestFilterSchema,
   resolveEmployeeRequestSchema,
   updateProfileSchema,
+  uploadAvatarSchema,
   uploadDocumentSchema,
   verifyDocumentSchema,
   generateLetterSchema,
@@ -39,6 +40,7 @@ import {
   type RequestFilterDto,
   type ResolveEmployeeRequestDto,
   type UpdateProfileDto,
+  type UploadAvatarDto,
   type UploadDocumentDto,
   type VerifyDocumentDto,
   type GenerateLetterDto,
@@ -88,6 +90,33 @@ export class EssController {
       queryEmployeeId || (await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId));
 
     return this.essService.updateProfile(tenant.tenantId, targetEmployeeId, body, tenant.userId);
+  }
+
+  @Post("profile/avatar")
+  @RequirePermissions("profile.update")
+  async uploadAvatar(
+    @Req() req: AuthenticatedRequest,
+    @Body(new ZodValidationPipe(uploadAvatarSchema)) body: UploadAvatarDto,
+    @Query("employeeId") queryEmployeeId?: string
+  ) {
+    const tenant = requireTenantContext(req);
+    const targetEmployeeId =
+      queryEmployeeId || (await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId));
+
+    return this.essService.uploadAvatar(tenant.tenantId, targetEmployeeId, body, tenant.userId);
+  }
+
+  @Delete("profile/avatar")
+  @RequirePermissions("profile.update")
+  async removeAvatar(
+    @Req() req: AuthenticatedRequest,
+    @Query("employeeId") queryEmployeeId?: string
+  ) {
+    const tenant = requireTenantContext(req);
+    const targetEmployeeId =
+      queryEmployeeId || (await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId));
+
+    return this.essService.removeAvatar(tenant.tenantId, targetEmployeeId, tenant.userId);
   }
 
   // ----------------- Document Vault Endpoints -----------------

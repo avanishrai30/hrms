@@ -6,10 +6,48 @@ import Link from "next/link";
 import { Badge } from "../../../components/ui";
 import { apiRequest } from "../../../lib/api";
 import { AnalyticsFilterBar, type AnalyticsFilterState } from "./components/analytics-filter-bar";
-import type { ExecutiveDashboardView } from "@vc-wms/shared-types";
+
+interface ExecutiveAnalyticsResult {
+  headcount?: {
+    total: number;
+    active: number;
+    inactive?: number;
+    probation: number;
+    notice: number;
+  };
+  newHiresThisMonth?: number;
+  attritionRate?: number;
+  attendanceRate?: number;
+  leaveUtilizationPercentage?: number;
+  payroll?: {
+    totalCost: number;
+    overtimeCost: number;
+    grossSalary: number;
+    netSalary: number;
+    averageSalary: number;
+    employerContributions: number;
+    currency?: string;
+  };
+  statutoryLiabilities?: {
+    totalPf: number;
+    totalEsi: number;
+    totalPt: number;
+    totalTds: number;
+    totalLiability: number;
+  };
+  distributions?: {
+    department?: Array<{ departmentName: string; count: number; percentage: number }>;
+    gender?: Array<{ gender: string; count: number; percentage: number }>;
+    employmentType?: Array<{ employmentType: string; count: number; percentage: number }>;
+  };
+  biometrics?: {
+    faceMatchPercentage?: number;
+    livenessSuccessPercentage?: number;
+  };
+}
 
 export default function AnalyticsHubPage() {
-  const [data, setData] = useState<ExecutiveDashboardView | null>(null);
+  const [data, setData] = useState<ExecutiveAnalyticsResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<AnalyticsFilterState>({
@@ -22,8 +60,8 @@ export default function AnalyticsHubPage() {
     try {
       setIsLoading(true);
       setError(null);
-      const res = await apiRequest<ExecutiveDashboardView>("/analytics/overview");
-      setData(res);
+      const res = await apiRequest<ExecutiveAnalyticsResult>("/analytics/overview");
+      setData(res && typeof res === "object" ? res : null);
     } catch (err: unknown) {
       setData(null);
       setError(err instanceof Error ? err.message : "Failed to load analytics overview.");
@@ -36,6 +74,8 @@ export default function AnalyticsHubPage() {
     void loadData();
   }, [filters]);
 
+  const currency = data?.payroll?.currency || "INR";
+
   const domainDashboards = [
     {
       title: "Executive Intelligence",
@@ -44,9 +84,9 @@ export default function AnalyticsHubPage() {
       badgeTone: "success" as const,
       description: "Holistic multi-dimensional KPI command center: headcount, attrition velocity, payroll burn, and statutory health.",
       kpis: [
-        { label: "Active Staff", value: data ? String(data.headcount.active) : "—" },
-        { label: "Attendance Rate", value: data ? `${data.attendanceToday.attendanceRate}%` : "—" },
-        { label: "Gross Payroll", value: data?.payrollLiability ? data.payrollLiability.totalGross.toLocaleString() : "—" }
+        { label: "Active Staff", value: data?.headcount ? String(data.headcount.active) : "—" },
+        { label: "Attendance Rate", value: data?.attendanceRate !== undefined ? `${data.attendanceRate}%` : "—" },
+        { label: "Gross Payroll", value: data?.payroll?.grossSalary !== undefined ? `${currency} ${data.payroll.grossSalary.toLocaleString()}` : "—" }
       ],
       icon: "🏢"
     },
@@ -57,9 +97,9 @@ export default function AnalyticsHubPage() {
       badgeTone: "neutral" as const,
       description: "12-month headcount trajectory, hiring vs attrition delta, department growth, age brackets, and manager span of control.",
       kpis: [
-        { label: "Total Headcount", value: data ? String(data.headcount.total) : "—" },
-        { label: "Probation", value: data ? String(data.headcount.probation) : "—" },
-        { label: "Notice Period", value: data ? String(data.headcount.notice) : "—" }
+        { label: "Total Headcount", value: data?.headcount ? String(data.headcount.total) : "—" },
+        { label: "Probation", value: data?.headcount ? String(data.headcount.probation) : "—" },
+        { label: "Notice Period", value: data?.headcount ? String(data.headcount.notice) : "—" }
       ],
       icon: "👥"
     },
@@ -70,9 +110,9 @@ export default function AnalyticsHubPage() {
       badgeTone: "neutral" as const,
       description: "24x7 punch density heatmap, punctuality indexes, missing checkouts, geofence radius adherence, and fraud telemetry.",
       kpis: [
-        { label: "Today Present", value: data ? String(data.attendanceToday.present) : "—" },
-        { label: "Late Arrivals", value: data ? String(data.attendanceToday.late) : "—" },
-        { label: "Absences", value: data ? String(data.attendanceToday.absent) : "—" }
+        { label: "Attendance Rate", value: data?.attendanceRate !== undefined ? `${data.attendanceRate}%` : "—" },
+        { label: "Active Staff", value: data?.headcount ? String(data.headcount.active) : "—" },
+        { label: "Shift Coverage", value: data?.attendanceRate !== undefined ? `${data.attendanceRate}% Active` : "—" }
       ],
       icon: "⏱️"
     },
@@ -83,9 +123,9 @@ export default function AnalyticsHubPage() {
       badgeTone: "warning" as const,
       description: "Accrual velocity, balance burn forecast, sandwich penalty impact, approval turnaround time, and seasonal leave surges.",
       kpis: [
-        { label: "Today on Leave", value: data ? String(data.attendanceToday.onLeave) : "—" },
-        { label: "Half Day", value: data ? String(data.attendanceToday.halfDay) : "—" },
-        { label: "Status", value: data ? "Active Tracking" : "—" }
+        { label: "Utilization Rate", value: data?.leaveUtilizationPercentage !== undefined ? `${data.leaveUtilizationPercentage}%` : "—" },
+        { label: "Active Staff", value: data?.headcount ? String(data.headcount.active) : "—" },
+        { label: "Policy Tracking", value: "Active" }
       ],
       icon: "🌴"
     },
@@ -96,9 +136,9 @@ export default function AnalyticsHubPage() {
       badgeTone: "success" as const,
       description: "12-month expense trajectory, net payable disbursal, salary band distribution, allowance/deduction split, and budget variance.",
       kpis: [
-        { label: "Gross Spend", value: data?.payrollLiability ? data.payrollLiability.totalGross.toLocaleString() : "—" },
-        { label: "Net Disbursed", value: data?.payrollLiability ? data.payrollLiability.totalNet.toLocaleString() : "—" },
-        { label: "Employer Contrib", value: data?.payrollLiability ? data.payrollLiability.totalEmployerContributions.toLocaleString() : "—" }
+        { label: "Gross Spend", value: data?.payroll?.grossSalary !== undefined ? `${currency} ${data.payroll.grossSalary.toLocaleString()}` : "—" },
+        { label: "Net Disbursed", value: data?.payroll?.netSalary !== undefined ? `${currency} ${data.payroll.netSalary.toLocaleString()}` : "—" },
+        { label: "Employer Contrib", value: data?.payroll?.employerContributions !== undefined ? `${currency} ${data.payroll.employerContributions.toLocaleString()}` : "—" }
       ],
       icon: "💰"
     },
@@ -109,9 +149,9 @@ export default function AnalyticsHubPage() {
       badgeTone: "success" as const,
       description: "Statutory Health Index (PF, ESI, PT, TDS), overdue returns tracker, monthly challan liabilities, and penalty risk gauges.",
       kpis: [
-        { label: "Total Liability", value: data?.statutoryLiability ? data.statutoryLiability.totalLiability.toLocaleString() : "—" },
-        { label: "PF Liability", value: data?.statutoryLiability ? data.statutoryLiability.totalPf.toLocaleString() : "—" },
-        { label: "TDS Liability", value: data?.statutoryLiability ? data.statutoryLiability.totalTds.toLocaleString() : "—" }
+        { label: "Total Liability", value: data?.statutoryLiabilities?.totalLiability !== undefined ? `${currency} ${data.statutoryLiabilities.totalLiability.toLocaleString()}` : "—" },
+        { label: "PF Liability", value: data?.statutoryLiabilities?.totalPf !== undefined ? `${currency} ${data.statutoryLiabilities.totalPf.toLocaleString()}` : "—" },
+        { label: "TDS Liability", value: data?.statutoryLiabilities?.totalTds !== undefined ? `${currency} ${data.statutoryLiabilities.totalTds.toLocaleString()}` : "—" }
       ],
       icon: "⚖️"
     },
@@ -122,8 +162,8 @@ export default function AnalyticsHubPage() {
       badgeTone: "danger" as const,
       description: "Liveness verification pass rates, anti-spoof attack telemetry, camera sensor quality, and sub-second matching latency metrics.",
       kpis: [
-        { label: "Modality", value: "Face Liveness" },
-        { label: "Telemetry", value: "Real-time" },
+        { label: "Face Match", value: data?.biometrics?.faceMatchPercentage !== undefined ? `${data.biometrics.faceMatchPercentage}%` : "—" },
+        { label: "Liveness Rate", value: data?.biometrics?.livenessSuccessPercentage !== undefined ? `${data.biometrics.livenessSuccessPercentage}%` : "—" },
         { label: "Audit Trail", value: "Verified" }
       ],
       icon: "👁️"
@@ -135,8 +175,8 @@ export default function AnalyticsHubPage() {
       badgeTone: "neutral" as const,
       description: "Business units, operating regions, team hierarchy depth, manager workload balance, and cross-functional distribution.",
       kpis: [
-        { label: "Departments", value: data ? `${data.departmentDistribution.length} Active` : "—" },
-        { label: "Workforce", value: data ? String(data.headcount.total) : "—" },
+        { label: "Departments", value: data?.distributions?.department ? `${data.distributions.department.length} Active` : "—" },
+        { label: "Workforce", value: data?.headcount ? String(data.headcount.total) : "—" },
         { label: "Status", value: data ? "Healthy" : "—" }
       ],
       icon: "🏛️"
@@ -188,8 +228,14 @@ export default function AnalyticsHubPage() {
       />
 
       {error && (
-        <div className="rounded-panel border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
+        <div className="rounded-panel border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button
+            onClick={() => void loadData()}
+            className="rounded-control border border-red-300 bg-white px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -201,14 +247,14 @@ export default function AnalyticsHubPage() {
             <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
               Total Workforce
             </span>
-            <Badge tone="success">{data ? `${data.headcount.active} Active` : "—"}</Badge>
+            <Badge tone="success">{data?.headcount ? `${data.headcount.active} Active` : "—"}</Badge>
           </div>
           <div className="mt-2 text-3xl font-extrabold text-zinc-950">
-            {data ? data.headcount.total : "—"}
+            {data?.headcount ? data.headcount.total : "—"}
           </div>
           <div className="mt-2 text-xs text-zinc-500 flex items-center gap-1.5">
-            <span className="font-medium text-zinc-700">{data ? data.headcount.probation : "—"}</span> Probation •{" "}
-            <span className="font-medium text-zinc-700">{data ? data.headcount.notice : "—"}</span> Notice
+            <span className="font-medium text-zinc-700">{data?.headcount ? data.headcount.probation : "—"}</span> Probation •{" "}
+            <span className="font-medium text-zinc-700">{data?.headcount ? data.headcount.notice : "—"}</span> Notice
           </div>
         </div>
 
@@ -218,15 +264,14 @@ export default function AnalyticsHubPage() {
             <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
               Today Attendance
             </span>
-            <Badge tone="neutral">{data ? `${data.attendanceToday.attendanceRate}% Rate` : "—"}</Badge>
+            <Badge tone="neutral">{data?.attendanceRate !== undefined ? `${data.attendanceRate}% Rate` : "—"}</Badge>
           </div>
           <div className="mt-2 text-3xl font-extrabold text-primary">
-            {data ? data.attendanceToday.present : "—"}
-            <span className="text-sm font-normal text-zinc-500 ml-1.5">Present</span>
+            {data?.attendanceRate !== undefined ? `${data.attendanceRate}%` : "—"}
+            <span className="text-sm font-normal text-zinc-500 ml-1.5">Coverage</span>
           </div>
           <div className="mt-2 text-xs text-zinc-500 flex items-center gap-1.5">
-            <span className="text-red-600 font-medium">{data ? data.attendanceToday.absent : "—"}</span> Absent •{" "}
-            <span className="text-amber-600 font-medium">{data ? data.attendanceToday.late : "—"}</span> Late Arrivals
+            Active Staff: <span className="text-zinc-800 font-medium">{data?.headcount ? data.headcount.active : "—"}</span>
           </div>
         </div>
 
@@ -237,15 +282,15 @@ export default function AnalyticsHubPage() {
               Monthly Payroll Run
             </span>
             <span className="text-[11px] font-mono text-zinc-400 font-medium">
-              {data?.payrollLiability ? `${String(data.payrollLiability.latestMonth).padStart(2, "0")}/${data.payrollLiability.latestYear}` : "—"}
+              {currency}
             </span>
           </div>
           <div className="mt-2 text-3xl font-extrabold text-zinc-950">
-            {data?.payrollLiability ? data.payrollLiability.totalGross.toLocaleString() : "—"}
+            {data?.payroll?.grossSalary !== undefined ? `${currency} ${data.payroll.grossSalary.toLocaleString()}` : "—"}
           </div>
           <div className="mt-2 text-xs text-zinc-500 flex items-center gap-1.5">
-            Net: <span className="font-semibold text-zinc-800">{data?.payrollLiability ? data.payrollLiability.totalNet.toLocaleString() : "—"}</span> • 
-            Employer: <span className="font-semibold text-zinc-800">{data?.payrollLiability ? data.payrollLiability.totalEmployerContributions.toLocaleString() : "—"}</span>
+            Net: <span className="font-semibold text-zinc-800">{data?.payroll?.netSalary !== undefined ? `${currency} ${data.payroll.netSalary.toLocaleString()}` : "—"}</span> • 
+            Employer: <span className="font-semibold text-zinc-800">{data?.payroll?.employerContributions !== undefined ? `${currency} ${data.payroll.employerContributions.toLocaleString()}` : "—"}</span>
           </div>
         </div>
 
@@ -258,10 +303,10 @@ export default function AnalyticsHubPage() {
             <Badge tone="warning">PF + ESI + PT + TDS</Badge>
           </div>
           <div className="mt-2 text-3xl font-extrabold text-amber-600">
-            {data?.statutoryLiability ? data.statutoryLiability.totalLiability.toLocaleString() : "—"}
+            {data?.statutoryLiabilities?.totalLiability !== undefined ? `${currency} ${data.statutoryLiabilities.totalLiability.toLocaleString()}` : "—"}
           </div>
           <div className="mt-2 text-xs text-zinc-500 flex items-center gap-1.5">
-            PF: <span className="font-semibold text-zinc-800">{data?.statutoryLiability ? data.statutoryLiability.totalPf.toLocaleString() : "—"}</span> • TDS: <span className="font-semibold text-zinc-800">{data?.statutoryLiability ? data.statutoryLiability.totalTds.toLocaleString() : "—"}</span>
+            PF: <span className="font-semibold text-zinc-800">{data?.statutoryLiabilities?.totalPf !== undefined ? `${currency} ${data.statutoryLiabilities.totalPf.toLocaleString()}` : "—"}</span> • TDS: <span className="font-semibold text-zinc-800">{data?.statutoryLiabilities?.totalTds !== undefined ? `${currency} ${data.statutoryLiabilities.totalTds.toLocaleString()}` : "—"}</span>
           </div>
         </div>
       </div>
