@@ -6,11 +6,18 @@ import { apiRequest } from "../../../../lib/api";
 import type { SeverityLevel, SuspiciousActivityType, SuspiciousActivityView } from "@vc-wms/shared-types";
 
 interface SecurityMetrics {
-  totalAlerts: number;
-  unresolvedAlerts: number;
-  criticalAlerts: number;
-  highAlerts: number;
-  activityBreakdown: Record<string, number>;
+  summary?: {
+    totalAlerts: number;
+    openAlerts: number;
+    resolvedAlerts: number;
+    last24hAlerts: number;
+  };
+  bySeverity?: Record<string, number>;
+  byActivityType?: Record<string, number>;
+  totalAlerts?: number;
+  unresolvedAlerts?: number;
+  criticalAlerts?: number;
+  highAlerts?: number;
 }
 
 export default function SecurityAdminPage() {
@@ -105,9 +112,9 @@ export default function SecurityAdminPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Security & Threat Hardening</h1>
-            {metrics && metrics.unresolvedAlerts > 0 && (
-              <Badge tone={metrics.criticalAlerts > 0 ? "danger" : "warning"}>
-                {metrics.unresolvedAlerts} Active Incidents
+            {metrics && (metrics.summary?.openAlerts ?? metrics.unresolvedAlerts ?? 0) > 0 && (
+              <Badge tone={(metrics.bySeverity?.CRITICAL ?? metrics.criticalAlerts ?? 0) > 0 ? "danger" : "warning"}>
+                {metrics.summary?.openAlerts ?? metrics.unresolvedAlerts ?? 0} Active Incidents
               </Badge>
             )}
           </div>
@@ -133,14 +140,16 @@ export default function SecurityAdminPage() {
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Panel className="p-4">
           <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Total Flagged Events</p>
-          <p className="mt-2 text-2xl font-bold text-zinc-950">{metrics?.totalAlerts ?? alerts.length}</p>
+          <p className="mt-2 text-2xl font-bold text-zinc-950">
+            {metrics?.summary?.totalAlerts ?? metrics?.totalAlerts ?? alerts.length}
+          </p>
           <p className="mt-1 text-xs text-zinc-400">All recorded anomaly logs</p>
         </Panel>
 
         <Panel className="p-4">
           <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Unresolved Alerts</p>
           <p className="mt-2 text-2xl font-bold text-amber-600">
-            {metrics?.unresolvedAlerts ?? alerts.filter((a) => !a.isResolved).length}
+            {metrics?.summary?.openAlerts ?? metrics?.unresolvedAlerts ?? alerts.filter((a) => !a.isResolved).length}
           </p>
           <p className="mt-1 text-xs text-zinc-400">Pending admin review</p>
         </Panel>
@@ -148,7 +157,8 @@ export default function SecurityAdminPage() {
         <Panel className="p-4">
           <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Critical / High Severity</p>
           <p className="mt-2 text-2xl font-bold text-red-600">
-            {metrics ? metrics.criticalAlerts + metrics.highAlerts : 0}
+            {(metrics?.bySeverity?.CRITICAL ?? metrics?.criticalAlerts ?? 0) +
+              (metrics?.bySeverity?.HIGH ?? metrics?.highAlerts ?? 0)}
           </p>
           <p className="mt-1 text-xs text-zinc-400">Immediate action advised</p>
         </Panel>
