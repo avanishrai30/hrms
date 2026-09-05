@@ -100,3 +100,7 @@ export function shouldRenderUnreadNotificationDot(unreadCount: number | null | u
 export function shouldRenderReleaseBadge(enabled: boolean | null | undefined): boolean {
   return enabled === true;
 }
+
+export function hasWorkforceAnalyticsPermission(permissions: string[] | null | undefined): boolean {
+  return Array.isArray(permissions) && permissions.includes("analytics.view");
+}

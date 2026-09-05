@@ -192,11 +192,7 @@ export function WorkforceActivityPanel() {
   const dayCount = period === "7days" ? 7 : period === "30days" ? 30 : 14;
 
   const permissions = useSessionStore((state) => state.permissions) || [];
-  const hasAnalyticsAccess =
-    permissions.includes("analytics.view") ||
-    permissions.includes("tenant.settings.read") ||
-    permissions.includes("employees.read") ||
-    permissions.includes("attendance.view");
+  const hasAnalyticsAccess = permissions.includes("analytics.view");
 
   const analyticsQuery = useAttendanceAnalytics(dayCount, hasAnalyticsAccess);
   const attendanceQuery = useAttendanceToday();

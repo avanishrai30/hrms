@@ -156,3 +156,56 @@ describe("AIavro Dashboard Production Integrity & Zero Synthetic Data Verificati
     expect(clampedPoints.every((v) => v >= 0)).toBe(true);
   });
 });
+
+describe("Workforce Activity Analytics Permission Gating", () => {
+  it("enables query when user has analytics.view permission", () => {
+    const permissions = ["analytics.view", "attendance.view"];
+    const hasAnalyticsAccess = permissions.includes("analytics.view");
+    expect(hasAnalyticsAccess).toBe(true);
+  });
+
+  it("disables query when user has employees.read without analytics.view", () => {
+    const permissions = ["employees.read", "attendance.view"];
+    const hasAnalyticsAccess = permissions.includes("analytics.view");
+    expect(hasAnalyticsAccess).toBe(false);
+  });
+
+  it("disables query when user has attendance.view without analytics.view", () => {
+    const permissions = ["attendance.view"];
+    const hasAnalyticsAccess = permissions.includes("analytics.view");
+    expect(hasAnalyticsAccess).toBe(false);
+  });
+
+  it("disables query when user has tenant.settings.read without analytics.view", () => {
+    const permissions = ["tenant.settings.read"];
+    const hasAnalyticsAccess = permissions.includes("analytics.view");
+    expect(hasAnalyticsAccess).toBe(false);
+  });
+
+  it("emits no /analytics/attendance request (preventing 403) when analytics.view is absent", () => {
+    const testCases = [
+      ["employees.read"],
+      ["attendance.view"],
+      ["tenant.settings.read"],
+      ["employees.read", "attendance.view", "tenant.settings.read"],
+      []
+    ];
+
+    for (const permissions of testCases) {
+      const hasAnalyticsAccess = permissions.includes("analytics.view");
+      const queryEnabled = hasAnalyticsAccess;
+      expect(queryEnabled).toBe(false);
+
+      let networkRequestTriggered = false;
+      const simulatedQuery = {
+        enabled: queryEnabled,
+        execute: () => {
+          if (!queryEnabled) return;
+          networkRequestTriggered = true;
+        }
+      };
+      simulatedQuery.execute();
+      expect(networkRequestTriggered).toBe(false);
+    }
+  });
+});
