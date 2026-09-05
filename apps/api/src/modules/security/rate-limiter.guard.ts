@@ -4,6 +4,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Optional,
   SetMetadata
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
@@ -33,8 +34,8 @@ export class RateLimiterGuard implements CanActivate {
   private readonly config: RateLimitConfig;
 
   constructor(
-    private readonly reflector?: Reflector,
-    customConfig?: Partial<RateLimitConfig>
+    @Optional() private readonly reflector?: Reflector,
+    @Optional() customConfig?: Partial<RateLimitConfig>
   ) {
     this.config = { ...DEFAULT_CONFIG, ...customConfig };
   }
