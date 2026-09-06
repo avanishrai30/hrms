@@ -10,7 +10,6 @@ import {
   AttendanceStatus,
   LeaveRequestStatus,
   LeaveTransactionType,
-  SandwichPolicyType,
   type Prisma
 } from "@prisma/client";
 import { AuditService } from "../audit/audit.service.js";
@@ -285,17 +284,10 @@ export class LeavesService {
       throw new NotFoundException("Leave type not found.");
     }
 
-    const policy = leaveType.policies[0] ?? {
-      annualAllocationDays: 12,
-      allowNegativeBalance: false,
-      maxNegativeBalanceDays: 0,
-      maxConsecutiveDays: 15,
-      requiresManagerApproval: true,
-      requiresHrApproval: false,
-      requiresAttachment: false,
-      attachmentMandatoryAboveDays: 2,
-      sandwichPolicy: SandwichPolicyType.NONE
-    };
+    const policy = leaveType.policies[0];
+    if (!policy) {
+      throw new BadRequestException("No active leave policy is configured for this leave type.");
+    }
 
     const holidays = await this.prisma.holiday.findMany({
       where: { tenantId, date: { gte: start, lte: end } }
@@ -422,12 +414,17 @@ export class LeavesService {
       throw new NotFoundException("Leave request not found.");
     }
 
+    const reviewerMembership = await this.prisma.tenantMembership.findFirst({
+      where: { tenantId, userId: actorUserId },
+      select: { employeeId: true }
+    });
+
+    if (reviewerMembership?.employeeId === request.employeeId) {
+      throw new ForbiddenException("You cannot approve or reject your own leave request.");
+    }
+
     if (approverRole === "MANAGER") {
-      const reviewerMembership = await this.prisma.tenantMembership.findFirst({
-        where: { tenantId, userId: actorUserId },
-        select: { employeeId: true }
-      });
-      if (reviewerMembership?.employeeId && request.employee.managerEmployeeId !== reviewerMembership.employeeId) {
+      if (!reviewerMembership?.employeeId || request.employee.managerEmployeeId !== reviewerMembership.employeeId) {
         throw new ForbiddenException("You can only review leave requests for your direct reports.");
       }
     }

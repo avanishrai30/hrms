@@ -22,10 +22,6 @@ export default function NewEmployeeRequestPage() {
   const [addressState, setAddressState] = useState("");
   const [addressZip, setAddressZip] = useState("");
 
-  const [bankName, setBankName] = useState("");
-  const [bankAccount, setBankAccount] = useState("");
-  const [bankIfsc, setBankIfsc] = useState("");
-
   const [contactPhone, setContactPhone] = useState("");
   const [personalEmail, setPersonalEmail] = useState("");
 
@@ -50,15 +46,6 @@ export default function NewEmployeeRequestPage() {
           state: addressState,
           postalCode: addressZip,
           country: "India"
-        }
-      };
-    } else if (requestType === "BANK_CHANGE") {
-      payload = {
-        bankDetails: {
-          bankName,
-          accountNumber: bankAccount,
-          ifscCode: bankIfsc,
-          accountType: "SALARY"
         }
       };
     } else if (requestType === "PERSONAL_INFO_CORRECTION") {
@@ -140,7 +127,6 @@ export default function NewEmployeeRequestPage() {
               className="w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <option value="ADDRESS_CHANGE">Residential Address Update</option>
-              <option value="BANK_CHANGE">Salary Bank Account Change</option>
               <option value="PERSONAL_INFO_CORRECTION">Personal Contact Correction</option>
               <option value="SHIFT_CHANGE">Shift Timing Adjustment</option>
               <option value="DOCUMENT_UPDATE">Document & ID Update</option>
@@ -197,41 +183,6 @@ export default function NewEmployeeRequestPage() {
                   value={addressZip}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddressZip(e.target.value)}
                   placeholder="560001"
-                  required
-                />
-              </div>
-            </div>
-          </Panel>
-        )}
-
-        {requestType === "BANK_CHANGE" && (
-          <Panel className="p-6 space-y-4">
-            <h2 className="text-base font-semibold text-zinc-900">New Bank Account Details</h2>
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">Bank Name</label>
-              <Input
-                value={bankName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBankName(e.target.value)}
-                placeholder="e.g. HDFC Bank"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 mb-1">Account Number</label>
-                <Input
-                  value={bankAccount}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBankAccount(e.target.value)}
-                  placeholder="Account number"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 mb-1">IFSC Code</label>
-                <Input
-                  value={bankIfsc}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBankIfsc(e.target.value)}
-                  placeholder="e.g. HDFC0001234"
                   required
                 />
               </div>

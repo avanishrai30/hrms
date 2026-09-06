@@ -114,7 +114,7 @@ describe("Employee Request Service (Task 18)", () => {
     );
   });
 
-  it("approves employee request and auto-syncs approved changes to employee profile", async () => {
+  it("approves address requests and auto-syncs approved changes to employee profile", async () => {
     const approved = await reqService.approveRequest(tenantId, "req-1", approverUserId, {
       comments: "Address proof verified and approved."
     });
@@ -127,6 +127,24 @@ describe("Employee Request Service (Task 18)", () => {
         action: "requests.approved"
       })
     );
+  });
+
+  it("blocks generic bank-change approval from bypassing the dedicated bank workflow", async () => {
+    mockPrisma.employeeRequest.findFirst.mockResolvedValueOnce({
+      id: "req-bank",
+      tenantId,
+      employeeId,
+      requestType: "BANK_CHANGE",
+      status: "PENDING",
+      payloadJson: { bankDetails: { accountNumber: "123456789012", bankName: "HDFC Bank" } },
+      employee: { id: employeeId, fullName: "John Doe", employeeCode: "EMP001" }
+    });
+
+    await expect(
+      reqService.approveRequest(tenantId, "req-bank", approverUserId, {
+        comments: "Use payroll workflow."
+      })
+    ).rejects.toThrow("dedicated bank-details workflow");
   });
 
   it("rejects employee request with mandatory review comments", async () => {

@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   NotFoundException,
   Param,
@@ -34,6 +35,22 @@ export class LeavesController {
     private readonly leavesService: LeavesService,
     private readonly prisma: PrismaService
   ) {}
+
+  private async getLinkedEmployeeId(tenantId: string, userId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: {
+        tenantId,
+        memberships: { some: { userId } }
+      },
+      select: { id: true }
+    });
+
+    if (!employee) {
+      throw new NotFoundException("Employee profile not linked to user.");
+    }
+
+    return employee.id;
+  }
 
   @Get("types")
   @RequirePermissions("leave.view")
@@ -86,20 +103,11 @@ export class LeavesController {
       throw new BadRequestException("User ID is required.");
     }
 
-    const employee = await this.prisma.employee.findFirst({
-      where: {
-        tenantId: tenant.tenantId,
-        memberships: { some: { userId: actorUserId } }
-      }
-    });
-
-    if (!employee) {
-      throw new NotFoundException("Employee profile not linked to user.");
-    }
+    const employeeId = await this.getLinkedEmployeeId(tenant.tenantId, actorUserId);
 
     return this.leavesService.getEmployeeBalances(
       tenant.tenantId,
-      employee.id,
+      employeeId,
       year ? parseInt(year, 10) : undefined
     );
   }
@@ -112,6 +120,13 @@ export class LeavesController {
     @Query("year") year?: string
   ) {
     const tenant = requireTenantContext(req);
+    if (!tenant.permissions.includes("leave.manage")) {
+      const linkedEmployeeId = await this.getLinkedEmployeeId(tenant.tenantId, tenant.userId);
+      if (linkedEmployeeId !== employeeId) {
+        throw new ForbiddenException("You can only view leave balances for your own employee profile.");
+      }
+    }
+
     return this.leavesService.getEmployeeBalances(
       tenant.tenantId,
       employeeId,
@@ -145,17 +160,14 @@ export class LeavesController {
     const parsed = createLeaveRequestSchema.parse(body);
 
     let employeeId = parsed.employeeId;
-    if (!employeeId) {
-      const employee = await this.prisma.employee.findFirst({
-        where: {
-          tenantId: tenant.tenantId,
-          memberships: { some: { userId: tenant.userId } }
-        }
-      });
-      if (!employee) {
-        throw new NotFoundException("Employee profile not linked to user.");
+    if (employeeId && !tenant.permissions.includes("leave.manage")) {
+      const linkedEmployeeId = await this.getLinkedEmployeeId(tenant.tenantId, tenant.userId);
+      if (linkedEmployeeId !== employeeId) {
+        throw new ForbiddenException("You can only submit leave requests for your own employee profile.");
       }
-      employeeId = employee.id;
+    }
+    if (!employeeId) {
+      employeeId = await this.getLinkedEmployeeId(tenant.tenantId, tenant.userId);
     }
 
     return this.leavesService.createLeaveRequest(
@@ -179,18 +191,9 @@ export class LeavesController {
       throw new BadRequestException("User ID is required.");
     }
 
-    const employee = await this.prisma.employee.findFirst({
-      where: {
-        tenantId: tenant.tenantId,
-        memberships: { some: { userId: actorUserId } }
-      }
-    });
+    const employeeId = await this.getLinkedEmployeeId(tenant.tenantId, actorUserId);
 
-    if (!employee) {
-      throw new NotFoundException("Employee profile not linked to user.");
-    }
-
-    const parsed = leaveFilterSchema.parse({ ...(query as Record<string, unknown>), employeeId: employee.id });
+    const parsed = leaveFilterSchema.parse({ ...(query as Record<string, unknown>), employeeId });
     return this.leavesService.listLeaveRequests(tenant.tenantId, parsed);
   }
 
@@ -201,6 +204,10 @@ export class LeavesController {
     @Query() query: unknown
   ) {
     const tenant = requireTenantContext(req);
+    if (!tenant.permissions.includes("leave.manage")) {
+      throw new ForbiddenException("Tenant-wide leave requests require leave.manage.");
+    }
+
     const parsed = leaveFilterSchema.parse(query);
     return this.leavesService.listLeaveRequests(tenant.tenantId, parsed);
   }
@@ -282,6 +289,10 @@ export class LeavesController {
     @Query() query: unknown
   ) {
     const tenant = requireTenantContext(req);
+    if (!tenant.permissions.includes("leave.manage")) {
+      throw new ForbiddenException("Tenant-wide leave calendar requires leave.manage.");
+    }
+
     const parsed = calendarQuerySchema.parse(query);
     return this.leavesService.getCalendarEvents(tenant.tenantId, parsed);
   }

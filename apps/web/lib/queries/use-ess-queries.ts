@@ -363,8 +363,13 @@ export interface LeaveBalanceData {
   id: string;
   availableDays: number;
   allocatedDays?: number | null;
-  consumedDays?: number | null;
+  usedDays?: number | null;
+  pendingDays?: number | null;
   accruedDays?: number | null;
+  carriedForwardDays?: number | null;
+  expiredDays?: number | null;
+  manualAdjustedDays?: number | null;
+  consumedDays?: number | null;
   leaveType?: {
     id: string;
     name: string;
@@ -379,6 +384,24 @@ export interface LeaveTypeItem {
   code: string;
   description?: string;
   color?: string;
+  isPaid?: boolean;
+  category?: string;
+  policies?: Array<{
+    id?: string;
+    annualAllocationDays?: number;
+    accrualFrequency?: string;
+    accrualDaysPerPeriod?: number;
+    maxCarryForwardDays?: number;
+    allowNegativeBalance?: boolean;
+    maxNegativeBalanceDays?: number;
+    requiresManagerApproval?: boolean;
+    requiresHrApproval?: boolean;
+    requiresAttachment?: boolean;
+    attachmentMandatoryAboveDays?: number;
+    minimumNoticeDays?: number;
+    maxConsecutiveDays?: number;
+    sandwichPolicy?: string;
+  }>;
 }
 
 export interface LeaveRequestData {
@@ -387,18 +410,39 @@ export interface LeaveRequestData {
   startDate: string;
   endDate: string;
   daysCount?: number;
+  totalDays?: number;
+  deductedDays?: number;
+  isHalfDay?: boolean;
+  halfDaySession?: string | null;
   reason?: string;
+  rejectionReason?: string | null;
+  cancellationReason?: string | null;
+  attachmentObjectKey?: string | null;
+  metadata?: Record<string, unknown> | null;
   employee?: {
     id?: string;
     fullName?: string;
     employeeCode?: string;
+    department?: { name?: string } | string | null;
+    designation?: { name?: string } | string | null;
   } | null;
   leaveType?: {
     id?: string;
     name?: string;
     code?: string;
+    color?: string;
   } | null;
+  approvals?: Array<{
+    id?: string;
+    approverRole?: string;
+    action?: string;
+    note?: string | null;
+    decidedAt?: string;
+    approverUser?: { email?: string } | null;
+  }>;
   createdAt?: string;
+  updatedAt?: string;
+  cancelledAt?: string | null;
 }
 
 export interface HolidayData {
@@ -482,6 +526,8 @@ export function useSubmitLeaveRequest() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leaveKeys.all });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["manager", "approvals"] });
     }
   });
 }
@@ -489,13 +535,17 @@ export function useSubmitLeaveRequest() {
 export function useCancelLeaveRequest() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       apiRequest(`/leaves/requests/${id}/cancel`, {
         method: "POST",
-        body: JSON.stringify({ reason: "Cancelled by employee" })
+        body: JSON.stringify({ reason })
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leaveKeys.all });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["manager", "approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      queryClient.invalidateQueries({ queryKey: ["ess-attendance"] });
     }
   });
 }
@@ -508,7 +558,7 @@ export function useLeaveCalendar(startDate?: string, endDate?: string, enabled: 
   return useQuery({
     queryKey: ["ess-leaves", "calendar", { startDate, endDate }] as const,
     queryFn: async () => {
-      const res = await apiRequest<Array<{ id: string; employeeId: string; employeeName?: string; startDate: string; endDate: string; status: string; leaveType?: { name: string } }>>(`/leaves/calendar${qStr ? `?${qStr}` : ""}`);
+      const res = await apiRequest<Array<{ id: string; title: string; date: string; endDate?: string; type: "LEAVE" | "HOLIDAY"; employeeName?: string; color: string }>>(`/leaves/calendar${qStr ? `?${qStr}` : ""}`);
       return Array.isArray(res) ? res : [];
     },
     enabled,
@@ -536,11 +586,15 @@ export function useApproveLeaveRequest() {
     mutationFn: ({ id, comments }: { id: string; comments?: string }) =>
       apiRequest(`/leaves/requests/${id}/approve`, {
         method: "POST",
-        body: JSON.stringify({ comments })
+        body: JSON.stringify({ note: comments })
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leaveKeys.all });
       queryClient.invalidateQueries({ queryKey: ["ess-leaves", "all-requests"] });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["manager", "approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      queryClient.invalidateQueries({ queryKey: ["ess-attendance"] });
     }
   });
 }
@@ -551,11 +605,13 @@ export function useRejectLeaveRequest() {
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       apiRequest(`/leaves/requests/${id}/reject`, {
         method: "POST",
-        body: JSON.stringify({ reason })
+        body: JSON.stringify({ note: reason })
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leaveKeys.all });
       queryClient.invalidateQueries({ queryKey: ["ess-leaves", "all-requests"] });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["manager", "approvals"] });
     }
   });
 }

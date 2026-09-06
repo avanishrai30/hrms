@@ -12,7 +12,6 @@ import {
   X,
   FolderOpen,
   MapPin,
-  CreditCard,
   UserCheck,
   Calendar,
   ShieldCheck
@@ -28,7 +27,6 @@ import { SkeletonLoader } from "../../../components/aiavro/feedback/aiavro-state
 const REQUEST_TYPES = [
   { value: "ATTENDANCE_CORRECTION", label: "Attendance Correction / Regularization", icon: Calendar },
   { value: "ADDRESS_CHANGE", label: "Address Change Request", icon: MapPin },
-  { value: "BANK_CHANGE", label: "Bank Account Details Change", icon: CreditCard },
   { value: "PERSONAL_INFO_CORRECTION", label: "Personal Info Correction", icon: UserCheck },
   { value: "DOCUMENT_UPDATE", label: "Document Update Request", icon: FolderOpen },
   { value: "SHIFT_CHANGE", label: "Shift Schedule Change", icon: Clock },

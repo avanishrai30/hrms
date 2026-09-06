@@ -18,6 +18,17 @@ describe("Leave RBAC Enforcement", () => {
     expect(controllerCode).toContain('@RequirePermissions("leave.create")\n  async createLeaveRequest');
   });
 
+  it("blocks non-admin users from submitting leave for another employee", () => {
+    expect(controllerCode).toContain('if (employeeId && !tenant.permissions.includes("leave.manage"))');
+    expect(controllerCode).toContain("You can only submit leave requests for your own employee profile.");
+  });
+
+  it("requires leave.manage for tenant-wide leave surfaces", () => {
+    expect(controllerCode).toContain("Tenant-wide leave requests require leave.manage.");
+    expect(controllerCode).toContain("Tenant-wide leave calendar requires leave.manage.");
+    expect(controllerCode).toContain("You can only view leave balances for your own employee profile.");
+  });
+
   it("enforces leave.approve on request approvals", () => {
     expect(controllerCode).toContain('@RequirePermissions("leave.approve")\n  async approveRequest');
     expect(controllerCode).toContain('@RequirePermissions("leave.approve")\n  async rejectRequest');
@@ -32,5 +43,23 @@ describe("Leave RBAC Enforcement", () => {
     expect(controllerCode).toContain('@RequirePermissions("leave.manage")\n  async updatePolicy');
     expect(controllerCode).toContain('@RequirePermissions("leave.manage")\n  async adjustBalance');
     expect(controllerCode).toContain('@RequirePermissions("leave.manage")\n  async createHoliday');
+  });
+
+  it("denies self-approval server-side", () => {
+    const serviceCode = readFileSync(
+      new URL("../src/modules/leaves/leaves.service.ts", import.meta.url),
+      "utf8"
+    );
+    expect(serviceCode).toContain("reviewerMembership?.employeeId === request.employeeId");
+    expect(serviceCode).toContain("You cannot approve or reject your own leave request.");
+  });
+
+  it("requires managers to have a linked employee profile before reviewing direct reports", () => {
+    const serviceCode = readFileSync(
+      new URL("../src/modules/leaves/leaves.service.ts", import.meta.url),
+      "utf8"
+    );
+    expect(serviceCode).toContain("!reviewerMembership?.employeeId || request.employee.managerEmployeeId !== reviewerMembership.employeeId");
+    expect(serviceCode).toContain("You can only review leave requests for your direct reports.");
   });
 });

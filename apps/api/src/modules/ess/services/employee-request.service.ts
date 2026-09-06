@@ -306,13 +306,7 @@ export class EmployeeRequestService {
         }
       });
     } else if (requestType === "BANK_CHANGE") {
-      const bankDetails = payload.bankDetails ?? payload;
-      await this.prisma.employee.update({
-        where: { id: employeeId },
-        data: {
-          bankDetails: bankDetails as Prisma.InputJsonValue
-        }
-      });
+      throw new BadRequestException("Bank account changes must use the dedicated bank-details workflow.");
     } else if (requestType === "PERSONAL_INFO_CORRECTION") {
       const phone = payload.phone as string | undefined;
       const personalEmail = payload.personalEmail as string | undefined;

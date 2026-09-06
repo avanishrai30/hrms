@@ -31,6 +31,11 @@ describe("Leave Tenant Isolation & Model Integrity", () => {
     expect(serviceCode).toContain("where: { id: holidayId, tenantId }");
   });
 
+  it("does not fabricate leave policy values when active policy is missing", () => {
+    expect(serviceCode).toContain("No active leave policy is configured for this leave type.");
+    expect(serviceCode).not.toContain("annualAllocationDays: 12,\n      allowNegativeBalance: false");
+  });
+
   it("ensures controller extracts tenantId via requireTenantContext", () => {
     expect(controllerCode).toContain("requireTenantContext(req)");
     expect(controllerCode).toContain("tenant.tenantId");

@@ -5,10 +5,12 @@ import type { Route } from "next";
 import Link from "next/link";
 import { Badge, Button, Input, Panel } from "../../../../components/ui";
 import { apiRequest } from "../../../../lib/api";
+import { useHasPermission } from "../../../../lib/session-store";
 import type { EmployeeRequestView } from "@vc-wms/shared-types";
 
 export default function RequestDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
+  const canManageRequests = useHasPermission("requests.manage");
   const [req, setReq] = useState<EmployeeRequestView | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionComments, setActionComments] = useState("");
@@ -75,7 +77,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
           <p className="text-sm text-zinc-500">Request ID: {req?.id}</p>
         </div>
         <Link href={"/requests" as Route}>
-          <Button variant="secondary">← Back to Requests</Button>
+          <Button variant="secondary">Back to Requests</Button>
         </Link>
       </div>
 
@@ -122,10 +124,8 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Submitted Payload Data</p>
-          <pre className="p-4 bg-muted/70 rounded-control text-xs font-mono text-zinc-800 overflow-x-auto border border-border">
-            {JSON.stringify(req?.payload, null, 2)}
-          </pre>
+          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Submitted Details</p>
+          <SafePayloadSummary payload={req?.payload} requestType={req?.requestType} />
         </div>
 
         {req?.resolvedAt && (
@@ -162,18 +162,74 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
               <Button variant="secondary" onClick={() => handleAction("cancel")} disabled={acting}>
                 Cancel My Request
               </Button>
-              <div className="flex items-center gap-3">
-                <Button variant="danger" onClick={() => handleAction("reject")} disabled={acting}>
-                  Reject Request
-                </Button>
-                <Button variant="primary" onClick={() => handleAction("approve")} disabled={acting}>
-                  Approve Request
-                </Button>
-              </div>
+              {canManageRequests && (
+                <div className="flex items-center gap-3">
+                  <Button variant="danger" onClick={() => handleAction("reject")} disabled={acting}>
+                    Reject Request
+                  </Button>
+                  <Button variant="primary" onClick={() => handleAction("approve")} disabled={acting}>
+                    Approve Request
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )}
       </Panel>
     </div>
   );
+}
+
+function SafePayloadSummary({
+  payload,
+  requestType
+}: {
+  payload?: EmployeeRequestView["payload"] | undefined;
+  requestType?: string | undefined;
+}) {
+  const entries = safePayloadEntries(payload, requestType);
+  if (entries.length === 0) {
+    return (
+      <div className="rounded-control border border-border bg-muted/40 p-3 text-sm text-zinc-500">
+        No structured details were submitted with this request.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {entries.map(([label, value]) => (
+        <div key={label} className="rounded-control border border-border bg-muted/40 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">{label}</p>
+          <p className="mt-1 break-words text-sm font-medium text-zinc-900">{value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function safePayloadEntries(payload?: EmployeeRequestView["payload"] | undefined, requestType?: string | undefined): Array<[string, string]> {
+  const data = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+  if (requestType === "ADDRESS_CHANGE") {
+    const address = (data.currentAddress ?? data.permanentAddress ?? data.address) as Record<string, unknown> | undefined;
+    return Object.entries({
+      "Address Line": address?.line1,
+      City: address?.city,
+      State: address?.state,
+      "Postal Code": address?.postalCode,
+      Country: address?.country
+    }).filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0);
+  }
+  if (requestType === "PERSONAL_INFO_CORRECTION") {
+    return Object.entries({
+      Phone: data.phone,
+      "Personal Email": data.personalEmail,
+      "Preferred Name": data.preferredName
+    }).filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0);
+  }
+  if (requestType === "BANK_CHANGE") {
+    return [["Bank Change", "Bank details are handled through the dedicated bank-details workflow and are not displayed here."]];
+  }
+  const details = typeof data.details === "string" ? data.details : undefined;
+  return details ? [["Details", details]] : [];
 }

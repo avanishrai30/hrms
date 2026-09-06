@@ -927,11 +927,14 @@ export function useApproveLeaveMutation() {
     mutationFn: ({ id, comments }: { id: string; comments?: string | undefined }) =>
       apiRequest<LeaveRequestView>(`/leaves/requests/${id}/approve`, {
         method: "POST",
-        body: JSON.stringify({ comments })
+        body: JSON.stringify({ note: comments })
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["manager", "approvals"] });
       queryClient.invalidateQueries({ queryKey: ["manager", "dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["ess-leaves"] });
+      queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      queryClient.invalidateQueries({ queryKey: ["ess-attendance"] });
     }
   });
 }
@@ -942,11 +945,12 @@ export function useRejectLeaveMutation() {
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       apiRequest<LeaveRequestView>(`/leaves/requests/${id}/reject`, {
         method: "POST",
-        body: JSON.stringify({ reason })
+        body: JSON.stringify({ note: reason })
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["manager", "approvals"] });
       queryClient.invalidateQueries({ queryKey: ["manager", "dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["ess-leaves"] });
     }
   });
 }
