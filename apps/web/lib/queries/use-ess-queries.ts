@@ -711,7 +711,15 @@ export interface PayslipItem {
       id: string;
       name: string;
       type: string;
+      code?: string;
+      baseAmount?: number;
+      proratedAmount: number;
+    }>;
+    adjustments?: Array<{
+      id: string;
+      title: string;
       amount: number;
+      type: string;
     }>;
   };
 }

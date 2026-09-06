@@ -156,7 +156,7 @@ const navSections: NavSection[] = [
     title: "Enterprise",
     items: [
       { href: "/ats" as Route, label: "Talent", icon: Users, permission: "recruitment.read" },
-      { href: "/payroll" as Route, label: "Payroll", icon: CreditCard, permission: "payroll.read" },
+      { href: "/payroll" as Route, label: "Payroll", icon: CreditCard, permission: "payroll.view" },
       { href: "/performance" as Route, label: "Performance", icon: Sparkles },
       { href: "/learning" as Route, label: "Learning", icon: GraduationCap },
       { href: "/assets" as Route, label: "Assets", icon: Laptop },

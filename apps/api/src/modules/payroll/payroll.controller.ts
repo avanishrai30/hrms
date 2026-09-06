@@ -200,7 +200,7 @@ export class PayrollController {
   }
 
   @Get("me")
-  @RequirePermissions("payroll.view")
+  @RequirePermissions("payslip.view")
   async getMyPayroll(@Req() req: AuthenticatedRequest) {
     const tenant = requireTenantContext(req);
     if (!tenant.userId) {

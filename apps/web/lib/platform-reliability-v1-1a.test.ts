@@ -40,7 +40,7 @@ describe("V1.1A Frontend Platform Reliability & Security (Part 15)", () => {
 
   // 3. Authenticated refresh stays logged in
   it("keeps session active and updates store when refresh succeeds", async () => {
-    const mockToken = "header." + btoa(JSON.stringify({ permissions: ["employees.read", "payroll.read"] })) + ".sig";
+    const mockToken = "header." + btoa(JSON.stringify({ permissions: ["employees.read", "payroll.view"] })) + ".sig";
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
       ok: true,
       json: async () => ({ accessToken: mockToken })
@@ -106,7 +106,7 @@ describe("V1.1A Frontend Platform Reliability & Security (Part 15)", () => {
     const accessible = COMMAND_ROUTES.filter((r) => !r.permission || userPermissions.includes(r.permission));
 
     expect(accessible.some((r) => r.title === "Employees Directory")).toBe(true);
-    // User does not have payroll.read or tenant.settings.read
+    // User does not have payroll.view or tenant.settings.read
     expect(accessible.some((r) => r.title === "Enterprise Payroll")).toBe(false);
     expect(accessible.some((r) => r.title === "Platform Admin Center")).toBe(false);
   });
@@ -147,7 +147,7 @@ describe("V1.1A Frontend Platform Reliability & Security (Part 15)", () => {
 
   // 9. Query invalidation correctness
   it("decodes permissions payload correctly from JWT token", () => {
-    const testPerms: PermissionCode[] = ["directory.view", "employees.read", "payroll.read"];
+    const testPerms: PermissionCode[] = ["directory.view", "employees.read", "payroll.view"];
     const token = "header." + btoa(JSON.stringify({ permissions: testPerms })) + ".sig";
     expect(decodePermissions(token)).toEqual(testPerms);
   });

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Header,
   Param,
@@ -78,6 +79,10 @@ export class PayslipsController {
     @Query() query: unknown
   ) {
     const tenant = requireTenantContext(req);
+    if (!tenant.permissions.includes("payroll.view")) {
+      throw new ForbiddenException("Tenant-wide payslip access requires payroll.view.");
+    }
+
     const parsed = payslipFilterSchema.parse(query);
     return this.payslipsService.listPayslips(tenant.tenantId, parsed);
   }
@@ -127,7 +132,8 @@ export class PayslipsController {
       tenant.tenantId,
       id,
       tenant.userId,
-      tenant.membershipId
+      tenant.membershipId,
+      tenant.permissions.includes("payroll.view")
     );
   }
 
@@ -144,7 +150,8 @@ export class PayslipsController {
       tenant.tenantId,
       id,
       tenant.userId,
-      tenant.membershipId
+      tenant.membershipId,
+      tenant.permissions.includes("payroll.view")
     );
 
     res.set({

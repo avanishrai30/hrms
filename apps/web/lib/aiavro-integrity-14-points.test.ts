@@ -187,7 +187,7 @@ describe("AIavro 14-Point Data Integrity Verification Suite (Task 03.6)", () => 
     const items = [
       { href: "/employees", permission: "employees.read" },
       { href: "/organization", permission: "organization.view" },
-      { href: "/payroll", permission: "payroll.read" },
+      { href: "/payroll", permission: "payroll.view" },
       { href: "/dashboard" }
     ];
 

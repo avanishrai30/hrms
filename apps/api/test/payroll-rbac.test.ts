@@ -22,10 +22,16 @@ describe("Payroll & Compensation RBAC Permissions (Task 30)", () => {
   });
 
   it("MANAGER and EMPLOYEE should have read-only access to their own payroll and payslips", () => {
-    expect(ROLE_PERMISSIONS.EMPLOYEE).toContain("payroll.view");
-    expect(ROLE_PERMISSIONS.EMPLOYEE).toContain("payroll.read");
     expect(ROLE_PERMISSIONS.EMPLOYEE).toContain("payslip.view");
+    expect(ROLE_PERMISSIONS.EMPLOYEE).not.toContain("compensation.view");
+    expect(ROLE_PERMISSIONS.EMPLOYEE).not.toContain("payroll.view");
+    expect(ROLE_PERMISSIONS.EMPLOYEE).not.toContain("payroll.read");
     expect(ROLE_PERMISSIONS.EMPLOYEE).not.toContain("payroll.manage");
     expect(ROLE_PERMISSIONS.EMPLOYEE).not.toContain("payroll.process");
+
+    expect(ROLE_PERMISSIONS.MANAGER).toContain("payslip.view");
+    expect(ROLE_PERMISSIONS.MANAGER).not.toContain("compensation.view");
+    expect(ROLE_PERMISSIONS.MANAGER).not.toContain("payroll.view");
+    expect(ROLE_PERMISSIONS.MANAGER).not.toContain("payroll.read");
   });
 });

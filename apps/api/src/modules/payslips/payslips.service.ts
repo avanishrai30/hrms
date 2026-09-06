@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException
@@ -114,7 +115,7 @@ export class PayslipsService {
       }
 
       const pdfData: PayslipPdfData = {
-        tenantName: run.tenant?.name ?? "VC Organics",
+        tenantName: run.tenant?.name ?? "AIavro Workforce",
         month: run.month,
         year: run.year,
         version,
@@ -169,7 +170,7 @@ export class PayslipsService {
         }
       });
 
-      createdPayslips.push(payslip);
+      createdPayslips.push(this.redactPayslipStoragePath(payslip));
     }
 
     await this.auditService.record({
@@ -257,7 +258,7 @@ export class PayslipsService {
     }
 
     const pdfData: PayslipPdfData = {
-      tenantName: runEmp.payrollRun.tenant?.name ?? "VC Organics",
+      tenantName: runEmp.payrollRun.tenant?.name ?? "AIavro Workforce",
       month: runEmp.payrollRun.month,
       year: runEmp.payrollRun.year,
       version,
@@ -326,7 +327,7 @@ export class PayslipsService {
       after: { version, month: runEmp.payrollRun.month, year: runEmp.payrollRun.year }
     });
 
-    return payslip;
+    return this.redactPayslipStoragePath(payslip);
   }
 
   // ----------------- Distribution -----------------
@@ -344,7 +345,7 @@ export class PayslipsService {
       },
       include: {
         employee: { select: { id: true, fullName: true, email: true } },
-        payrollRun: { select: { month: true, year: true } }
+        payrollRun: { select: { month: true, year: true, tenant: { select: { name: true } } } }
       }
     });
 
@@ -355,12 +356,17 @@ export class PayslipsService {
     const results = [];
 
     for (const payslip of payslips) {
-      const recipientEmail = payslip.employee.email ?? "employee@vcorganics.com";
+      if (!payslip.employee.email) {
+        throw new BadRequestException("Cannot distribute payslip because employee email is missing.");
+      }
+
+      const recipientEmail = payslip.employee.email;
+      const tenantName = payslip.payrollRun.tenant?.name ?? "AIavro Workforce";
 
       // Dispatch via email provider
       const emailResult = await this.emailProvider.sendEmail({
         to: recipientEmail,
-        subject: `Payslip for ${payslip.month}/${payslip.year} - VC Organics`,
+        subject: `Payslip for ${payslip.month}/${payslip.year} - ${tenantName}`,
         html: `<p>Dear ${payslip.employee.fullName}, your payslip for ${payslip.month}/${payslip.year} is now available for download.</p>`
       });
 
@@ -424,7 +430,8 @@ export class PayslipsService {
     tenantId: string,
     payslipId: string,
     actorUserId: string,
-    actorMembershipId?: string
+    actorMembershipId?: string,
+    canViewAllPayslips = false
   ) {
     const payslip = await this.prisma.payslip.findFirst({
       where: { id: payslipId, tenantId },
@@ -436,6 +443,8 @@ export class PayslipsService {
     if (!payslip) {
       throw new NotFoundException("Payslip not found.");
     }
+
+    await this.assertPayslipAccess(tenantId, payslip.employeeId, actorUserId, canViewAllPayslips);
 
     const buffer = await this.storageProvider.getStream(payslip.pdfPath);
 
@@ -477,7 +486,8 @@ export class PayslipsService {
     tenantId: string,
     payslipId: string,
     actorUserId: string,
-    actorMembershipId?: string
+    actorMembershipId?: string,
+    canViewAllPayslips = false
   ) {
     const payslip = await this.prisma.payslip.findFirst({
       where: { id: payslipId, tenantId },
@@ -510,6 +520,8 @@ export class PayslipsService {
       throw new NotFoundException("Payslip not found.");
     }
 
+    await this.assertPayslipAccess(tenantId, payslip.employeeId, actorUserId, canViewAllPayslips);
+
     if (payslip.status === PayslipStatus.GENERATED || payslip.status === PayslipStatus.DISTRIBUTED) {
       await this.prisma.payslip.update({
         where: { id: payslipId },
@@ -527,7 +539,7 @@ export class PayslipsService {
       after: { payslipId }
     });
 
-    return payslip;
+    return this.redactPayslipStoragePath(payslip);
   }
 
   async listPayslips(tenantId: string, filters: PayslipFilterDto) {
@@ -580,7 +592,12 @@ export class PayslipsService {
       this.prisma.payslip.count({ where })
     ]);
 
-    return { payslips, total, page: filters.page, limit: filters.limit };
+    return {
+      payslips: payslips.map((payslip) => this.redactPayslipStoragePath(payslip)),
+      total,
+      page: filters.page,
+      limit: filters.limit
+    };
   }
 
   async getMyPayslips(tenantId: string, userId: string) {
@@ -595,7 +612,7 @@ export class PayslipsService {
       throw new NotFoundException("Employee profile not linked to user.");
     }
 
-    return this.prisma.payslip.findMany({
+    const payslips = await this.prisma.payslip.findMany({
       where: { tenantId, employeeId: employee.id },
       include: {
         payrollRun: {
@@ -616,6 +633,38 @@ export class PayslipsService {
       },
       orderBy: [{ year: "desc" }, { month: "desc" }]
     });
+
+    return payslips.map((payslip) => this.redactPayslipStoragePath(payslip));
+  }
+
+  private redactPayslipStoragePath<T extends { pdfPath?: unknown }>(payslip: T): Omit<T, "pdfPath"> {
+    const { pdfPath: _pdfPath, ...safePayslip } = payslip;
+    void _pdfPath;
+    return safePayslip;
+  }
+
+  private async assertPayslipAccess(
+    tenantId: string,
+    employeeId: string,
+    actorUserId: string,
+    canViewAllPayslips: boolean
+  ) {
+    if (canViewAllPayslips) {
+      return;
+    }
+
+    const employee = await this.prisma.employee.findFirst({
+      where: {
+        tenantId,
+        id: employeeId,
+        memberships: { some: { userId: actorUserId } }
+      },
+      select: { id: true }
+    });
+
+    if (!employee) {
+      throw new ForbiddenException("You can only access payslips for your own employee profile.");
+    }
   }
 
   async listDistributions(tenantId: string, filters: DistributionFilterDto) {

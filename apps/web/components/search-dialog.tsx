@@ -81,7 +81,7 @@ export const COMMAND_ROUTES: RouteItem[] = [
   { title: "Preboarding Tasks", href: "/ats" as Route, icon: FolderOpen, section: "Talent", permission: "preboarding.read" },
   { title: "Performance & OKRs", href: "/performance" as Route, icon: Sparkles, section: "Management" },
   { title: "Learning LMS", href: "/learning" as Route, icon: GraduationCap, section: "Management" },
-  { title: "Enterprise Payroll", href: "/payroll" as Route, icon: CreditCard, section: "Management", permission: "payroll.read" },
+  { title: "Enterprise Payroll", href: "/payroll" as Route, icon: CreditCard, section: "Management", permission: "payroll.view" },
   { title: "Asset Management", href: "/assets" as Route, icon: Laptop, section: "Management" },
   { title: "Platform Admin Center", href: "/admin" as Route, icon: ShieldCheck, section: "Management", permission: "tenant.settings.read" }
 ];

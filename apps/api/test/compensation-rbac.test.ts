@@ -12,7 +12,11 @@ describe("Compensation RBAC Enforcement", () => {
     expect(controllerCode).toContain('@RequirePermissions("compensation.view")\n  async listTemplates');
     expect(controllerCode).toContain('@RequirePermissions("compensation.view")\n  async calculatePreview');
     expect(controllerCode).toContain('@RequirePermissions("compensation.view")\n  async listAllCompensations');
-    expect(controllerCode).toContain('@RequirePermissions("compensation.view")\n  async getMyCompensation');
+    expect(controllerCode).toContain('@RequirePermissions("compensation.view")\n  async getEmployeeCompensation');
+  });
+
+  it("uses self-service permission for current user's own compensation endpoint", () => {
+    expect(controllerCode).toContain('@RequirePermissions("payslip.view")\n  async getMyCompensation');
   });
 
   it("enforces compensation.manage on component and template creation/updates", () => {

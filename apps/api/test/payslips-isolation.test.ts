@@ -22,6 +22,22 @@ describe("Payslips Tenant Isolation", () => {
     expect(serviceCode).toContain("`${tenantId}/payslips/${run.year}/${run.month}/${runEmp.employeeId}/v${version}.pdf`");
   });
 
+  it("enforces self-scope for payslip detail and download when caller lacks payroll-wide access", () => {
+    expect(serviceCode).toContain("assertPayslipAccess");
+    expect(serviceCode).toContain("You can only access payslips for your own employee profile.");
+    expect(controllerCode).toContain('tenant.permissions.includes("payroll.view")');
+  });
+
+  it("redacts internal payslip storage paths from API responses", () => {
+    expect(serviceCode).toContain("redactPayslipStoragePath");
+    expect(serviceCode).toContain("const { pdfPath: _pdfPath, ...safePayslip } = payslip;");
+  });
+
+  it("does not fall back to fake recipient email addresses for distribution", () => {
+    expect(serviceCode).toContain("Cannot distribute payslip because employee email is missing.");
+    expect(serviceCode).not.toContain("employee@vcorganics.com");
+  });
+
   it("ensures controller extracts tenantId via requireTenantContext", () => {
     expect(controllerCode).toContain("requireTenantContext(req)");
     expect(controllerCode).toContain("tenant.tenantId");

@@ -94,7 +94,7 @@ export default function PayrollRunWorkbenchPage() {
       setError(null);
       await apiRequest(`/payroll/runs/${currentRun.id}/approve`, {
         method: "POST",
-        body: JSON.stringify({ note: "Approved by HR Admin" })
+        body: JSON.stringify({ note: "Approved from payroll workbench" })
       });
       await loadRun();
     } catch (err: unknown) {
@@ -111,7 +111,7 @@ export default function PayrollRunWorkbenchPage() {
       setError(null);
       await apiRequest(`/payroll/runs/${currentRun.id}/lock`, {
         method: "POST",
-        body: JSON.stringify({ note: "Locked by Tenant Administrator" })
+        body: JSON.stringify({ note: "Locked from payroll workbench" })
       });
       await loadRun();
     } catch (err: unknown) {
@@ -180,7 +180,7 @@ export default function PayrollRunWorkbenchPage() {
             href={"/payroll" as Route}
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition"
           >
-            &larr; Dashboard
+            Dashboard
           </Link>
         </div>
       </div>
@@ -233,14 +233,14 @@ export default function PayrollRunWorkbenchPage() {
                     disabled={isActing}
                     className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                   >
-                    🔄 Recalculate
+                    Recalculate
                   </button>
                   <button
                     onClick={handleApprove}
                     disabled={isActing}
                     className="rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm transition"
                   >
-                    ✓ Approve Payroll
+                    Approve Payroll
                   </button>
                 </>
               )}
@@ -251,12 +251,12 @@ export default function PayrollRunWorkbenchPage() {
                   disabled={isActing}
                   className="rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 shadow-sm transition"
                 >
-                  🔒 Lock & Finalize Payroll
+                  Lock & Finalize Payroll
                 </button>
               )}
 
               {currentRun.status === "LOCKED" && (
-                <Badge tone="neutral">🔒 Immutable / Locked</Badge>
+                <Badge tone="neutral">Immutable / Locked</Badge>
               )}
             </>
           ) : (
@@ -265,7 +265,7 @@ export default function PayrollRunWorkbenchPage() {
               disabled={isActing}
               className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm transition"
             >
-              ⚡ Generate Payroll for {monthNames[selectedMonth - 1]}
+              Generate Payroll for {monthNames[selectedMonth - 1]}
             </button>
           )}
         </div>
@@ -316,7 +316,7 @@ export default function PayrollRunWorkbenchPage() {
           <div className="p-12 text-center text-sm text-slate-500">Loading workbench...</div>
         ) : !currentRun ? (
           <div className="p-12 text-center text-sm text-slate-500">
-            No payroll run found for {monthNames[selectedMonth - 1]} {selectedYear}. Click &quot;⚡ Generate Payroll&quot; above to calculate.
+            No payroll run found for {monthNames[selectedMonth - 1]} {selectedYear}. Generate payroll above to calculate.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -389,7 +389,7 @@ export default function PayrollRunWorkbenchPage() {
                         href={`/payroll/employees/${emp.id}` as Route}
                         className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded"
                       >
-                        Paysheet &rarr;
+                        Paysheet
                       </Link>
                     </td>
                   </tr>

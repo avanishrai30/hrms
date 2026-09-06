@@ -17,12 +17,18 @@ describe("Payslips RBAC Permissions", () => {
   it("grants only payslip.view to EMPLOYEE and MANAGER", () => {
     const employeePerms = collectPermissions(["EMPLOYEE"]);
     expect(hasPermission(employeePerms, "payslip.view")).toBe(true);
+    expect(hasPermission(employeePerms, "compensation.view")).toBe(false);
+    expect(hasPermission(employeePerms, "payroll.view")).toBe(false);
+    expect(hasPermission(employeePerms, "payroll.read")).toBe(false);
     expect(hasPermission(employeePerms, "payslip.generate")).toBe(false);
     expect(hasPermission(employeePerms, "payslip.distribute")).toBe(false);
     expect(hasPermission(employeePerms, "payslip.audit")).toBe(false);
 
     const managerPerms = collectPermissions(["MANAGER"]);
     expect(hasPermission(managerPerms, "payslip.view")).toBe(true);
+    expect(hasPermission(managerPerms, "compensation.view")).toBe(false);
+    expect(hasPermission(managerPerms, "payroll.view")).toBe(false);
+    expect(hasPermission(managerPerms, "payroll.read")).toBe(false);
     expect(hasPermission(managerPerms, "payslip.generate")).toBe(false);
     expect(hasPermission(managerPerms, "payslip.distribute")).toBe(false);
     expect(hasPermission(managerPerms, "payslip.audit")).toBe(false);

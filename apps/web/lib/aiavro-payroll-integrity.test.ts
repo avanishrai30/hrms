@@ -44,24 +44,24 @@ describe("AIavro Payroll & Financial Integrity Tests (Task 05.2)", () => {
       const unauthRoutes = getAuthorizedCommandRoutes([]);
       expect(unauthRoutes.some((r) => r.href === "/payroll")).toBe(false);
 
-      // User with payroll.read sees Enterprise Payroll
-      const payrollUserRoutes = getAuthorizedCommandRoutes(["payroll.read"]);
+      // User with payroll.view sees Enterprise Payroll
+      const payrollUserRoutes = getAuthorizedCommandRoutes(["payroll.view"]);
       expect(payrollUserRoutes.some((r) => r.href === "/payroll")).toBe(true);
     });
 
     it("evaluates actual production action-level permission gates", () => {
       expect(canReadPayroll([])).toBe(false);
-      expect(canReadPayroll(["payroll.read"])).toBe(true);
+      expect(canReadPayroll(["payroll.view"])).toBe(true);
 
-      expect(canManagePayroll(["payroll.read"])).toBe(false);
+      expect(canManagePayroll(["payroll.view"])).toBe(false);
       expect(canManagePayroll(["payroll.manage"])).toBe(true);
 
       expect(canLockPayroll(["payroll.manage"])).toBe(false);
       expect(canLockPayroll(["payroll.lock"])).toBe(true);
 
       expect(canAccessCompensation([])).toBe(false);
-      expect(canAccessCompensation(["payroll.read"])).toBe(true);
-      expect(canAccessCompensation(["compensation.read"])).toBe(true);
+      expect(canAccessCompensation(["payroll.view"])).toBe(true);
+      expect(canAccessCompensation(["compensation.view"])).toBe(true);
     });
   });
 

@@ -200,7 +200,7 @@ export class PayslipPdfEngine {
     contentOps.push(
       `55 80 Td (This is a system-generated payslip generated from a locked payroll run. No physical signature is required.) Tj`
     );
-    contentOps.push(`0 -12 Td (Document Version: ${data.version} | VC Organics HRMS Enterprise Trust Platform) Tj`);
+    contentOps.push(`0 -12 Td (Document Version: ${data.version} | AIavro Workforce Platform) Tj`);
     contentOps.push("ET");
 
     const streamBody = contentOps.join("\n");

@@ -146,7 +146,7 @@ export class CompensationController {
   }
 
   @Get("me")
-  @RequirePermissions("compensation.view")
+  @RequirePermissions("payslip.view")
   async getMyCompensation(@Req() req: AuthenticatedRequest) {
     const tenant = requireTenantContext(req);
     const actorUserId = tenant.userId;

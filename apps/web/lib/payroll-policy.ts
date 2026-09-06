@@ -3,7 +3,7 @@
  */
 
 export function canReadPayroll(permissions: string[]): boolean {
-  return permissions.includes("payroll.read");
+  return permissions.includes("payroll.view");
 }
 
 export function canManagePayroll(permissions: string[]): boolean {
@@ -15,7 +15,7 @@ export function canLockPayroll(permissions: string[]): boolean {
 }
 
 export function canAccessCompensation(permissions: string[]): boolean {
-  return permissions.includes("compensation.read") || permissions.includes("payroll.read");
+  return permissions.includes("compensation.view") || permissions.includes("payroll.view");
 }
 
 export type PayrollAction = "APPROVE" | "CANCEL" | "RECALCULATE" | "LOCK";

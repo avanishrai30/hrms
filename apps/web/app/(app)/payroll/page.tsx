@@ -147,9 +147,9 @@ export default function PayrollDashboardPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "LOCKED":
-        return <Badge variant="secondary">🔒 Locked</Badge>;
+        return <Badge variant="secondary">Locked</Badge>;
       case "APPROVED":
-        return <Badge variant="success">✓ Approved</Badge>;
+        return <Badge variant="success">Approved</Badge>;
       case "GENERATED":
         return <Badge variant="outline">Draft (Generated)</Badge>;
       case "CANCELLED":
@@ -256,7 +256,7 @@ export default function PayrollDashboardPage() {
             </p>
           </div>
           <Link href={"/payroll/history" as Route} className="text-xs font-semibold text-primary hover:underline">
-            View All History &rarr;
+            View All History
           </Link>
         </CardHeader>
         <CardContent className="p-0">
