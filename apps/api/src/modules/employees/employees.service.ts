@@ -8,6 +8,7 @@ import type {
   BulkEmployeeUpdateDto,
   CreateDepartmentDto,
   CreateDesignationDto,
+  EmployeeBankDetailsDto,
   CreateDocumentMetadataDto,
   CreateEmployeeDto,
   EmployeeExportDto,
@@ -198,6 +199,44 @@ export class EmployeesService {
     });
     await this.auditEmployeeEvent(tenantId, actorUserId, actorMembershipId, "employee.updated", employee.id, before, employee);
     return employee;
+  }
+
+  async updateBankDetails(tenantId: string, employeeId: string, input: EmployeeBankDetailsDto, actorUserId: string, actorMembershipId: string) {
+    const before = await this.assertEmployee(tenantId, employeeId);
+    const bankDetails = this.bankDetailsData(input);
+    const employee = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.employee.update({
+        where: { id: employeeId },
+        data: { bankDetails: bankDetails as Prisma.InputJsonValue }
+      });
+      await tx.employeeTimelineEvent.create({
+        data: this.timelineData(
+          tenantId,
+          employeeId,
+          actorUserId,
+          actorMembershipId,
+          "bank.details.updated",
+          "employee",
+          employeeId,
+          "Bank details updated",
+          this.bankAuditMetadata(bankDetails)
+        )
+      });
+      return updated;
+    });
+    await this.auditService.record({
+      tenantId,
+      actorUserId,
+      actorMembershipId,
+      action: "BANK_DETAILS_UPDATED",
+      resourceType: "employee",
+      resourceId: employeeId,
+      before: this.auditJson({ employeeId, bankDetails: this.maskBankDetails(before.bankDetails) }),
+      after: this.auditJson({ employeeId, bankDetails: this.maskBankDetails(employee.bankDetails) }),
+      metadata: this.bankAuditMetadata(bankDetails)
+    });
+    const [enriched] = await this.enrichEmployeeRecords(tenantId, [employee]);
+    return enriched;
   }
 
   async transitionStatus(
@@ -546,6 +585,27 @@ export class EmployeesService {
     };
   }
 
+  private bankDetailsData(input: EmployeeBankDetailsDto) {
+    return {
+      accountHolderName: input.accountHolderName.trim(),
+      bankName: input.bankName.trim(),
+      accountNumber: input.accountNumber.trim(),
+      ifsc: input.ifsc.trim().toUpperCase(),
+      branch: input.branch.trim(),
+      accountType: input.accountType
+    };
+  }
+
+  private bankAuditMetadata(details: { bankName?: string; accountNumber?: string }) {
+    const last4 = details.accountNumber?.slice(-4) || undefined;
+    return {
+      result: "UPDATED",
+      bankChanged: true,
+      bankName: details.bankName,
+      last4
+    } as Prisma.InputJsonValue;
+  }
+
   private async assertDepartment(tenantId: string, departmentId: string) {
     const department = await this.prisma.department.findFirst({ where: { id: departmentId, tenantId } });
     if (!department) throw new BadRequestException("Department does not exist in this tenant.");
@@ -874,7 +934,6 @@ export class EmployeesService {
       bankName: details.bankName ?? null,
       branch: details.branch ?? null,
       accountType: details.accountType ?? null,
-      upi: details.upi ?? null,
       maskedAccountNumber: last4 ? `••••••${last4}` : null,
       hasAccountNumber: Boolean(accountNumber),
       ifsc: details.ifsc ? "[redacted]" : null

@@ -171,7 +171,7 @@ export interface EmployeeRecordView {
   locationId?: string | null | undefined;
   location?: { id: string; name: string } | null | undefined;
   locationAssignments?: Array<{ id: string; location?: { id: string; name: string; code?: string } | null; isPriority?: boolean }> | undefined;
-  shiftAssignments?: Array<{ id: string; shift?: { id: string; name: string; code?: string; startsAtMinute?: number; endsAtMinute?: number } | null }> | undefined;
+  shiftAssignments?: Array<{ id: string; startsOn?: string; endsOn?: string | null; shift?: { id: string; name: string; code?: string; startsAtMinute?: number; endsAtMinute?: number; timezone?: string } | null }> | undefined;
   businessUnit?: { id: string; name: string; code?: string } | null | undefined;
   team?: { id: string; name: string; code?: string } | null | undefined;
   managerId?: string | null | undefined;
@@ -191,6 +191,55 @@ export interface EmployeeRecordView {
   statusHistory?: Array<{ id: string; previousStatus?: string; newStatus?: string; reason?: string; createdAt?: string }> | undefined;
   faceProfile?: unknown;
   profileCompletionScore?: number | undefined;
+}
+
+export interface TenantRoleView {
+  id: string;
+  code: string;
+  name: string;
+  isSystemRole?: boolean;
+  permissions?: Array<{ permission?: { code?: string } }>;
+}
+
+export interface TenantMembershipView {
+  id: string;
+  userId: string;
+  employeeId?: string | null;
+  status: "ACTIVE" | "INVITED" | "SUSPENDED" | "REMOVED";
+  user: { id: string; email: string; phone?: string | null; status?: string };
+  employee?: { id: string; fullName: string; employeeCode: string } | null;
+  roles: Array<{ id?: string; role: TenantRoleView }>;
+}
+
+export interface ShiftView {
+  id: string;
+  name: string;
+  code: string;
+  startsAtMinute: number;
+  endsAtMinute: number;
+  timezone?: string;
+}
+
+export interface BankDetailsInput {
+  accountHolderName: string;
+  bankName: string;
+  accountNumber: string;
+  confirmAccountNumber: string;
+  ifsc: string;
+  branch: string;
+  accountType: "SAVINGS" | "CURRENT" | "SALARY";
+}
+
+export interface UploadEmployeeDocumentInput {
+  employeeId: string;
+  documentType: "PAN" | "AADHAAR" | "PASSPORT" | "DRIVING_LICENSE" | "OFFER_LETTER" | "APPOINTMENT_LETTER" | "PAYSLIP" | "TAX_DOCUMENT" | "CERTIFICATE" | "CUSTOM";
+  title: string;
+  fileName: string;
+  fileBase64?: string;
+  fileSize?: number;
+  mimeType: string;
+  expiryDate?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface DepartmentRecordView {
@@ -324,6 +373,11 @@ export const peopleKeys = {
   orgChart: () => ["organization", "chart"] as const,
   reportingChain: (id: string) => ["organization", "reporting-chain", id] as const,
   locations: (filters?: Record<string, unknown> | undefined) => ["organization", "locations", filters] as const,
+  shifts: () => ["attendance-ops", "shifts"] as const,
+  tenantRoles: () => ["tenant", "roles"] as const,
+  adminUsers: () => ["admin", "users"] as const,
+  faceProfile: (employeeId: string) => ["people", "employee", employeeId, "face-profile"] as const,
+  letters: (employeeId: string) => ["people", "employee", employeeId, "letters"] as const,
   managerDashboard: () => ["manager", "dashboard"] as const,
   managerTeam: () => ["manager", "team"] as const,
   managerApprovals: () => ["manager", "approvals"] as const
@@ -395,7 +449,7 @@ export function useEmployee(id: string, enabled: boolean = true) {
 export function useEmployeeDocuments(id: string, enabled: boolean = true) {
   return useQuery({
     queryKey: peopleKeys.employeeDocuments(id),
-    queryFn: () => apiRequest<EmployeeDocumentView[]>(`/employees/${id}/documents`),
+    queryFn: () => apiRequest<EmployeeDocumentView[]>(`/documents?employeeId=${id}`),
     enabled: enabled && Boolean(id),
     staleTime: 60 * 1000
   });
@@ -484,6 +538,52 @@ export function useLocations(filter?: Record<string, unknown> | undefined, enabl
     },
     enabled,
     staleTime: 5 * 60 * 1000
+  });
+}
+
+export function useShifts(enabled: boolean = true) {
+  return useQuery({
+    queryKey: peopleKeys.shifts(),
+    queryFn: () => apiRequest<ShiftView[]>("/attendance-ops/shifts"),
+    enabled,
+    staleTime: 5 * 60 * 1000
+  });
+}
+
+export function useTenantRoles(enabled: boolean = true) {
+  return useQuery({
+    queryKey: peopleKeys.tenantRoles(),
+    queryFn: () => apiRequest<TenantRoleView[]>("/tenant/roles"),
+    enabled,
+    staleTime: 60 * 1000
+  });
+}
+
+export function useAdminUsers(enabled: boolean = true) {
+  return useQuery({
+    queryKey: peopleKeys.adminUsers(),
+    queryFn: () => apiRequest<TenantMembershipView[]>("/admin/users"),
+    enabled,
+    staleTime: 30 * 1000
+  });
+}
+
+export function useEmployeeFaceProfile(employeeId: string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: peopleKeys.faceProfile(employeeId),
+    queryFn: () => apiRequest<Record<string, unknown>>(`/face/profiles/${employeeId}`),
+    enabled: Boolean(employeeId) && enabled,
+    retry: false,
+    staleTime: 60 * 1000
+  });
+}
+
+export function useEmployeeLetters(employeeId: string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: peopleKeys.letters(employeeId),
+    queryFn: () => apiRequest<Array<{ id: string; letterType: string; title?: string; status?: string; createdAt?: string }>>(`/letters?employeeId=${employeeId}`),
+    enabled: Boolean(employeeId) && enabled,
+    staleTime: 60 * 1000
   });
 }
 
@@ -616,6 +716,135 @@ export function useAssignEmployeeLocationMutation(employeeId: string) {
       queryClient.invalidateQueries({ queryKey: ["people", "employees"] });
       queryClient.invalidateQueries({ queryKey: ["organization", "locations"] });
       queryClient.invalidateQueries({ queryKey: ["attendance"] });
+    }
+  });
+}
+
+export function useAssignEmployeeShiftMutation(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { shiftId: string; startsOn: string; endsOn?: string | null; reason?: string }) =>
+      apiRequest("/attendance-ops/shift-assignments", {
+        method: "PUT",
+        body: JSON.stringify({ employeeId, ...data })
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDetail(employeeId) });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeTimeline(employeeId) });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.shifts() });
+      queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      queryClient.invalidateQueries({ queryKey: ["ess-attendance"] });
+    }
+  });
+}
+
+export function useInviteEmployeeAccountMutation(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { email: string; phone?: string; roles: string[] }) =>
+      apiRequest<TenantMembershipView>("/admin/users/invite", {
+        method: "POST",
+        body: JSON.stringify({ employeeId, ...data })
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDetail(employeeId) });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.adminUsers() });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeTimeline(employeeId) });
+    }
+  });
+}
+
+export function useAssignMembershipRolesMutation(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ membershipId, roles }: { membershipId: string; roles: string[] }) =>
+      apiRequest<TenantMembershipView>(`/admin/users/${membershipId}/roles`, {
+        method: "PATCH",
+        body: JSON.stringify({ roles })
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDetail(employeeId) });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.adminUsers() });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeTimeline(employeeId) });
+      queryClient.invalidateQueries({ queryKey: ["session"] });
+    }
+  });
+}
+
+export function useUpdateMembershipStatusMutation(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ membershipId, status }: { membershipId: string; status: "ACTIVE" | "INVITED" | "SUSPENDED" | "REMOVED" }) =>
+      apiRequest<TenantMembershipView>(`/admin/users/${membershipId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status })
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDetail(employeeId) });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.adminUsers() });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeTimeline(employeeId) });
+    }
+  });
+}
+
+export function useResetMembershipAccessMutation(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ membershipId, reason }: { membershipId: string; reason: string }) =>
+      apiRequest(`/admin/users/${membershipId}/reset-access`, {
+        method: "POST",
+        body: JSON.stringify({ reason })
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDetail(employeeId) });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.adminUsers() });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeTimeline(employeeId) });
+    }
+  });
+}
+
+export function useUpdateEmployeeBankDetailsMutation(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: BankDetailsInput) =>
+      apiRequest<EmployeeRecordView>(`/employees/${employeeId}/bank-details`, {
+        method: "PATCH",
+        body: JSON.stringify(data)
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDetail(employeeId) });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeTimeline(employeeId) });
+    }
+  });
+}
+
+export function useUploadEmployeeDocumentMutation(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UploadEmployeeDocumentInput) =>
+      apiRequest("/documents", {
+        method: "POST",
+        body: JSON.stringify(data)
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDocuments(employeeId) });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDetail(employeeId) });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeTimeline(employeeId) });
+    }
+  });
+}
+
+export function useDeleteEmployeeDocumentMutation(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (documentId: string) =>
+      apiRequest(`/documents/${documentId}`, {
+        method: "DELETE"
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDocuments(employeeId) });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeDetail(employeeId) });
+      queryClient.invalidateQueries({ queryKey: peopleKeys.employeeTimeline(employeeId) });
     }
   });
 }

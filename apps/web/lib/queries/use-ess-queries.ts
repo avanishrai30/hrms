@@ -44,6 +44,15 @@ export interface EmployeeProfileData {
     postalCode?: string;
     country?: string;
   } | null;
+  bankDetails?: {
+    accountHolderName?: string | null;
+    bankName?: string | null;
+    maskedAccountNumber?: string | null;
+    ifsc?: string | null;
+    branch?: string | null;
+    accountType?: string | null;
+    hasAccountNumber?: boolean;
+  } | null;
 }
 
 export const profileKeys = {
@@ -95,6 +104,28 @@ export function useRemoveAvatarMutation() {
     mutationFn: () =>
       apiRequest<{ success: boolean }>("/profile/avatar", {
         method: "DELETE"
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: profileKeys.me() });
+    }
+  });
+}
+
+export function useUpdateMyBankDetailsMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      accountHolderName: string;
+      bankName: string;
+      accountNumber: string;
+      confirmAccountNumber: string;
+      ifsc: string;
+      branch: string;
+      accountType: "SAVINGS" | "CURRENT" | "SALARY";
+    }) =>
+      apiRequest<EmployeeProfileData>("/profile/bank-details", {
+        method: "PATCH",
+        body: JSON.stringify(data)
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: profileKeys.me() });

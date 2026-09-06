@@ -11,6 +11,7 @@ import {
   createDocumentMetadataSchema,
   createEmployeeSchema,
   employeeExportSchema,
+  employeeBankDetailsSchema,
   employeeImportCommitSchema,
   employeeImportPreviewSchema,
   employeeSearchSchema,
@@ -26,6 +27,7 @@ import {
   type CreateDocumentMetadataDto,
   type CreateEmployeeDto,
   type EmployeeExportDto,
+  type EmployeeBankDetailsDto,
   type EmployeeImportCommitDto,
   type EmployeeImportPreviewDto,
   type EmployeeSearchDto,
@@ -96,6 +98,17 @@ export class EmployeesController {
   ) {
     const tenant = requireTenantContext(request);
     return this.employeesService.updateEmployee(tenant.tenantId, employeeId, body, tenant.userId, tenant.membershipId);
+  }
+
+  @Patch(":employeeId/bank-details")
+  @RequirePermissions("payroll.manage")
+  updateBankDetails(
+    @Param("employeeId") employeeId: string,
+    @Body(new ZodValidationPipe(employeeBankDetailsSchema)) body: EmployeeBankDetailsDto,
+    @Req() request: AuthenticatedRequest
+  ) {
+    const tenant = requireTenantContext(request);
+    return this.employeesService.updateBankDetails(tenant.tenantId, employeeId, body, tenant.userId, tenant.membershipId);
   }
 
   @Patch(":employeeId/status")

@@ -15,6 +15,7 @@ import type {
   CreateBiometricDeviceSchema,
   UpdateBiometricDeviceSchema,
   SyncBiometricPunchSchema,
+  AssignEmployeeShiftSchema,
   CreateShiftSwapRequestSchema,
   ReviewShiftSwapSchema,
   CreateOvertimeRequestSchema,
@@ -116,6 +117,76 @@ export class WorkforceOperationsService {
       },
       orderBy: { startsAtMinute: "asc" }
     });
+  }
+
+  async assignEmployeeShift(
+    tenantId: string,
+    dto: z.infer<typeof AssignEmployeeShiftSchema>,
+    userId: string,
+    membershipId: string
+  ) {
+    await Promise.all([
+      this.assertEmployeeInTenant(tenantId, dto.employeeId),
+      this.assertShiftInTenant(tenantId, dto.shiftId)
+    ]);
+    const startsOn = new Date(dto.startsOn);
+    const endsOn = dto.endsOn ? new Date(dto.endsOn) : null;
+    const assignment = await this.prisma.$transaction(async (tx) => {
+      await tx.shiftAssignment.updateMany({
+        where: {
+          tenantId,
+          employeeId: dto.employeeId,
+          OR: [{ endsOn: null }, { endsOn: { gte: startsOn } }]
+        },
+        data: { endsOn: startsOn }
+      });
+      const created = await tx.shiftAssignment.create({
+        data: {
+          tenantId,
+          employeeId: dto.employeeId,
+          shiftId: dto.shiftId,
+          startsOn,
+          endsOn,
+          metadata: { reason: dto.reason ?? null }
+        },
+        include: { shift: true, employee: { select: { id: true, fullName: true, employeeCode: true } } }
+      });
+      await tx.employeeTimelineEvent.create({
+        data: {
+          tenantId,
+          employeeId: dto.employeeId,
+          actorUserId: userId,
+          actorMembershipId: membershipId,
+          eventType: "shift.assigned",
+          entityType: "shift_assignment",
+          entityId: created.id,
+          message: "Shift assigned",
+          metadata: {
+            shiftId: dto.shiftId,
+            shiftName: created.shift.name,
+            startsOn: startsOn.toISOString(),
+            endsOn: endsOn?.toISOString() ?? null,
+            reason: dto.reason ?? null
+          }
+        }
+      });
+      return created;
+    });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      actorMembershipId: membershipId,
+      action: "WORKFORCE_SHIFT_ASSIGNED",
+      resourceType: "ShiftAssignment",
+      resourceId: assignment.id,
+      metadata: {
+        employeeId: dto.employeeId,
+        shiftId: dto.shiftId,
+        startsOn: startsOn.toISOString(),
+        endsOn: endsOn?.toISOString() ?? null
+      }
+    });
+    return assignment;
   }
 
   async listShiftSwapRequests(tenantId: string, employeeId?: string) {

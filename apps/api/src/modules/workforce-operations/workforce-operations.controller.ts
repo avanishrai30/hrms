@@ -16,6 +16,7 @@ import {
   CreateBiometricDeviceSchema,
   UpdateBiometricDeviceSchema,
   SyncBiometricPunchSchema,
+  AssignEmployeeShiftSchema,
   CreateShiftSwapRequestSchema,
   ReviewShiftSwapSchema,
   CreateOvertimeRequestSchema,
@@ -43,6 +44,14 @@ export class WorkforceOperationsController {
   async listShifts(@Req() req: Request) {
     const tenant = requireTenantContext(req);
     return this.workforceOpsService.listShifts(tenant.tenantId);
+  }
+
+  @Put("shift-assignments")
+  @RequirePermissions("attendance.shifts.manage")
+  async assignEmployeeShift(@Req() req: Request, @Body() body: unknown) {
+    const tenant = requireTenantContext(req);
+    const dto = AssignEmployeeShiftSchema.parse(body);
+    return this.workforceOpsService.assignEmployeeShift(tenant.tenantId, dto, tenant.userId, tenant.membershipId);
   }
 
   @Get("swaps")

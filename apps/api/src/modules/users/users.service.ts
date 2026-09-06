@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { UserStatus, type Prisma } from "@prisma/client";
 import { AuditService } from "../audit/audit.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -34,6 +34,7 @@ export class UsersService {
   async inviteUser(tenantId: string, input: InviteUserDto, actorUserId: string, actorMembershipId: string) {
     if (input.employeeId) {
       await this.assertTenantEmployee(tenantId, input.employeeId);
+      await this.assertEmployeeMembershipAvailable(tenantId, input.employeeId, input.email);
     }
     const roles = await this.findRolesByCode(tenantId, input.roles);
     const user = await this.prisma.user.upsert({
@@ -83,6 +84,9 @@ export class UsersService {
 
   async assignRoles(tenantId: string, membershipId: string, input: AssignRolesDto, actorUserId: string, actorMembershipId: string) {
     const before = await this.getMembership(tenantId, membershipId);
+    if (membershipId === actorMembershipId && this.roleSetChanged(before.roles.map((r) => r.role.code), input.roles)) {
+      throw new ForbiddenException("You cannot change your own role assignments.");
+    }
 
     const isDemotingOwner =
       before.roles.some((r) => r.role.code === "TENANT_OWNER") &&
@@ -135,6 +139,9 @@ export class UsersService {
 
   async updateStatus(tenantId: string, membershipId: string, input: UpdateUserStatusDto, actorUserId: string, actorMembershipId: string) {
     const before = await this.getMembership(tenantId, membershipId);
+    if (membershipId === actorMembershipId && input.status !== "ACTIVE") {
+      throw new ForbiddenException("You cannot suspend or remove your own access.");
+    }
 
     if (input.status !== "ACTIVE") {
       const hasOwnerRole = before.roles.some((r) => r.role.code === "TENANT_OWNER");
@@ -289,6 +296,23 @@ export class UsersService {
     if (!employee) {
       throw new BadRequestException("Employee does not exist in this tenant.");
     }
+  }
+
+  private async assertEmployeeMembershipAvailable(tenantId: string, employeeId: string, email: string): Promise<void> {
+    const existing = await this.prisma.tenantMembership.findFirst({
+      where: { tenantId, employeeId },
+      include: { user: true }
+    });
+    if (existing && existing.user.email.toLowerCase() !== email.toLowerCase()) {
+      throw new BadRequestException("Employee is already linked to another tenant user.");
+    }
+  }
+
+  private roleSetChanged(before: string[], after: string[]): boolean {
+    const beforeSet = new Set(before);
+    const afterSet = new Set(after);
+    if (beforeSet.size !== afterSet.size) return true;
+    return after.some((role) => !beforeSet.has(role));
   }
 
   private auditJson(value: unknown): Prisma.InputJsonValue {

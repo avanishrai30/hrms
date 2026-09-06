@@ -16,27 +16,48 @@ import {
   Fingerprint,
   KeyRound,
   Layers,
+  Loader2,
   Lock,
   Mail,
   MapPin,
   Pencil,
+  Plus,
   ShieldCheck,
+  UploadCloud,
   Users
 } from "lucide-react";
 import {
   formatEmploymentStatus,
   formatEmploymentType,
+  useAssignEmployeeOrgMutation,
   useAssignEmployeeLocationMutation,
+  useAssignEmployeeShiftMutation,
+  useAssignMembershipRolesMutation,
+  useBusinessUnits,
+  useDepartments,
+  useDesignations,
+  useDeleteEmployeeDocumentMutation,
   useAssignReportingManagerMutation,
+  useEmployeeFaceProfile,
+  useEmployeeLetters,
   useEmployee,
   useEmployeeAssets,
   useEmployeeDocuments,
   useEmployeeLeaveBalances,
   useEmployeeTimeline,
   useEmployees,
+  useInviteEmployeeAccountMutation,
   useLocations,
+  useResetMembershipAccessMutation,
+  useShifts,
+  useTeams,
+  useTenantRoles,
+  useUpdateEmployeeBankDetailsMutation,
   useUpdateEmployeeProfile,
-  useUpdateEmployeeStatus
+  useUpdateEmployeeStatus,
+  useUpdateMembershipStatusMutation,
+  useUploadEmployeeDocumentMutation,
+  type BankDetailsInput
 } from "../../../../lib/queries/use-people-queries";
 import { useHasPermission, usePermissionGate } from "../../../../lib/session-store";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../../components/ui/avatar";
@@ -79,8 +100,8 @@ function currentLocation(employee: { location?: { name?: string } | null | undef
   return employee.location?.name ?? employee.locationAssignments?.find((assignment) => assignment.location)?.location?.name ?? null;
 }
 
-function currentShift(employee: { shiftAssignments?: Array<{ shift?: { name?: string; code?: string; startsAtMinute?: number; endsAtMinute?: number } | null | undefined }> | undefined }) {
-  return employee.shiftAssignments?.find((assignment) => assignment.shift)?.shift ?? null;
+function currentShiftAssignment(employee: { shiftAssignments?: Array<{ startsOn?: string; endsOn?: string | null; shift?: { id?: string; name?: string; code?: string; startsAtMinute?: number; endsAtMinute?: number } | null | undefined }> | undefined }) {
+  return employee.shiftAssignments?.find((assignment) => assignment.shift) ?? null;
 }
 
 function minutesToTime(minutes?: number) {
@@ -113,6 +134,49 @@ function permissionGroupSummary(permissions: string[] | undefined) {
     count: (permissions ?? []).filter((permission) => prefixes.some((prefix) => permission.startsWith(prefix))).length
   }));
 }
+
+function accessLevel(count: number) {
+  if (count >= 3) return "Enabled";
+  if (count > 0) return "Limited";
+  return "No access";
+}
+
+function accountStatusLabel(status?: string | null, hasMembership?: boolean) {
+  if (!hasMembership) return "No Account";
+  if (status === "INVITED") return "Invited";
+  if (status === "ACTIVE") return "Active";
+  if (status === "SUSPENDED") return "Suspended";
+  if (status === "REMOVED") return "Disabled";
+  return "No Account";
+}
+
+function readFileAsBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+const emptyBankForm: BankDetailsInput = {
+  accountHolderName: "",
+  bankName: "",
+  accountNumber: "",
+  confirmAccountNumber: "",
+  ifsc: "",
+  branch: "",
+  accountType: "SALARY"
+};
+
+const bankFields: Array<[keyof BankDetailsInput, string, string]> = [
+  ["accountHolderName", "Account Holder Name", "name"],
+  ["bankName", "Bank Name", "organization"],
+  ["accountNumber", "Account Number", "off"],
+  ["confirmAccountNumber", "Confirm Account Number", "off"],
+  ["ifsc", "IFSC", "off"],
+  ["branch", "Branch", "address-level2"]
+];
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -155,8 +219,18 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
   const canManageOrg = useHasPermission("organization.manage");
   const canAssignLocation = useHasPermission("location.assign");
   const canReadDocuments = useHasPermission(["documents.read", "documents.view"]);
+  const canUploadDocuments = useHasPermission(["documents.upload", "documents.metadata.create"]);
   const canReadLeave = useHasPermission("leave.view");
   const canReadPayroll = useHasPermission(["payroll.view", "compensation.view"]);
+  const canManagePayroll = useHasPermission(["payroll.manage", "compensation.manage"]);
+  const canInviteUsers = useHasPermission("users.invite");
+  const canUpdateUsers = useHasPermission("users.update");
+  const canDeactivateUsers = useHasPermission("users.deactivate");
+  const canResetAccess = useHasPermission("users.reset_access");
+  const canReadRoles = useHasPermission("roles.read");
+  const canManageShifts = useHasPermission("attendance.shifts.manage");
+  const canReadFace = useHasPermission("face.view");
+  const canGenerateLetters = useHasPermission("letters.generate");
   const canReadAssets = useHasPermission("assets.view");
 
   const [activeTab, setActiveTab] = useState<EmployeeTab>("overview");
@@ -164,33 +238,70 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
   const [statusOpen, setStatusOpen] = useState(false);
   const [managerOpen, setManagerOpen] = useState(false);
   const [locationOpen, setLocationOpen] = useState(false);
+  const [orgOpen, setOrgOpen] = useState(false);
+  const [shiftOpen, setShiftOpen] = useState(false);
+  const [bankOpen, setBankOpen] = useState(false);
+  const [rolesOpen, setRolesOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [documentOpen, setDocumentOpen] = useState(false);
   const [phoneInput, setPhoneInput] = useState("");
   const [statusInput, setStatusInput] = useState("ACTIVE");
   const [statusReason, setStatusReason] = useState("");
   const [managerInput, setManagerInput] = useState("");
   const [locationInput, setLocationInput] = useState("");
+  const [departmentInput, setDepartmentInput] = useState("");
+  const [designationInput, setDesignationInput] = useState("");
+  const [businessUnitInput, setBusinessUnitInput] = useState("");
+  const [teamInput, setTeamInput] = useState("");
+  const [shiftInput, setShiftInput] = useState("");
+  const [shiftStartsOn, setShiftStartsOn] = useState(new Date().toISOString().slice(0, 10));
+  const [shiftEndsOn, setShiftEndsOn] = useState("");
+  const [roleInputs, setRoleInputs] = useState<string[]>([]);
+  const [inviteRoleInputs, setInviteRoleInputs] = useState<string[]>(["EMPLOYEE"]);
+  const [bankForm, setBankForm] = useState<BankDetailsInput>(emptyBankForm);
+  const [documentType, setDocumentType] = useState<"PAN" | "AADHAAR" | "PASSPORT" | "DRIVING_LICENSE" | "OFFER_LETTER" | "APPOINTMENT_LETTER" | "PAYSLIP" | "TAX_DOCUMENT" | "CERTIFICATE" | "CUSTOM">("CUSTOM");
+  const [documentTitle, setDocumentTitle] = useState("");
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const employeeQuery = useEmployee(id, gate.isAuthorized);
   const employee = employeeQuery.data;
   const { data: employees = [] } = useEmployees({ limit: 100 }, gate.isAuthorized && canManageOrg);
+  const { data: departments = [] } = useDepartments(gate.isAuthorized && canManageOrg);
+  const { data: designations = [] } = useDesignations(gate.isAuthorized && canManageOrg);
+  const { data: businessUnits = [] } = useBusinessUnits(gate.isAuthorized && canManageOrg);
+  const { data: teams = [] } = useTeams(gate.isAuthorized && canManageOrg);
   const { data: locations = [] } = useLocations({}, gate.isAuthorized && canAssignLocation);
+  const { data: shifts = [] } = useShifts(gate.isAuthorized && canManageShifts);
+  const { data: tenantRoles = [] } = useTenantRoles(gate.isAuthorized && canReadRoles);
   const { data: documents = [] } = useEmployeeDocuments(id, gate.isAuthorized && canReadDocuments && activeTab === "documents");
   const { data: timeline = [] } = useEmployeeTimeline(id, gate.isAuthorized && activeTab === "activity");
   const { data: leaveBalances = [] } = useEmployeeLeaveBalances(id, gate.isAuthorized && canReadLeave && activeTab === "attendance");
   const assetsQuery = useEmployeeAssets(id, gate.isAuthorized && canReadAssets && activeTab === "documents");
+  const faceProfileQuery = useEmployeeFaceProfile(id, gate.isAuthorized && canReadFace && activeTab === "documents");
+  const { data: letters = [] } = useEmployeeLetters(id, gate.isAuthorized && activeTab === "documents");
 
   const updateProfile = useUpdateEmployeeProfile();
   const updateStatus = useUpdateEmployeeStatus();
   const assignManager = useAssignReportingManagerMutation(id);
   const assignLocation = useAssignEmployeeLocationMutation(id);
+  const assignOrg = useAssignEmployeeOrgMutation(id);
+  const assignShift = useAssignEmployeeShiftMutation(id);
+  const inviteAccount = useInviteEmployeeAccountMutation(id);
+  const assignRoles = useAssignMembershipRolesMutation(id);
+  const updateMembershipStatus = useUpdateMembershipStatusMutation(id);
+  const resetAccess = useResetMembershipAccessMutation(id);
+  const updateBank = useUpdateEmployeeBankDetailsMutation(id);
+  const uploadDocument = useUploadEmployeeDocumentMutation(id);
+  const deleteDocument = useDeleteEmployeeDocumentMutation(id);
 
   const name = employee?.fullName || "Employee";
   const initial = name.trim().charAt(0).toUpperCase();
   const locationName = employee ? currentLocation(employee) : null;
-  const shift = employee ? currentShift(employee) : null;
+  const shiftAssignment = employee ? currentShiftAssignment(employee) : null;
+  const shift = shiftAssignment?.shift ?? null;
   const primaryMembership = employee?.memberships?.[0];
-  const accountStatus = primaryMembership?.user?.status ?? primaryMembership?.status ?? (primaryMembership ? "Linked" : "Not invited");
+  const accountStatus = accountStatusLabel(primaryMembership?.status ?? primaryMembership?.user?.status, Boolean(primaryMembership));
   const permissionSummary = employee?.permissionsSummary?.permissions ?? [];
   const roles = employee?.permissionsSummary?.roles ?? primaryMembership?.roles?.map((assignment) => assignment.role).filter(Boolean) ?? [];
   const bank = employee?.bankDetails ?? {};
@@ -264,6 +375,52 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
     setLocationOpen(true);
   };
 
+  const openOrg = () => {
+    setDepartmentInput(employee.departmentId ?? "");
+    setDesignationInput(employee.designationId ?? "");
+    setBusinessUnitInput(employee.businessUnit?.id ?? "");
+    setTeamInput(employee.team?.id ?? "");
+    setError(null);
+    setOrgOpen(true);
+  };
+
+  const openShift = () => {
+    setShiftInput(shift?.id ?? "");
+    setShiftStartsOn(new Date().toISOString().slice(0, 10));
+    setShiftEndsOn("");
+    setError(null);
+    setShiftOpen(true);
+  };
+
+  const openRoles = () => {
+    setRoleInputs(roles.map((role) => role?.code).filter(Boolean) as string[]);
+    setError(null);
+    setRolesOpen(true);
+  };
+
+  const openAccount = () => {
+    setInviteRoleInputs(roles.length ? (roles.map((role) => role?.code).filter(Boolean) as string[]) : ["EMPLOYEE"]);
+    setError(null);
+    setAccountOpen(true);
+  };
+
+  const openBank = () => {
+    setBankForm({
+      ...emptyBankForm,
+      accountHolderName: typeof bank.accountHolderName === "string" ? bank.accountHolderName : "",
+      bankName: typeof bank.bankName === "string" ? bank.bankName : "",
+      branch: typeof bank.branch === "string" ? bank.branch : "",
+      accountType: ["SAVINGS", "CURRENT", "SALARY"].includes(String(bank.accountType)) ? (bank.accountType as BankDetailsInput["accountType"]) : "SALARY"
+    });
+    setError(null);
+    setBankOpen(true);
+  };
+
+  const toggleRoleInput = (code: string, target: "assign" | "invite" = "assign") => {
+    const setter = target === "assign" ? setRoleInputs : setInviteRoleInputs;
+    setter((current) => current.includes(code) ? current.filter((item) => item !== code) : [...current, code]);
+  };
+
   async function submitProfile(event: React.FormEvent) {
     event.preventDefault();
     try {
@@ -299,6 +456,123 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
       setLocationOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Location assignment failed.");
+    }
+  }
+
+  async function submitOrg() {
+    try {
+      if (!departmentInput || !designationInput) throw new Error("Choose a department and designation before saving.");
+      await updateProfile.mutateAsync({ id, data: { departmentId: departmentInput, designationId: designationInput } });
+      await assignOrg.mutateAsync({
+        departmentId: departmentInput,
+        businessUnitId: businessUnitInput || null,
+        teamId: teamInput || null
+      });
+      setOrgOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Organization assignment failed.");
+    }
+  }
+
+  async function submitShift() {
+    try {
+      if (!shiftInput) throw new Error("Choose a shift before saving.");
+      await assignShift.mutateAsync({
+        shiftId: shiftInput,
+        startsOn: new Date(shiftStartsOn).toISOString(),
+        endsOn: shiftEndsOn ? new Date(shiftEndsOn).toISOString() : null,
+        reason: "Employee record shift assignment"
+      });
+      setShiftOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Shift assignment failed.");
+    }
+  }
+
+  async function submitInviteAccount() {
+    try {
+      if (!employee?.email) throw new Error("Employee work email is required before inviting an account.");
+      if (inviteRoleInputs.length === 0) throw new Error("Choose at least one tenant role.");
+      await inviteAccount.mutateAsync({
+        email: employee.email,
+        roles: inviteRoleInputs,
+        ...(employee.phone ? { phone: employee.phone } : {})
+      });
+      setAccountOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Account invite failed.");
+    }
+  }
+
+  async function submitRoles() {
+    try {
+      if (!primaryMembership?.id) throw new Error("Create an account before assigning roles.");
+      if (roleInputs.length === 0) throw new Error("Choose at least one tenant role.");
+      await assignRoles.mutateAsync({ membershipId: primaryMembership.id, roles: roleInputs });
+      setRolesOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Role assignment failed.");
+    }
+  }
+
+  async function updateAccountStatus(status: "ACTIVE" | "SUSPENDED" | "REMOVED") {
+    try {
+      if (!primaryMembership?.id) throw new Error("No account is linked to this employee.");
+      await updateMembershipStatus.mutateAsync({ membershipId: primaryMembership.id, status });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Account status update failed.");
+    }
+  }
+
+  async function resendInvite() {
+    try {
+      if (primaryMembership?.id) {
+        await resetAccess.mutateAsync({ membershipId: primaryMembership.id, reason: "Resend invite or activation link from employee access tab" });
+      } else {
+        await submitInviteAccount();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invite resend failed.");
+    }
+  }
+
+  async function submitBank() {
+    try {
+      await updateBank.mutateAsync(bankForm);
+      setBankOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Bank update failed.");
+    }
+  }
+
+  async function submitDocument() {
+    try {
+      if (!documentFile) throw new Error("Choose a document file before uploading.");
+      if (!documentTitle.trim()) throw new Error("Document title is required.");
+      const fileBase64 = await readFileAsBase64(documentFile);
+      await uploadDocument.mutateAsync({
+        employeeId: id,
+        documentType,
+        title: documentTitle.trim(),
+        fileName: documentFile.name,
+        fileBase64,
+        fileSize: documentFile.size,
+        mimeType: documentFile.type || "application/pdf",
+        metadata: { source: "employee_detail" }
+      });
+      setDocumentOpen(false);
+      setDocumentTitle("");
+      setDocumentFile(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Document upload failed.");
+    }
+  }
+
+  async function removeDocument(documentId: string) {
+    try {
+      await deleteDocument.mutateAsync(documentId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Document delete failed.");
     }
   }
 
@@ -351,10 +625,22 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
                   Manager
                 </Button>
               )}
+              {canManageOrg && (
+                <Button variant="outline" size="sm" onClick={openOrg}>
+                  <Layers className="mr-1.5 size-3.5" />
+                  Org
+                </Button>
+              )}
               {canAssignLocation && (
                 <Button variant="outline" size="sm" onClick={openLocation}>
                   <MapPin className="mr-1.5 size-3.5" />
                   Location
+                </Button>
+              )}
+              {canManageShifts && (
+                <Button variant="outline" size="sm" onClick={openShift}>
+                  <CalendarClock className="mr-1.5 size-3.5" />
+                  Shift
                 </Button>
               )}
               {canUpdateStatus && (
@@ -488,13 +774,45 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
             <InfoRow label="Account status" value={accountStatus} />
             <InfoRow label="Login email" value={display(primaryMembership?.user?.email ?? employee.email)} />
             <InfoRow label="Tenant roles" value={roles.length ? roles.map((role) => role?.name ?? role?.code).join(", ") : "No tenant roles"} />
+            <div className="mt-4 grid gap-2">
+              {!primaryMembership && canInviteUsers ? (
+                <Button size="sm" onClick={openAccount}>
+                  <Plus className="mr-1.5 size-3.5" />
+                  Create / Invite Account
+                </Button>
+              ) : null}
+              {primaryMembership && canResetAccess ? (
+                <Button variant="outline" size="sm" onClick={resendInvite} disabled={resetAccess.isPending}>
+                  {resetAccess.isPending ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <Mail className="mr-1.5 size-3.5" />}
+                  Resend Invite
+                </Button>
+              ) : null}
+              {primaryMembership && canUpdateUsers && canReadRoles ? (
+                <Button variant="outline" size="sm" onClick={openRoles}>
+                  <ShieldCheck className="mr-1.5 size-3.5" />
+                  Manage Roles
+                </Button>
+              ) : null}
+              {primaryMembership && accountStatus === "Active" && canDeactivateUsers ? (
+                <Button variant="outline" size="sm" onClick={() => updateAccountStatus("SUSPENDED")} disabled={updateMembershipStatus.isPending}>
+                  Suspend Login
+                </Button>
+              ) : null}
+              {primaryMembership && ["Suspended", "Disabled", "Invited"].includes(accountStatus) && canDeactivateUsers ? (
+                <Button variant="outline" size="sm" onClick={() => updateAccountStatus("ACTIVE")} disabled={updateMembershipStatus.isPending}>
+                  Reactivate Login
+                </Button>
+              ) : null}
+              {error && activeTab === "access" ? <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{error}</p> : null}
+            </div>
           </SectionCard>
           <SectionCard title="Effective Permissions" icon={ShieldCheck}>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {permissionGroupSummary(permissionSummary).map((group) => (
                 <div key={group.label} className="rounded-md border border-border p-3">
                   <p className="text-xs font-medium text-foreground">{group.label}</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">{group.count ? `${group.count} permissions` : "No access"}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-foreground">{accessLevel(group.count)}</p>
+                  <p className="text-[11px] text-muted-foreground">{group.count ? `${group.count} permissions` : "No effective permission"}</p>
                 </div>
               ))}
             </div>
@@ -505,8 +823,14 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
           <SectionCard title="Attendance & Leave" icon={CalendarClock}>
             <InfoRow label="Current shift" value={shift ? `${shift.name} (${shift.code ?? "no code"})` : "Not configured"} />
             <InfoRow label="Shift window" value={shift ? `${minutesToTime(shift.startsAtMinute)}-${minutesToTime(shift.endsAtMinute)}` : "Not configured"} />
+            <InfoRow label="Effective date" value={shiftAssignment?.startsOn ? formatDate(shiftAssignment.startsOn) : "Not configured"} />
             <InfoRow label="Location dependency" value={display(locationName)} />
-            <div className="pt-3">
+            <div className="flex flex-wrap gap-2 pt-3">
+              {canManageShifts ? (
+                <Button variant="outline" size="sm" onClick={openShift}>
+                  Assign Shift
+                </Button>
+              ) : null}
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/attendance?employeeId=${employee.id}` as Route}>Open Attendance</Link>
               </Button>
@@ -538,6 +862,11 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
               <InfoRow label="IFSC" value={maskValue(bank.ifsc)} />
               <InfoRow label="Branch" value={maskValue(bank.branch)} />
               <InfoRow label="Account type" value={maskValue(bank.accountType)} />
+              {canManagePayroll ? (
+                <Button variant="outline" size="sm" className="mt-4" onClick={openBank}>
+                  Update Bank Details
+                </Button>
+              ) : null}
             </SectionCard>
           ) : (
             <RestrictedCard title="Payroll and bank data restricted" permission="payroll.view" />
@@ -558,6 +887,15 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
         <TabsContent value="documents" className="mt-4 grid gap-4 lg:grid-cols-[1fr_300px]">
           {canReadDocuments ? (
             <Card className="overflow-hidden border-border shadow-xs">
+              <CardHeader className="flex-row items-center justify-between border-b border-border pb-3">
+                <CardTitle className="text-xs font-semibold">Document Vault</CardTitle>
+                {canUploadDocuments ? (
+                  <Button size="sm" variant="outline" onClick={() => { setError(null); setDocumentOpen(true); }}>
+                    <UploadCloud className="mr-1.5 size-3.5" />
+                    Upload
+                  </Button>
+                ) : null}
+              </CardHeader>
               <CardContent className="p-0">
                 {documents.length ? (
                   <Table>
@@ -567,17 +905,32 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
                         <TableHead>Type</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Version</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {documents.map((doc) => {
-                        const metadataDoc = doc as typeof doc & { status?: string; version?: number };
+                        const metadataDoc = doc as typeof doc & { status?: string; version?: number; downloadUrl?: string };
                         return (
                         <TableRow key={doc.id}>
                           <TableCell className="font-medium text-foreground">{doc.fileName || doc.title || doc.documentType}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{doc.documentType}</TableCell>
                           <TableCell><Badge variant={doc.isVerified ? "success" : "secondary"} className="text-[10px]">{doc.isVerified ? "Verified" : metadataDoc.status ?? "Pending"}</Badge></TableCell>
                           <TableCell className="font-mono text-xs">{metadataDoc.version ?? "1"}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              {metadataDoc.downloadUrl ? (
+                                <Button variant="outline" size="sm" asChild>
+                                  <a href={metadataDoc.downloadUrl}>Download</a>
+                                </Button>
+                              ) : null}
+                              {canUploadDocuments ? (
+                                <Button variant="outline" size="sm" onClick={() => removeDocument(doc.id)} disabled={deleteDocument.isPending}>
+                                  Delete
+                                </Button>
+                              ) : null}
+                            </div>
+                          </TableCell>
                         </TableRow>
                         );
                       })}
@@ -597,10 +950,18 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
           )}
           <SectionCard title="Assets & Letters" icon={FileCheck}>
             <InfoRow label="Assigned assets" value={canReadAssets ? assets.length : "Restricted"} />
-            <InfoRow label="Letters" value="Use Document Vault" />
-            <Button variant="outline" size="sm" asChild className="mt-3">
-              <Link href={"/documents" as Route}>Open Documents</Link>
-            </Button>
+            <InfoRow label="Letters" value={letters.length ? `${letters.length} generated` : canGenerateLetters ? "Generator available" : "Restricted"} />
+            <InfoRow label="Biometric" value={faceProfileQuery.isSuccess ? "Enrollment state available" : canReadFace ? "Not enrolled or unavailable" : "Restricted"} />
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" asChild>
+                <Link href={"/documents" as Route}>Open Documents</Link>
+              </Button>
+              {canGenerateLetters ? (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={"/ess/letters" as Route}>Open Letters</Link>
+                </Button>
+              ) : null}
+            </div>
           </SectionCard>
         </TabsContent>
 
@@ -711,6 +1072,198 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
             <DialogFooter>
               <Button variant="outline" onClick={() => setLocationOpen(false)}>Cancel</Button>
               <Button onClick={submitLocation} disabled={assignLocation.isPending}>{assignLocation.isPending ? "Assigning..." : "Assign"}</Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={orgOpen} onOpenChange={setOrgOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Organization Assignment</DialogTitle>
+            <DialogDescription>Uses existing departments, designations, business units, and teams.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {error && <p className="sm:col-span-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{error}</p>}
+            <div className="space-y-1.5">
+              <Label htmlFor="department">Department</Label>
+              <select id="department" value={departmentInput} onChange={(event) => setDepartmentInput(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs">
+                <option value="">Choose department</option>
+                {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="designation">Designation</Label>
+              <select id="designation" value={designationInput} onChange={(event) => setDesignationInput(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs">
+                <option value="">Choose designation</option>
+                {designations.map((designation) => <option key={designation.id} value={designation.id}>{designation.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="business-unit">Business Unit</Label>
+              <select id="business-unit" value={businessUnitInput} onChange={(event) => setBusinessUnitInput(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs">
+                <option value="">Not assigned</option>
+                {businessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="team">Team</Label>
+              <select id="team" value={teamInput} onChange={(event) => setTeamInput(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs">
+                <option value="">Not assigned</option>
+                {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOrgOpen(false)}>Cancel</Button>
+            <Button onClick={submitOrg} disabled={updateProfile.isPending || assignOrg.isPending}>{updateProfile.isPending || assignOrg.isPending ? "Saving..." : "Save assignment"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={shiftOpen} onOpenChange={setShiftOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign Shift</DialogTitle>
+            <DialogDescription>Creates an audited shift assignment in Attendance Operations.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {error && <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{error}</p>}
+            <div className="space-y-1.5">
+              <Label htmlFor="shift">Shift</Label>
+              <select id="shift" value={shiftInput} onChange={(event) => setShiftInput(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs">
+                <option value="">Choose shift</option>
+                {shifts.map((item) => <option key={item.id} value={item.id}>{item.name} · {minutesToTime(item.startsAtMinute)}-{minutesToTime(item.endsAtMinute)}</option>)}
+              </select>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="shift-starts">Effective Date</Label>
+                <Input id="shift-starts" type="date" value={shiftStartsOn} onChange={(event) => setShiftStartsOn(event.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="shift-ends">End Date</Label>
+                <Input id="shift-ends" type="date" value={shiftEndsOn} onChange={(event) => setShiftEndsOn(event.target.value)} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShiftOpen(false)}>Cancel</Button>
+              <Button onClick={submitShift} disabled={assignShift.isPending}>{assignShift.isPending ? "Assigning..." : "Assign shift"}</Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={accountOpen} onOpenChange={setAccountOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create / Invite Account</DialogTitle>
+            <DialogDescription>Links this employee to a tenant login account without exposing passwords.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {error && <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{error}</p>}
+            <InfoRow label="Work email" value={employee.email} />
+            <div className="grid gap-2">
+              {tenantRoles.map((role) => (
+                <label key={role.id} className="flex items-start gap-3 rounded-md border border-border p-3 text-xs">
+                  <input type="checkbox" checked={inviteRoleInputs.includes(role.code)} onChange={() => toggleRoleInput(role.code, "invite")} className="mt-0.5" />
+                  <span><span className="block font-semibold">{role.name}</span><span className="font-mono text-[10px] text-muted-foreground">{role.code}</span></span>
+                </label>
+              ))}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAccountOpen(false)}>Cancel</Button>
+              <Button onClick={submitInviteAccount} disabled={inviteAccount.isPending}>{inviteAccount.isPending ? "Inviting..." : "Send invite"}</Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rolesOpen} onOpenChange={setRolesOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manage Tenant Roles</DialogTitle>
+            <DialogDescription>Role changes use the canonical Users & Access RBAC endpoint.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {error && <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{error}</p>}
+            <div className="grid max-h-80 gap-2 overflow-y-auto pr-1">
+              {tenantRoles.map((role) => (
+                <label key={role.id} className="flex items-start gap-3 rounded-md border border-border p-3 text-xs">
+                  <input type="checkbox" checked={roleInputs.includes(role.code)} onChange={() => toggleRoleInput(role.code)} className="mt-0.5" />
+                  <span><span className="block font-semibold">{role.name}</span><span className="font-mono text-[10px] text-muted-foreground">{role.code}</span></span>
+                </label>
+              ))}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRolesOpen(false)}>Cancel</Button>
+              <Button onClick={submitRoles} disabled={assignRoles.isPending}>{assignRoles.isPending ? "Saving..." : "Save roles"}</Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bankOpen} onOpenChange={setBankOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Update Bank Details</DialogTitle>
+            <DialogDescription>Existing account numbers stay write-only; standard People responses remain masked.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {error && <p className="sm:col-span-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{error}</p>}
+            {bankFields.map(([key, label, autocomplete]) => (
+              <div key={key} className="space-y-1.5">
+                <Label htmlFor={`bank-${key}`}>{label}</Label>
+                <Input
+                  id={`bank-${key}`}
+                  type={key.includes("accountNumber") ? "password" : "text"}
+                  autoComplete={autocomplete}
+                  value={String(bankForm[key as keyof BankDetailsInput] ?? "")}
+                  onChange={(event) => setBankForm((current) => ({ ...current, [key]: event.target.value }))}
+                />
+              </div>
+            ))}
+            <div className="space-y-1.5">
+              <Label htmlFor="bank-account-type">Account Type</Label>
+              <select id="bank-account-type" value={bankForm.accountType} onChange={(event) => setBankForm((current) => ({ ...current, accountType: event.target.value as BankDetailsInput["accountType"] }))} className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs">
+                {["SALARY", "SAVINGS", "CURRENT"].map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBankOpen(false)}>Cancel</Button>
+            <Button onClick={submitBank} disabled={updateBank.isPending}>{updateBank.isPending ? "Saving..." : "Save bank details"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={documentOpen} onOpenChange={setDocumentOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Upload Employee Document</DialogTitle>
+            <DialogDescription>Stores the file through Document Vault using a tenant and employee scoped object key.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {error && <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{error}</p>}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="document-title">Title</Label>
+                <Input id="document-title" value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="document-type">Type</Label>
+                <select id="document-type" value={documentType} onChange={(event) => setDocumentType(event.target.value as typeof documentType)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs">
+                  {["PAN", "AADHAAR", "PASSPORT", "DRIVING_LICENSE", "OFFER_LETTER", "APPOINTMENT_LETTER", "PAYSLIP", "TAX_DOCUMENT", "CERTIFICATE", "CUSTOM"].map((value) => <option key={value} value={value}>{value.replace(/_/g, " ")}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="document-file">File</Label>
+              <Input id="document-file" type="file" accept="application/pdf,image/png,image/jpeg,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => setDocumentFile(event.target.files?.[0] ?? null)} />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDocumentOpen(false)}>Cancel</Button>
+              <Button onClick={submitDocument} disabled={uploadDocument.isPending}>{uploadDocument.isPending ? "Uploading..." : "Upload"}</Button>
             </DialogFooter>
           </div>
         </DialogContent>

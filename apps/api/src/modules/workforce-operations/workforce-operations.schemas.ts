@@ -34,6 +34,21 @@ export const CreateShiftSwapRequestSchema = z.object({
   reason: z.string().min(3).max(500)
 });
 
+export const AssignEmployeeShiftSchema = z
+  .object({
+    employeeId: z.string().uuid(),
+    shiftId: z.string().uuid(),
+    startsOn: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
+    endsOn: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
+    reason: z.string().min(8).max(500).optional()
+  })
+  .refine((value) => !value.endsOn || new Date(value.endsOn) >= new Date(value.startsOn), {
+    path: ["endsOn"],
+    message: "Shift assignment end date must be on or after the effective date."
+  });
+
+export type AssignEmployeeShiftDto = z.infer<typeof AssignEmployeeShiftSchema>;
+
 export const ReviewShiftSwapSchema = z.object({
   action: z.enum(["APPROVE", "REJECT"]),
   rejectionReason: z.string().optional()

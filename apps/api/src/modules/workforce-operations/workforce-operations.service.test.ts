@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { WorkforceOperationsService } from "./workforce-operations.service.js";
 
 function createService(prismaOverrides: Record<string, unknown> = {}) {
-  const prisma = {
+  const prismaBase = {
     attendance: { findFirst: vi.fn() },
     biometricDevice: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     biometricPunch: { create: vi.fn() },
@@ -13,10 +13,17 @@ function createService(prismaOverrides: Record<string, unknown> = {}) {
     location: { findFirst: vi.fn() },
     shift: { findFirst: vi.fn() },
     shiftSwapRequest: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
-    shiftAssignment: { updateMany: vi.fn() },
-    workforceSchedule: { create: vi.fn() },
-    ...prismaOverrides
+    shiftAssignment: { create: vi.fn(), updateMany: vi.fn() },
+    employeeTimelineEvent: { create: vi.fn() },
+    workforceSchedule: { create: vi.fn() }
   };
+  const prisma = {
+    ...prismaBase,
+    ...prismaOverrides
+  } as typeof prismaBase & { $transaction: ReturnType<typeof vi.fn> };
+  prisma.$transaction = vi.fn(async (callback: (tx: typeof prismaBase) => unknown) => {
+    return callback(prisma);
+  });
   const audit = { record: vi.fn() };
   return { service: new WorkforceOperationsService(prisma as never, audit as never), prisma, audit };
 }
@@ -87,6 +94,38 @@ describe("WorkforceOperationsService tenant isolation", () => {
       )
     ).rejects.toThrow(NotFoundException);
     expect(prisma.shiftSwapRequest.create).not.toHaveBeenCalled();
+  });
+
+  it("assigns employee shifts with tenant checks and audit", async () => {
+    const assignment = {
+      id: "assignment-1",
+      employeeId: "employee-1",
+      shiftId: "shift-1",
+      shift: { id: "shift-1", name: "Morning Shift" },
+      employee: { id: "employee-1", fullName: "Asha Nair", employeeCode: "EMP-001" }
+    };
+    const { service, prisma, audit } = createService();
+    vi.mocked(prisma.employee.findFirst).mockResolvedValue({ id: "employee-1" } as never);
+    vi.mocked(prisma.shift.findFirst).mockResolvedValue({ id: "shift-1" } as never);
+    vi.mocked(prisma.shiftAssignment.create).mockResolvedValue(assignment as never);
+
+    await expect(
+      service.assignEmployeeShift(
+        "tenant-a",
+        {
+          employeeId: "11111111-1111-4111-8111-111111111111",
+          shiftId: "22222222-2222-4222-8222-222222222222",
+          startsOn: "2099-01-01",
+          reason: "Initial roster assignment"
+        },
+        "user-1",
+        "membership-1"
+      )
+    ).resolves.toMatchObject({ id: "assignment-1" });
+
+    expect(prisma.shiftAssignment.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ tenantId: "tenant-a" }) }));
+    expect(prisma.employeeTimelineEvent.create).toHaveBeenCalled();
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: "WORKFORCE_SHIFT_ASSIGNED", tenantId: "tenant-a" }));
   });
 
   it("rejects contractor attendance linked to another tenant gate pass", async () => {

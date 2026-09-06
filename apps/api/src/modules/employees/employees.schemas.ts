@@ -25,6 +25,21 @@ export const employeeDocumentStatusSchema = z.enum(["DRAFT", "ACTIVE", "REPLACED
 
 const jsonRecordSchema = z.record(z.unknown());
 
+export const employeeBankDetailsSchema = z
+  .object({
+    accountHolderName: z.string().min(2),
+    bankName: z.string().min(2),
+    accountNumber: z.string().min(5).max(34).regex(/^[0-9A-Za-z-]+$/),
+    confirmAccountNumber: z.string().min(5).max(34),
+    ifsc: z.string().min(4).max(15).regex(/^[A-Za-z]{4}0[A-Za-z0-9]{6}$/i, "IFSC must follow the Indian bank format."),
+    branch: z.string().min(2).max(120),
+    accountType: z.enum(["SAVINGS", "CURRENT", "SALARY"])
+  })
+  .refine((value) => value.accountNumber === value.confirmAccountNumber, {
+    path: ["confirmAccountNumber"],
+    message: "Account numbers do not match."
+  });
+
 export const createDepartmentSchema = z.object({
   name: z.string().min(2),
   code: z.string().min(2),
@@ -145,6 +160,7 @@ export type CreateDepartmentDto = z.infer<typeof createDepartmentSchema>;
 export type UpdateDepartmentDto = z.infer<typeof updateDepartmentSchema>;
 export type CreateDesignationDto = z.infer<typeof createDesignationSchema>;
 export type UpdateDesignationDto = z.infer<typeof updateDesignationSchema>;
+export type EmployeeBankDetailsDto = z.infer<typeof employeeBankDetailsSchema>;
 export type CreateEmployeeDto = z.infer<typeof createEmployeeSchema>;
 export type UpdateEmployeeDto = z.infer<typeof updateEmployeeSchema>;
 export type ArchiveEmployeeDto = z.infer<typeof archiveEmployeeSchema>;

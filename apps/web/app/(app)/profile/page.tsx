@@ -10,6 +10,7 @@ import {
   MapPin,
   HeartHandshake,
   AlertCircle,
+  Banknote,
   QrCode,
   FileText,
   ShieldCheck,
@@ -21,14 +22,25 @@ import {
 } from "lucide-react";
 import {
   useProfile,
+  useUpdateMyBankDetailsMutation,
   useUploadAvatarMutation,
   useRemoveAvatarMutation
 } from "../../../lib/queries/use-ess-queries";
-import { usePermissionGate } from "../../../lib/session-store";
+import { useHasPermission, usePermissionGate } from "../../../lib/session-store";
+
+const bankFields = [
+  ["accountHolderName", "Account Holder Name", "name"],
+  ["bankName", "Bank Name", "organization"],
+  ["accountNumber", "Account Number", "off"],
+  ["confirmAccountNumber", "Confirm Account Number", "off"],
+  ["ifsc", "IFSC", "off"],
+  ["branch", "Branch", "address-level2"]
+] as const;
 
 export default function EmployeeProfilePage() {
   const gate = usePermissionGate(["profile.view", "ess.read"]);
-  const [activeTab, setActiveTab] = useState<"work" | "personal" | "emergency">("work");
+  const canUpdateProfile = useHasPermission("profile.update");
+  const [activeTab, setActiveTab] = useState<"work" | "personal" | "emergency" | "bank">("work");
   const { data: profile, isLoading, isError, refetch } = useProfile(gate.isAuthorized);
 
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
@@ -37,10 +49,22 @@ export default function EmployeeProfilePage() {
   const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [isDraggingAvatar, setIsDraggingAvatar] = useState(false);
+  const [bankModalOpen, setBankModalOpen] = useState(false);
+  const [bankError, setBankError] = useState<string | null>(null);
+  const [bankForm, setBankForm] = useState({
+    accountHolderName: "",
+    bankName: "",
+    accountNumber: "",
+    confirmAccountNumber: "",
+    ifsc: "",
+    branch: "",
+    accountType: "SALARY" as "SAVINGS" | "CURRENT" | "SALARY"
+  });
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const uploadAvatarMutation = useUploadAvatarMutation();
   const removeAvatarMutation = useRemoveAvatarMutation();
+  const updateBankMutation = useUpdateMyBankDetailsMutation();
 
   const handleAvatarSelect = (file: File) => {
     setAvatarError(null);
@@ -91,6 +115,30 @@ export default function EmployeeProfilePage() {
       setAvatarBase64(null);
     } catch (err: unknown) {
       setAvatarError(err instanceof Error ? err.message : "Failed to remove avatar.");
+    }
+  };
+
+  const openBankModal = () => {
+    setBankError(null);
+    setBankForm({
+      accountHolderName: profile?.bankDetails?.accountHolderName ?? displayName ?? "",
+      bankName: profile?.bankDetails?.bankName ?? "",
+      accountNumber: "",
+      confirmAccountNumber: "",
+      ifsc: "",
+      branch: profile?.bankDetails?.branch ?? "",
+      accountType: ["SAVINGS", "CURRENT", "SALARY"].includes(String(profile?.bankDetails?.accountType)) ? profile?.bankDetails?.accountType as "SAVINGS" | "CURRENT" | "SALARY" : "SALARY"
+    });
+    setBankModalOpen(true);
+  };
+
+  const handleSaveBank = async () => {
+    try {
+      setBankError(null);
+      await updateBankMutation.mutateAsync(bankForm);
+      setBankModalOpen(false);
+    } catch (err) {
+      setBankError(err instanceof Error ? err.message : "Failed to update bank details.");
     }
   };
 
@@ -279,6 +327,16 @@ export default function EmployeeProfilePage() {
         >
           Emergency Contacts
         </button>
+        <button
+          onClick={() => setActiveTab("bank")}
+          className={`px-4 py-2 rounded-control text-xs font-semibold transition ${
+            activeTab === "bank"
+              ? "bg-primary text-white shadow-sm"
+              : "text-foreground-secondary hover:bg-surface-muted"
+          }`}
+        >
+          Bank Details
+        </button>
       </div>
 
       {/* 3. Tab Content Surfaces */}
@@ -287,8 +345,9 @@ export default function EmployeeProfilePage() {
           <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
               <Briefcase className="w-4 h-4 text-primary" />
-              Position & Organization
+              Company Managed
             </h3>
+            <p className="text-[11px] text-foreground-muted">These employment fields are maintained by HR and cannot be edited from self-service.</p>
             <div className="divide-y divide-border-subtle text-xs">
               <div className="py-2.5 flex justify-between">
                 <span className="text-foreground-muted">Employee ID</span>
@@ -316,8 +375,9 @@ export default function EmployeeProfilePage() {
           <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
               <Building className="w-4 h-4 text-primary" />
-              Workplace Context
+              Company Managed Context
             </h3>
+            <p className="text-[11px] text-foreground-muted">Work email, team, reporting structure, location, and salary type are controlled by company workflows.</p>
             <div className="divide-y divide-border-subtle text-xs">
               <div className="py-2.5 flex justify-between">
                 <span className="text-foreground-muted">Work Email</span>
@@ -351,8 +411,9 @@ export default function EmployeeProfilePage() {
           <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card space-y-4">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
               <User className="w-4 h-4 text-primary" />
-              Contact Information
+              Your Details
             </h3>
+            <p className="text-[11px] text-foreground-muted">You can maintain your contact and address details from Edit Profile.</p>
             <div className="divide-y divide-border-subtle text-xs">
               <div className="py-2.5 flex justify-between">
                 <span className="text-foreground-muted">Personal Email</span>
@@ -396,8 +457,9 @@ export default function EmployeeProfilePage() {
         <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card max-w-xl space-y-4">
           <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
             <HeartHandshake className="w-4 h-4 text-primary" />
-            Emergency Contact Information
+            Your Details
           </h3>
+          <p className="text-[11px] text-foreground-muted">Emergency contact details are employee-owned and audit logged when updated.</p>
           <div className="divide-y divide-border-subtle text-xs">
             <div className="py-2.5 flex justify-between">
               <span className="text-foreground-muted">Contact Name</span>
@@ -410,6 +472,125 @@ export default function EmployeeProfilePage() {
             <div className="py-2.5 flex justify-between">
               <span className="text-foreground-muted">Emergency Phone</span>
               <span className="font-mono font-semibold text-foreground">{profile.emergencyContact?.phone || "—"}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "bank" && (
+        <div className="rounded-card bg-surface-raised border border-border-subtle p-5 shadow-card max-w-2xl space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <Banknote className="w-4 h-4 text-primary" />
+                Your Details
+              </h3>
+              <p className="mt-1 text-[11px] text-foreground-muted">Bank details are write-only for account number updates. Standard responses show masked values only.</p>
+            </div>
+            {canUpdateProfile ? (
+              <button
+                type="button"
+                onClick={openBankModal}
+                className="px-3.5 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-bold transition shadow-sm"
+              >
+                Update
+              </button>
+            ) : null}
+          </div>
+          <div className="divide-y divide-border-subtle text-xs">
+            <div className="py-2.5 flex justify-between gap-4">
+              <span className="text-foreground-muted">Account Holder</span>
+              <span className="font-semibold text-foreground text-right">{profile.bankDetails?.accountHolderName || "—"}</span>
+            </div>
+            <div className="py-2.5 flex justify-between gap-4">
+              <span className="text-foreground-muted">Bank Name</span>
+              <span className="font-semibold text-foreground text-right">{profile.bankDetails?.bankName || "—"}</span>
+            </div>
+            <div className="py-2.5 flex justify-between gap-4">
+              <span className="text-foreground-muted">Account Number</span>
+              <span className="font-mono font-semibold text-foreground text-right">{profile.bankDetails?.maskedAccountNumber || "—"}</span>
+            </div>
+            <div className="py-2.5 flex justify-between gap-4">
+              <span className="text-foreground-muted">IFSC</span>
+              <span className="font-semibold text-foreground text-right">{profile.bankDetails?.ifsc || "—"}</span>
+            </div>
+            <div className="py-2.5 flex justify-between gap-4">
+              <span className="text-foreground-muted">Branch</span>
+              <span className="font-semibold text-foreground text-right">{profile.bankDetails?.branch || "—"}</span>
+            </div>
+            <div className="py-2.5 flex justify-between gap-4">
+              <span className="text-foreground-muted">Account Type</span>
+              <span className="font-semibold text-foreground text-right">{profile.bankDetails?.accountType || "—"}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bankModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-panel bg-surface-raised border border-border-subtle p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+              <div>
+                <h3 className="text-sm font-bold text-foreground">Update Bank Details</h3>
+                <p className="text-[11px] text-foreground-muted">Account number is replaced only when you enter the complete value.</p>
+              </div>
+              <button
+                onClick={() => setBankModalOpen(false)}
+                className="w-7 h-7 rounded-pill hover:bg-surface-muted flex items-center justify-center text-foreground-muted transition"
+                aria-label="Close bank details dialog"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {bankError && (
+              <div className="p-3 rounded-control bg-danger/10 border border-danger/20 text-danger text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{bankError}</span>
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {bankFields.map(([key, label, autocomplete]) => (
+                <div key={key}>
+                  <label htmlFor={`profile-bank-${key}`} className="block text-xs font-semibold text-foreground-secondary mb-1">{label}</label>
+                  <input
+                    id={`profile-bank-${key}`}
+                    type={key.includes("accountNumber") ? "password" : "text"}
+                    autoComplete={autocomplete}
+                    value={String(bankForm[key as keyof typeof bankForm] ?? "")}
+                    onChange={(event) => setBankForm((current) => ({ ...current, [key]: event.target.value }))}
+                    className="w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              ))}
+              <div>
+                <label htmlFor="profile-bank-account-type" className="block text-xs font-semibold text-foreground-secondary mb-1">Account Type</label>
+                <select
+                  id="profile-bank-account-type"
+                  value={bankForm.accountType}
+                  onChange={(event) => setBankForm((current) => ({ ...current, accountType: event.target.value as typeof bankForm.accountType }))}
+                  className="w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {["SALARY", "SAVINGS", "CURRENT"].map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="pt-3 border-t border-border-subtle flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setBankModalOpen(false)}
+                className="px-4 py-2 rounded-control bg-surface-muted hover:bg-muted text-xs font-semibold text-foreground-secondary transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={updateBankMutation.isPending}
+                onClick={handleSaveBank}
+                className="px-5 py-2 rounded-control bg-primary hover:bg-primary-hover text-white text-xs font-bold transition shadow-sm inline-flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {updateBankMutation.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Saving...</> : "Save Bank Details"}
+              </button>
             </div>
           </div>
         </div>

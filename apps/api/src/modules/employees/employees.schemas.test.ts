@@ -4,6 +4,7 @@ import {
   createDocumentMetadataSchema,
   createEmployeeSchema,
   employeeExportSchema,
+  employeeBankDetailsSchema,
   employeeImportCommitSchema,
   employeeImportPreviewSchema,
   employeeSearchSchema,
@@ -81,6 +82,32 @@ describe("employee foundation schemas", () => {
         reason: "Bulk probation assignment"
       }).success
     ).toBe(true);
+  });
+
+  it("validates write-only employee bank detail updates", () => {
+    const valid = employeeBankDetailsSchema.safeParse({
+      accountHolderName: "Asha Nair",
+      bankName: "Example Bank",
+      accountNumber: "12345678901",
+      confirmAccountNumber: "12345678901",
+      ifsc: "HDFC0001234",
+      branch: "Mumbai Fort",
+      accountType: "SALARY"
+    });
+    expect(valid.success).toBe(true);
+    if (valid.success) {
+      expect("confirmAccountNumber" in valid.data).toBe(true);
+    }
+
+    expect(employeeBankDetailsSchema.safeParse({
+      accountHolderName: "Asha Nair",
+      bankName: "Example Bank",
+      accountNumber: "12345678901",
+      confirmAccountNumber: "99999999999",
+      ifsc: "HDFC0001234",
+      branch: "Mumbai Fort",
+      accountType: "SALARY"
+    }).success).toBe(false);
   });
 
   it("validates import preview schema", () => {

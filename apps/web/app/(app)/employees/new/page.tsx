@@ -3,6 +3,9 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import type { Route } from "next";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button, Field, Input, Panel } from "../../../../components/ui";
@@ -28,6 +31,7 @@ type EmployeeForm = z.infer<typeof schema>;
 
 export default function EmployeeCreatePage() {
   const router = useRouter();
+  const [createdEmployee, setCreatedEmployee] = useState<{ id: string; managerEmployeeId?: string | null; departmentId?: string | null; designationId?: string | null; memberships?: unknown[]; locationAssignments?: unknown[]; shiftAssignments?: unknown[] } | null>(null);
   const form = useForm<EmployeeForm>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -46,13 +50,52 @@ export default function EmployeeCreatePage() {
       if (payload.dateOfBirth) payload.dateOfBirth = new Date(payload.dateOfBirth).toISOString();
       if (!payload.managerEmployeeId) delete payload.managerEmployeeId;
       if (!payload.gender) delete payload.gender;
-      return apiRequest<{ id: string }>("/employees", {
+      return apiRequest<{ id: string; managerEmployeeId?: string | null; departmentId?: string | null; designationId?: string | null; memberships?: unknown[]; locationAssignments?: unknown[]; shiftAssignments?: unknown[] }>("/employees", {
         method: "POST",
         body: JSON.stringify(payload)
       });
     },
-    onSuccess: (employee) => router.push(`/employees/${employee.id}`)
+    onSuccess: (employee) => setCreatedEmployee(employee)
   });
+
+  if (createdEmployee) {
+    const checklist = [
+      ["Manager", Boolean(createdEmployee.managerEmployeeId)],
+      ["Location", Boolean(createdEmployee.locationAssignments?.length)],
+      ["Department / Team", Boolean(createdEmployee.departmentId)],
+      ["Designation", Boolean(createdEmployee.designationId)],
+      ["Shift", Boolean(createdEmployee.shiftAssignments?.length)],
+      ["Role", Boolean(createdEmployee.memberships?.length)],
+      ["Login Account", Boolean(createdEmployee.memberships?.length)]
+    ];
+    return (
+      <div className="mx-auto grid max-w-3xl gap-6 p-4 md:p-6 lg:p-8">
+        <header>
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Employee created</h1>
+          <p className="mt-1 text-sm text-zinc-600">Continue setup from the employee record. Login account creation is optional.</p>
+        </header>
+        <Panel className="p-0 overflow-hidden">
+          <div className="border-b border-border px-5 py-4">
+            <h2 className="text-sm font-semibold text-zinc-950">Setup checklist</h2>
+          </div>
+          <div className="grid gap-2 p-5 sm:grid-cols-2">
+            {checklist.map(([label, ready]) => (
+              <div key={String(label)} className="flex items-center justify-between rounded-control border border-border px-3 py-2 text-xs">
+                <span className="font-medium text-zinc-800">{label}</span>
+                <span className={ready ? "font-semibold text-emerald-700" : "font-semibold text-zinc-500"}>{ready ? "Ready" : "Needs setup"}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-col gap-2 border-t border-border p-5 sm:flex-row sm:justify-end">
+            <Button type="button" variant="secondary" onClick={() => setCreatedEmployee(null)}>Create another</Button>
+            <Link href={`/employees/${createdEmployee.id}` as Route} className="inline-flex h-10 items-center justify-center rounded-control bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-hover">
+              Continue setup
+            </Link>
+          </div>
+        </Panel>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto grid max-w-3xl gap-6 p-4 md:p-6 lg:p-8">

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Header,
   Param,
@@ -17,6 +18,10 @@ import { type AuthenticatedRequest } from "../common/request-context.js";
 import { requireTenantContext } from "../common/tenant-context.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { RequirePermissions } from "../rbac/permissions.decorator.js";
+import {
+  employeeBankDetailsSchema,
+  type EmployeeBankDetailsDto
+} from "../employees/employees.schemas.js";
 import {
   announcementFilterSchema,
   createAnnouncementSchema,
@@ -63,6 +68,18 @@ export class EssController {
     private readonly idCardService: IdCardService
   ) {}
 
+  private async resolveProfileEmployeeId(tenant: ReturnType<typeof requireTenantContext>, queryEmployeeId?: string) {
+    const ownEmployeeId = await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId);
+    if (!queryEmployeeId || queryEmployeeId === ownEmployeeId) return ownEmployeeId;
+    const canAccessOtherProfile = tenant.permissions.some((permission) =>
+      ["employees.read", "employees.update", "documents.view", "documents.read", "idcard.view"].includes(permission)
+    );
+    if (!canAccessOtherProfile) {
+      throw new ForbiddenException("You can only access your own employee profile.");
+    }
+    return queryEmployeeId;
+  }
+
   // ----------------- Profile Endpoints -----------------
 
   @Get("profile")
@@ -72,8 +89,7 @@ export class EssController {
     @Query("employeeId") queryEmployeeId?: string
   ) {
     const tenant = requireTenantContext(req);
-    const targetEmployeeId =
-      queryEmployeeId || (await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId));
+    const targetEmployeeId = await this.resolveProfileEmployeeId(tenant, queryEmployeeId);
 
     return this.essService.getProfile(tenant.tenantId, targetEmployeeId, tenant.userId);
   }
@@ -86,8 +102,7 @@ export class EssController {
     @Query("employeeId") queryEmployeeId?: string
   ) {
     const tenant = requireTenantContext(req);
-    const targetEmployeeId =
-      queryEmployeeId || (await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId));
+    const targetEmployeeId = await this.resolveProfileEmployeeId(tenant, queryEmployeeId);
 
     return this.essService.updateProfile(tenant.tenantId, targetEmployeeId, body, tenant.userId);
   }
@@ -100,8 +115,7 @@ export class EssController {
     @Query("employeeId") queryEmployeeId?: string
   ) {
     const tenant = requireTenantContext(req);
-    const targetEmployeeId =
-      queryEmployeeId || (await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId));
+    const targetEmployeeId = await this.resolveProfileEmployeeId(tenant, queryEmployeeId);
 
     return this.essService.uploadAvatar(tenant.tenantId, targetEmployeeId, body, tenant.userId);
   }
@@ -113,10 +127,20 @@ export class EssController {
     @Query("employeeId") queryEmployeeId?: string
   ) {
     const tenant = requireTenantContext(req);
-    const targetEmployeeId =
-      queryEmployeeId || (await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId));
+    const targetEmployeeId = await this.resolveProfileEmployeeId(tenant, queryEmployeeId);
 
     return this.essService.removeAvatar(tenant.tenantId, targetEmployeeId, tenant.userId);
+  }
+
+  @Patch("profile/bank-details")
+  @RequirePermissions("profile.update")
+  async updateMyBankDetails(
+    @Req() req: AuthenticatedRequest,
+    @Body(new ZodValidationPipe(employeeBankDetailsSchema)) body: EmployeeBankDetailsDto
+  ) {
+    const tenant = requireTenantContext(req);
+    const employeeId = await this.essService.resolveEmployeeIdForUser(tenant.tenantId, tenant.userId);
+    return this.essService.updateBankDetails(tenant.tenantId, employeeId, body, tenant.userId, tenant.membershipId);
   }
 
   // ----------------- Document Vault Endpoints -----------------

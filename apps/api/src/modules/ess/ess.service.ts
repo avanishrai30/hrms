@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import { AuditService } from "../audit/audit.service.js";
+import type { EmployeeBankDetailsDto } from "../employees/employees.schemas.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { STORAGE_PROVIDER, type StorageProvider } from "../storage/storage.provider.js";
 import type {
@@ -109,8 +110,7 @@ export class EssService {
     const permanentAddress =
       (employee.permanentAddress as Record<string, unknown>) ?? null;
 
-    const bankDetails =
-      (employee.bankDetails as Record<string, unknown>) ?? null;
+    const bankDetails = this.maskBankDetails(employee.bankDetails);
 
     const governmentIds =
       (employee.governmentIds as Record<string, unknown>) ?? null;
@@ -199,7 +199,6 @@ export class EssService {
         ...(dto.currentAddress !== undefined ? { currentAddress: dto.currentAddress as Prisma.InputJsonValue } : {}),
         ...(dto.permanentAddress !== undefined ? { permanentAddress: dto.permanentAddress as Prisma.InputJsonValue } : {}),
         ...(dto.emergencyContact !== undefined ? { emergencyContact: dto.emergencyContact as Prisma.InputJsonValue } : {}),
-        ...(dto.bankDetails !== undefined ? { bankDetails: dto.bankDetails as Prisma.InputJsonValue } : {}),
         ...(dto.governmentIds !== undefined ? { governmentIds: dto.governmentIds as Prisma.InputJsonValue } : {}),
         ...(dto.profilePhoto !== undefined ? { profilePhotoObjectKey: dto.profilePhoto } : {})
       }
@@ -246,6 +245,45 @@ export class EssService {
       }
     });
 
+    return this.getProfile(tenantId, employeeId, actorUserId);
+  }
+
+  async updateBankDetails(tenantId: string, employeeId: string, dto: EmployeeBankDetailsDto, actorUserId: string, actorMembershipId?: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+      select: { id: true, bankDetails: true }
+    });
+    if (!employee) {
+      throw new NotFoundException("Employee record not found.");
+    }
+    const bankDetails = {
+      accountHolderName: dto.accountHolderName.trim(),
+      bankName: dto.bankName.trim(),
+      accountNumber: dto.accountNumber.trim(),
+      ifsc: dto.ifsc.trim().toUpperCase(),
+      branch: dto.branch.trim(),
+      accountType: dto.accountType
+    };
+    await this.prisma.employee.update({
+      where: { id: employeeId },
+      data: { bankDetails: bankDetails as Prisma.InputJsonValue }
+    });
+    await this.auditService.record({
+      tenantId,
+      actorUserId,
+      actorMembershipId,
+      action: "BANK_DETAILS_UPDATED",
+      resourceType: "employee",
+      resourceId: employeeId,
+      before: this.auditJson({ employeeId, bankDetails: this.maskBankDetails(employee.bankDetails) }),
+      after: this.auditJson({ employeeId, bankDetails: this.maskBankDetails(bankDetails as Prisma.InputJsonValue) }),
+      metadata: {
+        result: "UPDATED",
+        bankChanged: true,
+        bankName: bankDetails.bankName,
+        last4: bankDetails.accountNumber.slice(-4)
+      }
+    });
     return this.getProfile(tenantId, employeeId, actorUserId);
   }
 
@@ -615,6 +653,26 @@ export class EssService {
 
     const completed = fields.filter(Boolean).length;
     return Math.round((completed / fields.length) * 100);
+  }
+
+  private maskBankDetails(value: unknown): Prisma.InputJsonValue | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const details = value as Record<string, unknown>;
+    const accountNumber = typeof details.accountNumber === "string" ? details.accountNumber : "";
+    const last4 = accountNumber.slice(-4);
+    return {
+      accountHolderName: details.accountHolderName ?? null,
+      bankName: details.bankName ?? null,
+      branch: details.branch ?? details.branchName ?? null,
+      accountType: details.accountType ?? null,
+      maskedAccountNumber: last4 ? `••••••${last4}` : null,
+      hasAccountNumber: Boolean(accountNumber),
+      ifsc: details.ifsc || details.ifscCode ? "[redacted]" : null
+    };
+  }
+
+  private auditJson(value: unknown): Prisma.InputJsonValue {
+    return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
   }
 
   // ----------------- TASK 32: ESS & MSS COMPREHENSIVE PLATFORM METHODS -----------------
