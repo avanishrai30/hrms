@@ -3,8 +3,10 @@
   "compilerOptions": {
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "rootDir": "./src",
     "outDir": "dist",
     "paths": {},
+    "ignoreDeprecations": "5.0",
     "exactOptionalPropertyTypes": false,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
